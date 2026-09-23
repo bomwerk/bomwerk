@@ -1,0 +1,68 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "f703c85f-a8b5-51ac-9093-15e3b9833903",
+      "name": "click",
+      "purl": "pkg:pypi/click@8.1.7",
+      "type": "library",
+      "version": "8.1.7"
+    },
+    {
+      "bom-ref": "6f0130fe-795f-5bbc-a715-b8ad372c1512",
+      "name": "flask",
+      "purl": "pkg:pypi/flask@3.0.3",
+      "type": "library",
+      "version": "3.0.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "f703c85f-a8b5-51ac-9093-15e3b9833903"
+    },
+    {
+      "ref": "6f0130fe-795f-5bbc-a715-b8ad372c1512"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:3852a2a2-cf71-535a-b871-641e60180715",
+  "specVersion": "1.6",
+  "version": 1
+}

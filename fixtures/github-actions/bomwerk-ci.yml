@@ -1,0 +1,148 @@
+name: ci
+on: [push]
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
+    steps:
+      - uses: actions/checkout@v4.1.0
+        with:
+          submodules: true
+      - name: Resolve vcpkg baseline commit (cache key input)
+        id: vcpkg_baseline
+        run: echo "sha=$(git -C vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.vcpkg-binary-cache
+          key: vcpkg-bincache-${{ matrix.os }}-${{ steps.vcpkg_baseline.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bincache-${{ matrix.os }}-${{ steps.vcpkg_baseline.outputs.sha }}-
+            vcpkg-bincache-${{ matrix.os }}-
+      - name: Bootstrap vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+      - name: Make scripts executable
+        run: chmod +x ./scripts/*.sh
+      - name: Set up Python (cached)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+          cache-dependency-path: scripts/ci-requirements.txt
+      - name: Install schema validation tooling
+        run: python3 -m pip install --user --break-system-packages -r scripts/ci-requirements.txt
+      - name: Configure
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug
+          -DBOMWERK_SANITIZE=${{ matrix.os == 'ubuntu-24.04' && 'ON' || 'OFF' }}
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Cache sbom-tools binary
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/sbom-tools
+          key: sbom-tools-${{ matrix.os }}-${{ hashFiles('scripts/fetch-sbom-tools.sh') }}
+      - name: Install sbom-tools (CRANE interop)
+        run: ./scripts/fetch-sbom-tools.sh
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Smoke run (dogfood — our own vendored vcpkg submodule must appear)
+        run: |
+          set +e
+          # --exclude-list keeps fixtures/ (real-world and hostile PARSER INPUT —
+          # several files literally named vcpkg.json/conanfile.txt/CMakeLists.txt/
+          # conan.lock/.gitmodules) out of bomwerk's own dependency list; see
+          # scripts/ci-self-scan-exclude.txt for why this can't just add
+          # "fixtures" to the built-in list.
+          ./build/bomwerk scan . --exclude-list scripts/ci-self-scan-exclude.txt > scan.out 2> scan.err
+          code=$?
+          set -e
+          echo "=== exit code: $code ==="
+          echo "=== stdout: $(wc -c < scan.out) bytes ==="
+          cat scan.out
+          echo "=== stderr: $(wc -c < scan.err) bytes ==="
+          cat scan.err
+          test "$code" -le 1
+          grep -Eq 'pkg:github/microsoft/vcpkg@[0-9a-f]{40}' scan.out
+          test -s sbom.cdx.json
+          # the golden purl_spec_* ctests check hand-built fixtures; this
+          # checks a REAL scan of a real repo, where the purls come from whatever
+          # bomwerk's own dependencies happen to look like today.
+          python3 scripts/validate_purls.py sbom.cdx.json
+          # Two independent absence checks for the fixtures-exclusion fix, each
+          # using an explicit if/exit rather than `!`-negation: bash's `set -e`
+          # never aborts on a `!`-inverted command's status, so a `!`-prefixed
+          # check here would silently stop guarding anything the moment one
+          # more line was appended after it. harfbuzz is declared only by
+          # fixtures/vuln/known-vulnerable's FetchContent; the hex string is a
+          # purely synthetic commit id shared by two fixtures/golden/ cases
+          # (never a real bomwerk dependency's commit) — either appearing here
+          # means the fixtures exclusion regressed.
+          if grep -q 'harfbuzz' scan.out; then
+            echo "fixtures/vuln/known-vulnerable leaked into bomwerk's own dependency list" >&2
+            exit 1
+          fi
+          if grep -q '0f1e2d3c4b5a69788796a5b4c3d2e1f009182736' scan.out; then
+            echo "a fixtures/golden/ fixture leaked into bomwerk's own dependency list" >&2
+            exit 1
+          fi
+
+  packaging:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.1.0
+        with:
+          submodules: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build production service image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/service.Dockerfile
+          target: production
+          load: true
+          push: false
+          tags: bomwerk-service:ci-production
+          cache-from: type=gha,scope=service-production
+          cache-to: type=gha,mode=max,scope=service-production
+      - name: Build RFC-key packaging test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/service.Dockerfile
+          target: packaging-test
+          load: true
+          push: false
+          tags: bomwerk-service:ci-test
+          cache-from: |
+            type=gha,scope=service-production
+            type=gha,scope=service-test
+          cache-to: type=gha,mode=max,scope=service-test
+      - name: Verify systemd unit
+        run: |
+          if command -v systemd-analyze >/dev/null 2>&1; then
+            sudo useradd --system --no-create-home --shell /usr/sbin/nologin bomwerk
+            sudo install -m 0555 /bin/true /usr/local/bin/bomwerk
+            systemd-analyze verify deploy/service/bomwerk-service.service
+          fi
+      - name: Exercise service packaging
+        run: >-
+          python3 scripts/run_packaging_case.py
+          --repo-root .
+          --production-image bomwerk-service:ci-production
+          --test-image bomwerk-service:ci-test
+          --skip-build
+
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang-format
+      - run: ./scripts/check-format.sh clang-format

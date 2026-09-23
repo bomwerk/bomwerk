@@ -1,0 +1,5 @@
+{
+  "description": "opt-in: the same tree as submodule-not-walked, scanned with --include-submodule-contents. The submodule is still one pinned component, but the walk now descends into third_party/libfoo, so its CMakeLists.txt, package-lock.json and vcpkg.json all report — and the vendored-C/C++ heuristic also sees the directory. The contrast between the two snapshots IS the feature",
+  "args": ["--include-submodule-contents"],
+  "expect_exit": 0
+}

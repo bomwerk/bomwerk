@@ -1,0 +1,67 @@
+{
+  "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+  "@graph": [
+    {
+      "@id": "_:creationInfo",
+      "created": "2025-01-01T00:00:00Z",
+      "createdBy": [
+        "https://bomwerk.dev/spdx/3.0.1/agent/bomwerk"
+      ],
+      "createdUsing": [
+        "https://bomwerk.dev/spdx/3.0.1/tool/bomwerk"
+      ],
+      "specVersion": "3.0.1",
+      "type": "CreationInfo"
+    },
+    {
+      "creationInfo": "_:creationInfo",
+      "name": "bomwerk",
+      "spdxId": "https://bomwerk.dev/spdx/3.0.1/agent/bomwerk",
+      "type": "Organization"
+    },
+    {
+      "creationInfo": "_:creationInfo",
+      "name": "bomwerk-@BOMWERK_VERSION@",
+      "spdxId": "https://bomwerk.dev/spdx/3.0.1/tool/bomwerk",
+      "type": "Tool"
+    },
+    {
+      "creationInfo": "_:creationInfo",
+      "element": [
+        "https://bomwerk.dev/spdx/3.0.1/agent/bomwerk",
+        "https://bomwerk.dev/spdx/3.0.1/tool/bomwerk",
+        "https://bomwerk.dev/spdx/3.0.1/package/acaaa616-b18e-5522-83ee-8333ee2a61d2",
+        "https://bomwerk.dev/spdx/3.0.1/relationship/describes"
+      ],
+      "name": "golden-demo",
+      "profileConformance": [
+        "core",
+        "software"
+      ],
+      "rootElement": [
+        "https://bomwerk.dev/spdx/3.0.1/package/acaaa616-b18e-5522-83ee-8333ee2a61d2"
+      ],
+      "spdxId": "https://bomwerk.dev/spdx/3.0.1/document/41c35338-5ffe-5fc3-b727-d0f256cfcac3",
+      "type": "SpdxDocument"
+    },
+    {
+      "creationInfo": "_:creationInfo",
+      "name": "fmt",
+      "software_downloadLocation": "NOASSERTION",
+      "software_packageUrl": "pkg:github/fmtlib/fmt@2d1e2f3a4b5c6d7e8f90a1b2c3d4e5f607182930",
+      "software_packageVersion": "2d1e2f3a4b5c6d7e8f90a1b2c3d4e5f607182930",
+      "spdxId": "https://bomwerk.dev/spdx/3.0.1/package/acaaa616-b18e-5522-83ee-8333ee2a61d2",
+      "type": "software_Package"
+    },
+    {
+      "creationInfo": "_:creationInfo",
+      "from": "https://bomwerk.dev/spdx/3.0.1/document/41c35338-5ffe-5fc3-b727-d0f256cfcac3",
+      "relationshipType": "describes",
+      "spdxId": "https://bomwerk.dev/spdx/3.0.1/relationship/describes",
+      "to": [
+        "https://bomwerk.dev/spdx/3.0.1/package/acaaa616-b18e-5522-83ee-8333ee2a61d2"
+      ],
+      "type": "Relationship"
+    }
+  ]
+}

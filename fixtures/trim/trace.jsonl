@@ -1,0 +1,6 @@
+{"argv":["ar","qc","libzlib.a","CMakeFiles/zlib.dir/adler32.c.o","CMakeFiles/zlib.dir/inflate.c.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":105,"tool":"ar"}
+{"argv":["c++","-I@FIXTURE_ROOT@/tree/third_party/json/include","-std=c++20","-c","../src/main.cpp","-o","CMakeFiles/app.dir/src/main.cpp.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":103,"tool":"c++"}
+{"argv":["cc","-c","../third_party/zlib/adler32.c","-o","CMakeFiles/zlib.dir/adler32.c.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":101,"tool":"cc"}
+{"argv":["cc","-c","../third_party/zlib/inflate.c","-o","CMakeFiles/zlib.dir/inflate.c.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":102,"tool":"cc"}
+{"argv":["cc","-c","/opt/vendor-sdk/support.c","-o","support.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":104,"tool":"cc"}
+{"argv":["c++","-o","app","CMakeFiles/app.dir/src/main.cpp.o","../third_party/vendored-crypto/libvendcrypto.a"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":106,"tool":"c++"}

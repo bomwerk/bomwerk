@@ -1,0 +1,12 @@
+.git
+.github
+build
+build-*
+.cache
+.clangd
+.idea
+.vscode
+vcpkg_installed
+vcpkg/buildtrees
+vcpkg/downloads
+vcpkg/packages

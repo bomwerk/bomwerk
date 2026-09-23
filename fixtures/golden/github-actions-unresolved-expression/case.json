@@ -1,0 +1,5 @@
+{
+  "description": "github-actions: a tag-pinned uses: alongside one whose ref is an unresolved ${{ }} expression -- degrades to Low confidence with no @ segment in the purl (never exit-2, rule 1); the warning is this case's exit 1",
+  "args": [],
+  "expect_exit": 1
+}

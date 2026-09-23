@@ -1,0 +1,113 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "408d6eb3-2672-5678-ab5c-535225e298f8",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "libs/uninitialized"
+          }
+        ]
+      },
+      "name": "never-checked-out",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:github/example/never-checked-out",
+      "supplier": {
+        "name": "example"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "2fbc5769-4df9-501f-abbf-095ada100fbe",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "libs/zlib"
+          }
+        ]
+      },
+      "name": "zlib",
+      "purl": "pkg:github/madler/zlib@0f1e2d3c4b5a69788796a5b4c3d2e1f009182736",
+      "supplier": {
+        "name": "madler"
+      },
+      "type": "library",
+      "version": "0f1e2d3c4b5a69788796a5b4c3d2e1f009182736"
+    },
+    {
+      "bom-ref": "bb2f425b-2431-5563-8a20-c70966c1c086",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "libs/mbedtls"
+          }
+        ]
+      },
+      "name": "mbedtls",
+      "purl": "pkg:github/mbed-tls/mbedtls@fedcba9876543210fedcba9876543210fedcba98",
+      "supplier": {
+        "name": "Mbed-TLS"
+      },
+      "type": "library",
+      "version": "fedcba9876543210fedcba9876543210fedcba98"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "408d6eb3-2672-5678-ab5c-535225e298f8"
+    },
+    {
+      "ref": "2fbc5769-4df9-501f-abbf-095ada100fbe"
+    },
+    {
+      "ref": "bb2f425b-2431-5563-8a20-c70966c1c086"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "1"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:d8f5a454-3cd8-5ee1-9ff1-7fb7edd283d6",
+  "specVersion": "1.6",
+  "version": 1
+}

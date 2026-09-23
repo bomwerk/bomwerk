@@ -1,0 +1,40 @@
+# Directory-name exclusion list for CI's dogfood smoke run only
+# (.github/workflows/ci.yml, step "Smoke run").
+#
+# `--exclude-list` REPLACES core::default_excluded_dir_names() entirely
+# (src/core/name_list.cpp: the built-in set is a fallback for an unreadable or
+# empty file, not a base to merge with): so this file re-lists every built-in
+# entry verbatim, plus the one addition CI needs. If default_excluded_dir_names()
+# in src/core/exclusions.cpp ever changes, update this file in the same change,
+# the same way vcpkg.json's version-string tracks CMakeLists.txt's project()
+# version (see the comment there).
+#
+# The addition: "fixtures" is real production input for parsers (real-world and
+# hostile manifests, several literally named vcpkg.json/conanfile.txt/CMakeLists.txt/
+# conan.lock/.gitmodules), never repo dependencies, but scan has no way to tell
+# the difference from directory content alone. Left unexcluded, bomwerk's own
+# self-scan reports fixture content as if bomwerk depended on it. --gitignore-aware
+# walking would let a real project's own fixtures/ directory keep
+# its default status; until then this list stays scoped to CI, not
+# core::default_excluded_dir_names(), because a real user's fixtures/ may hold
+# genuine first-party code (same reasoning that keeps "packages" off the
+# built-in list: see the comment in exclusions.cpp).
+
+# --- verbatim copy of core::default_excluded_dir_names() ---
+.git
+.svn
+.hg
+.idea
+.vscode
+build
+cmake-build-debug
+cmake-build-release
+out
+.cache
+vcpkg_installed
+buildtrees
+downloads
+_deps
+
+# --- CI-only addition ---
+fixtures

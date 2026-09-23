@@ -1,0 +1,5 @@
+{
+  "description": "vcpkg: a bare dependency (versionless), a version>= floor superseded by an exact overrides pin (different confidence tiers internally, not snapshot-visible — see SOURCES.md), and the consumer's own name/version which is not a dependency",
+  "args": [],
+  "expect_exit": 0
+}

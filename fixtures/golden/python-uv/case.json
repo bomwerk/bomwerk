@@ -1,0 +1,5 @@
+{
+  "description": "python: uv.lock — the virtual root project is skipped; registry packages become High-confidence pkg:pypi components",
+  "args": [],
+  "expect_exit": 0
+}

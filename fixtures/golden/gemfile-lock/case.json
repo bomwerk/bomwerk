@@ -1,0 +1,5 @@
+{
+  "description": "rubygems: Gemfile.lock — GEM specs emitted; 6-space dependency edges are never gems; a GIT spec carries its remote@revision as evidence; the PATH spec (first-party) is skipped",
+  "args": [],
+  "expect_exit": 0
+}

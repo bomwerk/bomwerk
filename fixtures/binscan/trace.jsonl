@@ -1,0 +1,4 @@
+{"argv":["ar","rcs","libzlib.a","CMakeFiles/zlib.dir/adler32.c.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":103,"tool":"ar"}
+{"argv":["c++","-o","app","main.o","../third_party/vendored-crypto/libvendcrypto.a","../third_party/vendored-crypto/libvendcrypto.so.1"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":101,"tool":"c++"}
+{"argv":["c++","-static","-o","tool-static","tool.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":102,"tool":"c++"}
+{"argv":["cc","-c","../third_party/zlib/adler32.c","-o","CMakeFiles/zlib.dir/adler32.c.o"],"cwd":"@FIXTURE_ROOT@/tree/build","pid":100,"tool":"cc"}

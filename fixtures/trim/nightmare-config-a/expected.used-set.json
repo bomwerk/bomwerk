@@ -1,0 +1,76 @@
+{
+  "_comment": [
+    "nightmare config-a (\"shipping firmware\"): which components the build used.",
+    "",
+    "zlib 1.2.11      10 sources compiled under its root          -> used",
+    "sqlite3 3.41.2   prebuilt .a passed to the linker            -> used (link input)",
+    "cjson-prebuilt   prebuilt .a passed to the linker            -> used (link input)",
+    "uthash           header-only, named only as an -I path       -> used (weaker rung)",
+    "freertos         in the tree, not compiled in this config    -> UNUSED",
+    "stb              in the tree, compiled in NO config          -> UNUSED",
+    "conan zlib 1.3.1 declared only: no location in the repo      -> not judged, kept",
+    "",
+    "Hand-authored, deliberately not machine-blessed (see fixtures/trim/). The",
+    "trace is the REAL `bomwerk observe` trace of bomwerk/nightmare, minimized:",
+    "CMake's compiler probes and the ld --help/-v/LTO runs (non-deterministic",
+    "/tmp paths) were dropped, absolute paths became @FIXTURE_ROOT@/tree and the",
+    "shim path became the plain tool name. The tree is IDENTICAL for config-a and",
+    "config-b; only the trace differs. That is the corpus's central claim.",
+    "The ar record is never evidence by itself; the final cc record has no -c, so",
+    "it is link-mode and does not count as a compile.",
+    "",
+    "The two prebuilt archives (sqlite-prebuilt, cjson-prebuilt) are judged from the",
+    "link line: config-a passes each .a to the linker by absolute path, so each root",
+    "gets one link input. Their include directories are on the -I path as well, but",
+    "a link input outranks a header-only mention. The tree holds only their headers",
+    "and an empty lib/ (a .gitkeep): trim canonicalizes a link input's DIRECTORY, not",
+    "the file, so the directory must exist and the archive itself need not."
+  ],
+  "exit_code": 0,
+  "compile_invocations": 12,
+  "in_tree_sources": 12,
+  "out_of_tree_sources": 0,
+  "link_invocations": 1,
+  "unresolved_library_names": 0,
+  "judged": 6,
+  "used": 4,
+  "not_judged": 1,
+  "verdicts": {
+    "pkg:generic/cjson-prebuilt": "used",
+    "pkg:generic/freertos@V11.1.0": "UNUSED",
+    "pkg:generic/sqlite3@3.41.2": "used",
+    "pkg:generic/stb": "UNUSED",
+    "pkg:generic/uthash": "used",
+    "pkg:generic/zlib@1.2.11": "used"
+  },
+  "qualifiers": {
+    "pkg:generic/cjson-prebuilt": "(1 link input(s))",
+    "pkg:generic/sqlite3@3.41.2": "(1 link input(s))",
+    "pkg:generic/uthash": "(headers only)",
+    "pkg:generic/zlib@1.2.11": "(10 sources)"
+  },
+  "trimmed_purls": [
+    "pkg:conan/zlib@1.3.1",
+    "pkg:generic/cjson-prebuilt",
+    "pkg:generic/sqlite3@3.41.2",
+    "pkg:generic/uthash",
+    "pkg:generic/zlib@1.2.11"
+  ],
+  "product_name": "nightmare",
+  "unused_report": {
+    "count": 2,
+    "trim_identities": [
+      "pkg:generic/freertos@V11.1.0",
+      "pkg:generic/stb"
+    ],
+    "scan_identities": [
+      "pkg:generic/freertos@V11.1.0",
+      "pkg:generic/stb"
+    ],
+    "roots": [
+      "third_party/freertos",
+      "third_party/stb"
+    ]
+  },
+  "discovery_checks": false
+}

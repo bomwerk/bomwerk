@@ -1,0 +1,10 @@
+name: docker-owner-name
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # "docker" here is a GitHub org name, not the docker:// URI scheme —
+      # must be reported as a normal pkg:github/docker/build-push-action
+      # component, never mistaken for a Docker action.
+      - uses: docker/build-push-action@v6

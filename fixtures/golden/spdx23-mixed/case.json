@@ -1,0 +1,7 @@
+{
+  "description": "SPDX 2.3 (flat JSON) writer over the mixed-product tree: fmt merged to one package from two producers; --product becomes the document name and each package gets a DESCRIBES relationship",
+  "args": ["--product", "golden-demo", "--product-version", "4.5.6"],
+  "format": "spdx",
+  "spdx_version": "2.3",
+  "expect_exit": 0
+}

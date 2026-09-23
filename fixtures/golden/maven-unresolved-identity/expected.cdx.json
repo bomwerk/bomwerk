@@ -1,0 +1,87 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "c03fc4ec-2528-5005-a25d-9670feae290c",
+      "name": "${undefined.vendor}:unresolved-vendor-lib",
+      "purl": "pkg:maven/%24%7Bundefined.vendor%7D/unresolved-vendor-lib@2.0.0",
+      "supplier": {
+        "name": "${undefined.vendor}"
+      },
+      "type": "library",
+      "version": "2.0.0"
+    },
+    {
+      "bom-ref": "5770bb19-e475-577b-8dfd-c9cc78671118",
+      "name": "com.example:identity-demo",
+      "purl": "pkg:maven/com.example/identity-demo@1.0.0",
+      "supplier": {
+        "name": "com.example"
+      },
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "eca2f830-eaad-5953-9d90-66818bf94c05",
+      "name": "org.example:normal-lib",
+      "purl": "pkg:maven/org.example/normal-lib@1.2.3",
+      "supplier": {
+        "name": "org.example"
+      },
+      "type": "library",
+      "version": "1.2.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "c03fc4ec-2528-5005-a25d-9670feae290c"
+    },
+    {
+      "ref": "5770bb19-e475-577b-8dfd-c9cc78671118"
+    },
+    {
+      "ref": "eca2f830-eaad-5953-9d90-66818bf94c05"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:a657845c-075e-58e4-a438-388b1af0124a",
+  "specVersion": "1.6",
+  "version": 1
+}

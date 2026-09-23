@@ -1,0 +1,5 @@
+{
+  "description": "maven: a pom.xml <groupId> referencing an undefined ${property} is kept — never dropped — with the raw unresolved text as its identity, downgraded to Low confidence (invisible to the byte-diff; the resulting warning is this case's exit 1). Also exercises the pom's own self-identity emission: this pom's own fully-resolved coordinates are additionally emitted as a High-confidence self-identity component, adding no warning of its own",
+  "args": [],
+  "expect_exit": 1
+}

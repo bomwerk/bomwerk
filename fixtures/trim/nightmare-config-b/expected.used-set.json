@@ -1,0 +1,72 @@
+{
+  "_comment": [
+    "nightmare config-b (\"lab build\"): which components the build used.",
+    "",
+    "freertos         list.c compiled - the FORKED file           -> used",
+    "zlib 1.2.11      in the tree, not compiled in this config    -> UNUSED",
+    "sqlite3 3.41.2   prebuilt .a, not linked in this config      -> UNUSED",
+    "cjson-prebuilt   prebuilt .a, not linked in this config      -> UNUSED",
+    "uthash           no -I path in this config                   -> UNUSED",
+    "stb              in the tree, compiled in NO config          -> UNUSED",
+    "conan zlib 1.3.1 declared only: no location in the repo      -> not judged, kept",
+    "",
+    "Hand-authored, deliberately not machine-blessed (see fixtures/trim/). The",
+    "trace is the REAL `bomwerk observe` trace of bomwerk/nightmare, minimized:",
+    "CMake's compiler probes and the ld --help/-v/LTO runs (non-deterministic",
+    "/tmp paths) were dropped, absolute paths became @FIXTURE_ROOT@/tree and the",
+    "shim path became the plain tool name. The tree is IDENTICAL for config-a and",
+    "config-b; only the trace differs. That is the corpus's central claim.",
+    "The ar record is never evidence by itself; the final cc record has no -c, so",
+    "it is link-mode and does not count as a compile."
+  ],
+  "exit_code": 0,
+  "compile_invocations": 4,
+  "in_tree_sources": 4,
+  "out_of_tree_sources": 0,
+  "link_invocations": 1,
+  "unresolved_library_names": 0,
+  "judged": 6,
+  "used": 1,
+  "not_judged": 1,
+  "verdicts": {
+    "pkg:generic/cjson-prebuilt": "UNUSED",
+    "pkg:generic/freertos@V11.1.0": "used",
+    "pkg:generic/sqlite3@3.41.2": "UNUSED",
+    "pkg:generic/stb": "UNUSED",
+    "pkg:generic/uthash": "UNUSED",
+    "pkg:generic/zlib@1.2.11": "UNUSED"
+  },
+  "qualifiers": {
+    "pkg:generic/freertos@V11.1.0": "(1 sources)"
+  },
+  "trimmed_purls": [
+    "pkg:conan/zlib@1.3.1",
+    "pkg:generic/freertos@V11.1.0"
+  ],
+  "product_name": "nightmare",
+  "unused_report": {
+    "count": 5,
+    "trim_identities": [
+      "pkg:generic/cjson-prebuilt",
+      "pkg:generic/sqlite3@3.41.2",
+      "pkg:generic/stb",
+      "pkg:generic/uthash",
+      "pkg:generic/zlib@1.2.11"
+    ],
+    "scan_identities": [
+      "pkg:generic/cjson-prebuilt",
+      "pkg:generic/sqlite3@3.41.2",
+      "pkg:generic/stb",
+      "pkg:generic/uthash",
+      "pkg:generic/zlib@1.2.11"
+    ],
+    "roots": [
+      "third_party/cjson-prebuilt",
+      "third_party/sqlite-prebuilt",
+      "third_party/stb",
+      "third_party/uthash",
+      "third_party/zlib"
+    ]
+  },
+  "discovery_checks": false
+}

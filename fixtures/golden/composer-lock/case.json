@@ -1,0 +1,5 @@
+{
+  "description": "composer: composer.lock — packages-dev entries become scope \"excluded\"; vendor is the purl namespace; the v-prefixed version is kept exactly as composer resolved it",
+  "args": [],
+  "expect_exit": 0
+}

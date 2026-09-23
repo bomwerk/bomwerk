@@ -1,0 +1,3 @@
+[submodule "crlf"]
+	path = libs/crlf
+	url = https://github.com/acme/crlf.git

@@ -1,0 +1,7 @@
+name: reusable-workflow-call
+on: [push]
+jobs:
+  call-shared:
+    uses: octo-org/example-repo/.github/workflows/shared.yml@main
+    with:
+      config: production

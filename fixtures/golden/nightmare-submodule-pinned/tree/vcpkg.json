@@ -1,0 +1,17 @@
+{
+  "name": "nightmare-miniature",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "fmt",
+    {
+      "name": "nlohmann-json",
+      "version>=": "3.11.2"
+    }
+  ],
+  "overrides": [
+    {
+      "name": "nlohmann-json",
+      "version": "3.11.3"
+    }
+  ]
+}

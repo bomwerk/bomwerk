@@ -1,0 +1,6 @@
+{
+  "description": "match-coverage report: a vcpkg.json (bare cli11 dependency = unversioned-purl, overrides-pinned zlib = unmapped-purl-type) plus a Cargo.lock (libc/serde, both fully resolved = matched) in one tree, so one scan exercises all three match-coverage classes a real producer can emit today (see match_coverage.hpp: no-identifier is unreachable through any current producer, which all fall back to at least pkg:generic — it is covered at the unit level instead). --coverage is exercised alongside the SBOM.",
+  "args": [],
+  "expect_exit": 0,
+  "coverage": true
+}

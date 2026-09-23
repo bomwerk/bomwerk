@@ -1,0 +1,4 @@
+github.com/gorilla/mux v1.8.1 h1:0f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5=
+github.com/gorilla/mux v1.8.1/go.mod h1:1a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d5e6=
+golang.org/x/text v0.17.0 h1:2b3c4d5e6f708192a2b3c4d5e6f708192a2b3c4d5e6=
+golang.org/x/text v0.17.0/go.mod h1:3c4d5e6f708192a3b3c4d5e6f708192a3b3c4d5e6f7=

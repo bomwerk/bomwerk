@@ -1,0 +1,5 @@
+{
+  "description": "go: go.sum — /go.mod metadata lines collapse into their module's component; the v prefix stays in the pkg:golang purl",
+  "args": [],
+  "expect_exit": 0
+}

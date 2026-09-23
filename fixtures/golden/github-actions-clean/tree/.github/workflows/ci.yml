@@ -1,0 +1,10 @@
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a commit: immutable, so the producer rates this High.
+      - uses: actions/checkout@1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b
+      # Pinned to a tag: a tag can be moved, so the producer rates this Medium.
+      - uses: actions/setup-node@v4

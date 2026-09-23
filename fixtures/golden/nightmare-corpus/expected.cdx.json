@@ -1,0 +1,368 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "4694c1d0-f3c7-5799-b9e4-46dede529c0f",
+      "cpe": "cpe:2.3:a:*:libcurl:8.5.0:*:*:*:*:*:*:*",
+      "name": "libcurl",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:conan/libcurl@8.5.0",
+      "type": "library",
+      "version": "8.5.0"
+    },
+    {
+      "bom-ref": "9f59bc00-a066-5171-89b2-0b3bb2bdbbb9",
+      "cpe": "cpe:2.3:a:*:zlib:1.3.1:*:*:*:*:*:*:*",
+      "name": "zlib",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:conan/zlib@1.3.1",
+      "type": "library",
+      "version": "1.3.1"
+    },
+    {
+      "bom-ref": "50e25f6a-c9b9-5157-a29c-a8b659614845",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/cjson-prebuilt"
+          }
+        ]
+      },
+      "name": "cjson-prebuilt",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/cjson-prebuilt",
+      "type": "library"
+    },
+    {
+      "bom-ref": "603ab5ae-2f71-542b-9fb8-8ceefcde27b3",
+      "cpe": "cpe:2.3:a:*:freertos:v11.1.0:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/freertos"
+          }
+        ]
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "name": "freertos",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/freertos@V11.1.0",
+      "type": "library",
+      "version": "V11.1.0"
+    },
+    {
+      "bom-ref": "8ec2adef-d76c-5605-9e5e-46e0e7e1841b",
+      "cpe": "cpe:2.3:a:*:sqlite3:3.41.2:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/sqlite-prebuilt"
+          }
+        ]
+      },
+      "name": "sqlite3",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/sqlite3@3.41.2",
+      "type": "library",
+      "version": "3.41.2"
+    },
+    {
+      "bom-ref": "164864a2-cf01-58d3-993c-f99ef3cd7441",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/stb"
+          }
+        ]
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "name": "stb",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/stb",
+      "type": "library"
+    },
+    {
+      "bom-ref": "d745decc-4094-5c3f-aa65-1508f0f2998e",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/uthash"
+          }
+        ]
+      },
+      "name": "uthash",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/uthash",
+      "type": "library"
+    },
+    {
+      "bom-ref": "2253b16f-e77a-5bb7-9953-a2fa40d6faaf",
+      "cpe": "cpe:2.3:a:*:zlib:1.2.11:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/zlib"
+          }
+        ]
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "Zlib"
+          }
+        }
+      ],
+      "name": "zlib",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/zlib@1.2.11",
+      "type": "library",
+      "version": "1.2.11"
+    },
+    {
+      "bom-ref": "6cfab640-6baa-531a-b1e2-e2f3ea83f6ce",
+      "name": "checkout",
+      "purl": "pkg:github/actions/checkout@0f1e2d3c4b5a69788796a5b4c3d2e1f009182736",
+      "supplier": {
+        "name": "actions"
+      },
+      "type": "library",
+      "version": "0f1e2d3c4b5a69788796a5b4c3d2e1f009182736"
+    },
+    {
+      "bom-ref": "8c047c38-3453-5546-bd6b-9141bb74527f",
+      "name": "setup-node",
+      "purl": "pkg:github/actions/setup-node@v4.1.0",
+      "supplier": {
+        "name": "actions"
+      },
+      "type": "library",
+      "version": "v4.1.0"
+    },
+    {
+      "bom-ref": "82e7fde0-821a-5c78-a3c6-9c984f419cbb",
+      "name": "tinyxml2",
+      "purl": "pkg:github/leethomason/tinyxml2@7e6d5c4b3a291807f6e5d4c3b2a1908f7e6d5c4b",
+      "supplier": {
+        "name": "leethomason"
+      },
+      "type": "library",
+      "version": "7e6d5c4b3a291807f6e5d4c3b2a1908f7e6d5c4b"
+    },
+    {
+      "bom-ref": "f9be1d4e-00da-544b-b066-ed296b701f0b",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/openssl"
+          }
+        ]
+      },
+      "name": "openssl",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:github/openssl/openssl",
+      "supplier": {
+        "name": "openssl"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "866e8f2f-4874-5106-a3f4-98d9e6bf954a",
+      "name": "debug",
+      "purl": "pkg:npm/debug@4.3.4",
+      "type": "library",
+      "version": "4.3.4"
+    },
+    {
+      "bom-ref": "e88d7130-4f7a-5f32-b7e1-340c854909aa",
+      "name": "ms",
+      "purl": "pkg:npm/ms@2.1.2",
+      "type": "library",
+      "version": "2.1.2"
+    },
+    {
+      "bom-ref": "3f826675-3e49-5994-8530-35d63053caaf",
+      "name": "rimraf",
+      "purl": "pkg:npm/rimraf@5.0.5",
+      "scope": "excluded",
+      "type": "library",
+      "version": "5.0.5"
+    },
+    {
+      "bom-ref": "5c9dbb9e-de34-538d-884c-93494aeffb9f",
+      "name": "fmt",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:vcpkg/fmt",
+      "type": "library"
+    },
+    {
+      "bom-ref": "41733166-3e05-5afc-a2ca-5066b049b9ac",
+      "cpe": "cpe:2.3:a:*:nlohmann-json:3.11.3:*:*:*:*:*:*:*",
+      "name": "nlohmann-json",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:vcpkg/nlohmann-json@3.11.3",
+      "type": "library",
+      "version": "3.11.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "4694c1d0-f3c7-5799-b9e4-46dede529c0f"
+    },
+    {
+      "ref": "9f59bc00-a066-5171-89b2-0b3bb2bdbbb9"
+    },
+    {
+      "ref": "50e25f6a-c9b9-5157-a29c-a8b659614845"
+    },
+    {
+      "ref": "603ab5ae-2f71-542b-9fb8-8ceefcde27b3"
+    },
+    {
+      "ref": "8ec2adef-d76c-5605-9e5e-46e0e7e1841b"
+    },
+    {
+      "ref": "164864a2-cf01-58d3-993c-f99ef3cd7441"
+    },
+    {
+      "ref": "d745decc-4094-5c3f-aa65-1508f0f2998e"
+    },
+    {
+      "ref": "2253b16f-e77a-5bb7-9953-a2fa40d6faaf"
+    },
+    {
+      "ref": "6cfab640-6baa-531a-b1e2-e2f3ea83f6ce"
+    },
+    {
+      "ref": "8c047c38-3453-5546-bd6b-9141bb74527f"
+    },
+    {
+      "ref": "82e7fde0-821a-5c78-a3c6-9c984f419cbb"
+    },
+    {
+      "ref": "f9be1d4e-00da-544b-b066-ed296b701f0b"
+    },
+    {
+      "ref": "866e8f2f-4874-5106-a3f4-98d9e6bf954a"
+    },
+    {
+      "ref": "e88d7130-4f7a-5f32-b7e1-340c854909aa"
+    },
+    {
+      "ref": "3f826675-3e49-5994-8530-35d63053caaf"
+    },
+    {
+      "ref": "5c9dbb9e-de34-538d-884c-93494aeffb9f"
+    },
+    {
+      "ref": "41733166-3e05-5afc-a2ca-5066b049b9ac"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "17"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "6"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "6"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "11"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "5"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:797c1d50-21d4-5221-ac96-36492da883c8",
+  "specVersion": "1.6",
+  "version": 1
+}

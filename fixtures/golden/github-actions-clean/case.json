@@ -1,0 +1,5 @@
+{
+  "description": "github-actions: a SHA-pinned and a tag-pinned uses: reference in one workflow file (clean parse path)",
+  "args": [],
+  "expect_exit": 0
+}

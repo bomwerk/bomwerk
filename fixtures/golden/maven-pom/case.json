@@ -1,0 +1,5 @@
+{
+  "description": "maven: pom.xml — literal and ${property}-resolved versions emitted (Medium, invisible to the byte-diff); <scope>test</scope> becomes scope \"excluded\"; the dependencyManagement pin must NOT appear. Also exercises the pom's own self-identity emission: its own coordinates are additionally emitted as a High-confidence self-identity component (no <licenses> block here — see maven-pom-license for that)",
+  "args": [],
+  "expect_exit": 0
+}

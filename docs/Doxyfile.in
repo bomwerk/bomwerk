@@ -1,0 +1,34 @@
+# Doxygen configuration template: configured by CMake into <build>/Doxyfile
+# when BOMWERK_DOCS=ON. Build with: cmake --build <build> --target docs
+
+PROJECT_NAME           = "bomwerk"
+PROJECT_NUMBER         = "@PROJECT_VERSION@"
+PROJECT_BRIEF          = "Build-accurate SBOMs & EU Cyber Resilience Act evidence"
+OUTPUT_DIRECTORY       = "@CMAKE_BINARY_DIR@/docs"
+STRIP_FROM_PATH        = "@CMAKE_CURRENT_SOURCE_DIR@"
+
+INPUT                  = "@CMAKE_CURRENT_SOURCE_DIR@/src" \
+                         "@CMAKE_CURRENT_SOURCE_DIR@/README.md"
+RECURSIVE              = YES
+FILE_PATTERNS          = *.hpp *.cpp *.md
+USE_MDFILE_AS_MAINPAGE = "@CMAKE_CURRENT_SOURCE_DIR@/README.md"
+
+# We document with Markdown inside /// comments and stay light on Doxygen
+# structural tags (docs/CONTRIBUTING.md, Documentation Style).
+MARKDOWN_SUPPORT       = YES
+JAVADOC_AUTOBRIEF      = YES
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+WARN_IF_UNDOCUMENTED   = NO
+QUIET                  = YES
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+# doxygen-awesome-css theme: drop doxygen-awesome.css into docs/ and reconfigure;
+# CMake fills in the path below (empty = stock Doxygen look).
+# These three settings are what the theme requires (Doxygen >= 1.9.5).
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_EXTRA_STYLESHEET  = "@BOMWERK_DOXYGEN_AWESOME_CSS@"

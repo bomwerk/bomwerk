@@ -1,0 +1,5 @@
+{
+  "description": "yarn: Yarn Berry yarn.lock — identity comes from resolution: not from the entry key's range; a scoped package keeps its %40scope namespace; a patch: locator resolves to the npm: locator underneath it; the workspace member (the product itself) is skipped SILENTLY, while the link: entry is first-party but points outside the workspace graph and is skipped with a counted warning — that count is behind the exit 1",
+  "args": [],
+  "expect_exit": 1
+}

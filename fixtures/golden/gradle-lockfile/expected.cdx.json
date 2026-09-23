@@ -1,0 +1,88 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "60bcfbbc-bf41-57d6-b3aa-e7ef53b7a9af",
+      "name": "ch.qos.logback:logback-classic",
+      "purl": "pkg:maven/ch.qos.logback/logback-classic@1.5.6",
+      "supplier": {
+        "name": "ch.qos.logback"
+      },
+      "type": "library",
+      "version": "1.5.6"
+    },
+    {
+      "bom-ref": "56ffa8e3-c073-5cdc-9229-2703eb0d274b",
+      "name": "org.apache.commons:commons-lang3",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "supplier": {
+        "name": "org.apache.commons"
+      },
+      "type": "library",
+      "version": "3.14.0"
+    },
+    {
+      "bom-ref": "4463f86d-f0c5-570d-adda-7816799e402c",
+      "name": "org.junit.jupiter:junit-jupiter",
+      "purl": "pkg:maven/org.junit.jupiter/junit-jupiter@5.10.2",
+      "scope": "excluded",
+      "supplier": {
+        "name": "org.junit.jupiter"
+      },
+      "type": "library",
+      "version": "5.10.2"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "60bcfbbc-bf41-57d6-b3aa-e7ef53b7a9af"
+    },
+    {
+      "ref": "56ffa8e3-c073-5cdc-9229-2703eb0d274b"
+    },
+    {
+      "ref": "4463f86d-f0c5-570d-adda-7816799e402c"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:7558e455-f722-5cba-a632-7b62b5ff79c3",
+  "specVersion": "1.6",
+  "version": 1
+}

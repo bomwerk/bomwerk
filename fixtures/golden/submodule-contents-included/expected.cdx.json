@@ -1,0 +1,143 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "6c48a1e6-092c-529b-9a4d-5af4cc3925a4",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/libfoo"
+          }
+        ]
+      },
+      "name": "libfoo",
+      "purl": "pkg:generic/libfoo@6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c",
+      "type": "library",
+      "version": "6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c"
+    },
+    {
+      "bom-ref": "c2d951bf-5887-59f9-937e-fe2af1861ce4",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/libfoo"
+          }
+        ]
+      },
+      "name": "libfoo",
+      "purl": "pkg:github/acme/libfoo@6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c",
+      "supplier": {
+        "name": "acme"
+      },
+      "type": "library",
+      "version": "6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c"
+    },
+    {
+      "bom-ref": "5ea0e23e-71ff-58ff-948e-9d51f17fdf50",
+      "name": "catch2",
+      "purl": "pkg:github/catchorg/catch2@7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+      "supplier": {
+        "name": "catchorg"
+      },
+      "type": "library",
+      "version": "7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d"
+    },
+    {
+      "bom-ref": "6aa0c4c5-03ff-5fb8-804d-22818cffd839",
+      "name": "spdlog",
+      "purl": "pkg:github/gabime/spdlog@4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e",
+      "supplier": {
+        "name": "gabime"
+      },
+      "type": "library",
+      "version": "4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e"
+    },
+    {
+      "bom-ref": "75e62084-701e-507b-a5f5-20183e539ada",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "name": "leftpad-inside-submodule",
+      "purl": "pkg:npm/leftpad-inside-submodule@1.0.0",
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "d30ec835-57d2-5f68-bc5d-5c6ccaed6963",
+      "name": "bzip2-inside-submodule",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:vcpkg/bzip2-inside-submodule",
+      "type": "library"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "6c48a1e6-092c-529b-9a4d-5af4cc3925a4"
+    },
+    {
+      "ref": "c2d951bf-5887-59f9-937e-fe2af1861ce4"
+    },
+    {
+      "ref": "5ea0e23e-71ff-58ff-948e-9d51f17fdf50"
+    },
+    {
+      "ref": "6aa0c4c5-03ff-5fb8-804d-22818cffd839"
+    },
+    {
+      "ref": "75e62084-701e-507b-a5f5-20183e539ada"
+    },
+    {
+      "ref": "d30ec835-57d2-5f68-bc5d-5c6ccaed6963"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "6"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "5"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "1"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:197030dd-e2fb-59f3-b4bb-25db388f09b1",
+  "specVersion": "1.6",
+  "version": 1
+}

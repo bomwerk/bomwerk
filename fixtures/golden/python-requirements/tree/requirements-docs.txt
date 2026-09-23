@@ -1,0 +1,2 @@
+# documentation pins for the fixture service
+flask==3.0.3

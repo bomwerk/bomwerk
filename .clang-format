@@ -1,0 +1,15 @@
+BasedOnStyle: Google
+ColumnLimit: 100
+IndentWidth: 2
+PointerAlignment: Left
+DerivePointerAlignment: false
+
+BreakBeforeBraces: Allman
+
+InsertBraces: true
+
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+AllowShortFunctionsOnASingleLine: Inline

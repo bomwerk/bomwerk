@@ -1,0 +1,5 @@
+{
+  "description": "vcpkg: a ports-registry port definition (ports/<name>/vcpkg.json) reports its own name+version as a High-confidence component, in addition to its dependencies array, unlike a consumer manifest",
+  "args": [],
+  "expect_exit": 0
+}

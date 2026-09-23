@@ -1,0 +1,68 @@
+{
+  "_comment": [
+    "The answer this fixture exists to pin: which components the traced build",
+    "actually used, and why. Hand-authored, deliberately not machine-blessed --",
+    "a correctness fixture that regenerates itself from the code under test",
+    "proves nothing. Derive each number from trace.jsonl and sbom.cdx.json by",
+    "hand before changing it.",
+    "",
+    "zlib            compiles two sources under its root            -> used",
+    "json             header-only: named only as an include path    -> used (weaker rung)",
+    "vendored-crypto  prebuilt .a, never compiled, only linked -> used (link evidence)",
+    "orphan           present in the tree, never compiled           -> UNUSED, and dropped",
+    "left-pad         an npm package: no location in the repository -> not judged, kept",
+    "",
+    "The `ar` record that builds libzlib.a produces no evidence by itself --",
+    "archiving alone is never proof of use, only of having been built -- and",
+    "the /opt/vendor-sdk compile lands outside the scanned root. The final",
+    "c++ record links app directly against vendored-crypto's prebuilt .a; that",
+    "record has no -c/-S/-E, so it is link-mode, not a compile, and",
+    "must not inflate compile_invocations.",
+    "",
+    "product_name / unused_report / discovery_checks used to be hard-coded in",
+    "scripts/run_trim_case.py; they moved here so a second trim fixture can",
+    "exist. The trim identity is this SBOM's hand-written purl; the scan identity",
+    "is what a fresh `scan` of tree/ derives from the folder name. This fixture is",
+    "the one that exercises trace DISCOVERY (discovery_checks: true)."
+  ],
+  "exit_code": 0,
+  "compile_invocations": 4,
+  "in_tree_sources": 3,
+  "out_of_tree_sources": 1,
+  "link_invocations": 1,
+  "unresolved_library_names": 0,
+  "judged": 4,
+  "used": 3,
+  "not_judged": 1,
+  "verdicts": {
+    "pkg:generic/nlohmann-json@3.11.3": "used",
+    "pkg:generic/orphan-lib@0.1.0": "UNUSED",
+    "pkg:generic/vendored-crypto@1.0.0": "used",
+    "pkg:generic/zlib@1.2.11": "used"
+  },
+  "qualifiers": {
+    "pkg:generic/nlohmann-json@3.11.3": "(headers only)",
+    "pkg:generic/vendored-crypto@1.0.0": "(1 link input(s))",
+    "pkg:generic/zlib@1.2.11": "(2 sources)"
+  },
+  "trimmed_purls": [
+    "pkg:generic/nlohmann-json@3.11.3",
+    "pkg:generic/vendored-crypto@1.0.0",
+    "pkg:generic/zlib@1.2.11",
+    "pkg:npm/left-pad@1.3.0"
+  ],
+  "product_name": "widget-firmware",
+  "unused_report": {
+    "count": 1,
+    "trim_identities": [
+      "pkg:generic/orphan-lib@0.1.0"
+    ],
+    "scan_identities": [
+      "pkg:generic/orphan"
+    ],
+    "roots": [
+      "third_party/orphan"
+    ]
+  },
+  "discovery_checks": true
+}

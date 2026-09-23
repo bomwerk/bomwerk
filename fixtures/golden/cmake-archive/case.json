@@ -1,0 +1,5 @@
+{
+  "description": "CMake archive dependencies: a FetchContent URL pinned by URL_HASH (checksum + download_url qualifiers, sha256 recorded in hashes) and one with no hash (download_url only). This is the pkg:generic-with-qualifiers shape the purl-spec validator most needs to see -- no other golden case emits a qualified purl.",
+  "args": [],
+  "expect_exit": 0
+}

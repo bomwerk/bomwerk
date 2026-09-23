@@ -1,0 +1,3 @@
+[submodule "broken"
+	path = libs/broken
+	url = https://github.com/acme/broken.git

@@ -1,0 +1,5 @@
+{
+  "description": "repo config: bomwerk.toml alone drives the scan (no CLI flags) — [scan] include keeps only app/, [scan] exclude drops app/playground/ inside it, [product] lands in metadata.component; the excluded npm lock and the outside-the-include Cargo.lock must contribute nothing",
+  "args": [],
+  "expect_exit": 0
+}

@@ -1,0 +1,23 @@
+# `bomwerk observe` writes its shim directory and trace here. The shims
+# stay put after a run on purpose: a CMake cache configured under observe
+# holds their absolute path: so this is a working directory, never an artifact
+# to commit.
+.bomwerk/
+build/
+build*/
+.cache/
+.DS_Store
+compile_commands.json
+.vscode/
+.idea/
+vcpkg_installed/
+__pycache__/
+
+# CTest's own working directory (created by every `ctest` run), a locally
+# downloaded `act` (GitHub Actions local runner) binary, and scan/report
+# output from running bomwerk against comparison repos. All generated, never
+# source.
+Testing/
+/bin/
+/reports/
+/sbom.cdx.json

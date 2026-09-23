@@ -1,0 +1,5 @@
+{
+  "description": "maven: pom.xml — the pom's own coordinates are emitted as a High-confidence self-identity component, carrying its <licenses><license><name> text verbatim in Component::license, serialized into CycloneDX's licenses[].license.name",
+  "args": [],
+  "expect_exit": 0
+}

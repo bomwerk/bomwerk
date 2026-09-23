@@ -1,0 +1,28 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies"
+    ],
+    "content-hash": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "packages": [
+        {
+            "name": "guzzlehttp/guzzle",
+            "version": "v7.8.1"
+        },
+        {
+            "name": "monolog/monolog",
+            "version": "3.6.0",
+            "license": ["MIT"],
+            "dist": {
+                "type": "zip",
+                "shasum": "0f1e2d3c4b5a69788796a5b4c3d2e1f0aabbccdd"
+            }
+        }
+    ],
+    "packages-dev": [
+        {
+            "name": "phpunit/phpunit",
+            "version": "v11.1.3"
+        }
+    ]
+}

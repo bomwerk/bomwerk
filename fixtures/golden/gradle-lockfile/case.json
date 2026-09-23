@@ -1,0 +1,5 @@
+{
+  "description": "maven: gradle.lockfile — group:artifact:version triplets emitted High (invisible to the byte-diff); an entry whose every configuration starts with test becomes scope \"excluded\"; the empty= line is ignored",
+  "args": [],
+  "expect_exit": 0
+}

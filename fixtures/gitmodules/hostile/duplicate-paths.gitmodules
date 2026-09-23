@@ -1,0 +1,6 @@
+[submodule "a"]
+	path = libs/dup
+	url = https://github.com/acme/a.git
+[submodule "b"]
+	path = libs/dup
+	url = https://github.com/acme/b.git

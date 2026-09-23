@@ -1,0 +1,7 @@
+{
+  "description": "SPDX 3.0.1 (JSON-LD) writer over the mixed-product tree: fmt is vendored as a submodule AND declared via FetchContent at the same commit, so core::merge_all yields one software_Package; --product/--product-version become the SpdxDocument name",
+  "args": ["--product", "golden-demo", "--product-version", "4.5.6"],
+  "format": "spdx",
+  "spdx_version": "3.0",
+  "expect_exit": 0
+}

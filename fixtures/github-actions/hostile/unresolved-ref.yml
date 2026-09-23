@@ -1,0 +1,7 @@
+name: unresolved-ref
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@${{ matrix.node-action-ref }}

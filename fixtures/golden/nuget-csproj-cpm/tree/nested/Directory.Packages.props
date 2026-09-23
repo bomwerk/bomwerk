@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="Shared.Lib" Version="2.0.0" />
+  </ItemGroup>
+</Project>

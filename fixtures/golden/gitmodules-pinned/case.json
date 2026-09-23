@@ -1,0 +1,5 @@
+{
+  "description": "submodules: a detached HEAD and a packed-refs ref both resolve to pinned commits; a third submodule is declared but never initialized, which degrades the run to exit 1",
+  "args": [],
+  "expect_exit": 1
+}

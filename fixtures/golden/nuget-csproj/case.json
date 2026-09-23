@@ -1,0 +1,5 @@
+{
+  "description": "nuget: .csproj PackageReference elements (no packages.lock.json present) emit Medium-confidence pkg:nuget components",
+  "args": [],
+  "expect_exit": 0
+}

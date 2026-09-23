@@ -1,0 +1,11 @@
+# golden: this file alone shapes the scan — the harness passes no
+# scan-shaping flags. If include stops working, outside/Cargo.lock leaks a
+# cargo component into the SBOM; if exclude stops working, the npm lock in
+# app/playground/ leaks an npm component.
+[scan]
+include = ["app"]
+exclude = ["app/playground"]
+
+[product]
+id = "golden-product"
+version = "9.9.9"

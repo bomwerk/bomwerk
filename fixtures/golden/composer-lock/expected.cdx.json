@@ -1,0 +1,95 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "42223a04-40b8-590e-bf49-49e64bb89fe3",
+      "name": "guzzlehttp/guzzle",
+      "purl": "pkg:composer/guzzlehttp/guzzle@v7.8.1",
+      "supplier": {
+        "name": "guzzlehttp"
+      },
+      "type": "library",
+      "version": "v7.8.1"
+    },
+    {
+      "bom-ref": "c7bd0954-929c-531a-9644-8f17df86eef2",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "name": "monolog/monolog",
+      "purl": "pkg:composer/monolog/monolog@3.6.0",
+      "supplier": {
+        "name": "monolog"
+      },
+      "type": "library",
+      "version": "3.6.0"
+    },
+    {
+      "bom-ref": "7838e409-801c-5828-8eeb-2a1c9bc40284",
+      "name": "phpunit/phpunit",
+      "purl": "pkg:composer/phpunit/phpunit@v11.1.3",
+      "scope": "excluded",
+      "supplier": {
+        "name": "phpunit"
+      },
+      "type": "library",
+      "version": "v11.1.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "42223a04-40b8-590e-bf49-49e64bb89fe3"
+    },
+    {
+      "ref": "c7bd0954-929c-531a-9644-8f17df86eef2"
+    },
+    {
+      "ref": "7838e409-801c-5828-8eeb-2a1c9bc40284"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:ce1f6ebd-c524-56ab-8bd7-0a3c83466344",
+  "specVersion": "1.6",
+  "version": 1
+}

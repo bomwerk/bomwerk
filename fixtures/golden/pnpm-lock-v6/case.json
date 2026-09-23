@@ -1,0 +1,5 @@
+{
+  "description": "pnpm: pnpm-lock.yaml v6 — the older key spelling, which no repo in the 16-repo corpus carries, so this case is where it is tested at all. A key opens with a `/` and may carry the peer set it was resolved against as a trailing (left-pad@1.3.0); both are stripped before the name/version split, and stripping the suffix FIRST is what keeps its embedded `@` out of the version. The per-package `dev:` flag v6 still writes is deliberately not read, so v6 and v9 describe the same tree identically",
+  "args": [],
+  "expect_exit": 0
+}

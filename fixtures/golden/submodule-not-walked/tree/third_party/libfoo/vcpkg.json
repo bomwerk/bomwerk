@@ -1,0 +1,7 @@
+{
+  "name": "libfoo",
+  "version-string": "0.9.0",
+  "dependencies": [
+    "bzip2-inside-submodule"
+  ]
+}

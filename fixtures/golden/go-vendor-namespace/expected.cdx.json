@@ -1,0 +1,71 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "2aa4d337-0a4f-5608-921e-8d7456167bc9",
+      "name": "github.com/gorilla/mux",
+      "purl": "pkg:golang/github.com/gorilla/mux@v1.8.1",
+      "supplier": {
+        "name": "gorilla"
+      },
+      "type": "library",
+      "version": "v1.8.1"
+    },
+    {
+      "bom-ref": "a74450d4-ca7c-548a-80a5-619dcafda815",
+      "name": "golang.org/x/text",
+      "purl": "pkg:golang/golang.org/x/text@v0.17.0",
+      "type": "library",
+      "version": "v0.17.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "2aa4d337-0a4f-5608-921e-8d7456167bc9"
+    },
+    {
+      "ref": "a74450d4-ca7c-548a-80a5-619dcafda815"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:d893ba3f-f7b6-563e-9305-e6b24b8dbe79",
+  "specVersion": "1.6",
+  "version": 1
+}

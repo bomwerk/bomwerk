@@ -1,0 +1,9 @@
+name: sequence-item-form
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # No preceding "- name:" step at all -- "uses:" is the very first key on
+    # the sequence-item line, the shape core::yaml_subset cannot parse.
+    steps:
+      - uses: acme/widget@v1

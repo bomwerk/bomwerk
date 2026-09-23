@@ -1,0 +1,5 @@
+{
+  "description": "a git submodule is worth exactly ONE pinned component and its contents are never walked. third_party/libfoo carries a CMakeLists.txt, a package-lock.json and a vcpkg.json that must produce nothing; the top-level FetchContent dependency proves the walk still works outside it. Delete the submodule skip set and this snapshot grows five components",
+  "args": [],
+  "expect_exit": 0
+}

@@ -1,0 +1,88 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "67cfaadd-a23b-5dea-bedb-2a358d1f95de",
+      "name": "npm-alpha",
+      "purl": "pkg:npm/npm-alpha@1.0.0",
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "341a5d60-570d-56ac-b257-8c5df3fa32c2",
+      "name": "npm-beta",
+      "purl": "pkg:npm/npm-beta@2.0.0",
+      "type": "library",
+      "version": "2.0.0"
+    },
+    {
+      "bom-ref": "abbe4d34-454e-5fd5-8833-c988f0c1106c",
+      "name": "yarn-alpha",
+      "purl": "pkg:npm/yarn-alpha@1.0.0",
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "030e6803-74b0-58d5-9c91-4fc3033f08b4",
+      "name": "yarn-beta",
+      "purl": "pkg:npm/yarn-beta@2.0.0",
+      "type": "library",
+      "version": "2.0.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "67cfaadd-a23b-5dea-bedb-2a358d1f95de"
+    },
+    {
+      "ref": "341a5d60-570d-56ac-b257-8c5df3fa32c2"
+    },
+    {
+      "ref": "abbe4d34-454e-5fd5-8833-c988f0c1106c"
+    },
+    {
+      "ref": "030e6803-74b0-58d5-9c91-4fc3033f08b4"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:780e1579-30c9-5943-99ad-b3db57c816e3",
+  "specVersion": "1.6",
+  "version": 1
+}

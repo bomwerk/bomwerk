@@ -1,0 +1,5 @@
+{
+  "description": "CLI max-packages overrides TOML, budgets npm and Yarn independently, writes the deterministic partial SBOM, and exits 2",
+  "args": ["--max-packages", "2"],
+  "expect_exit": 2
+}

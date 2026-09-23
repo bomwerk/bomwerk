@@ -1,0 +1,69 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "6f0130fe-795f-5bbc-a715-b8ad372c1512",
+      "name": "flask",
+      "purl": "pkg:pypi/flask@3.0.3",
+      "type": "library",
+      "version": "3.0.3"
+    },
+    {
+      "bom-ref": "d8a718d2-d080-5abf-89d3-4f277514ea08",
+      "name": "pytest",
+      "purl": "pkg:pypi/pytest@8.2.0",
+      "scope": "excluded",
+      "type": "library",
+      "version": "8.2.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "6f0130fe-795f-5bbc-a715-b8ad372c1512"
+    },
+    {
+      "ref": "d8a718d2-d080-5abf-89d3-4f277514ea08"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:4824992a-0e67-5558-824a-6b8516afe19b",
+  "specVersion": "1.6",
+  "version": 1
+}

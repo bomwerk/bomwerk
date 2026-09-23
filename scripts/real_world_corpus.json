@@ -1,0 +1,257 @@
+{
+  "pinned_at": "2026-09-10",
+  "repositories": [
+    {
+      "full_name": "fmtlib/fmt",
+      "commit": "8dc5d3f69f15417d13c60a4a21f7298ed24db41c",
+      "ecosystem": "C++/CMake",
+      "tier": 0,
+      "reason": "small CMake dependency declarations"
+    },
+    {
+      "full_name": "google/googletest",
+      "commit": "dd0a37b8432bf8a0c3e33938ae9807d413db0cbd",
+      "ecosystem": "C++/CMake",
+      "tier": 0,
+      "reason": "widely embedded CMake project"
+    },
+    {
+      "full_name": "catchorg/Catch2",
+      "commit": "897d8043eb192d0fc361c6339ce13e1cabe481c4",
+      "ecosystem": "C++/CMake",
+      "tier": 0,
+      "reason": "modern CMake project with packaging metadata"
+    },
+    {
+      "full_name": "pallets/flask",
+      "commit": "d73fa1cdcbd8b1465c151db8924ba58b1dd14e35",
+      "ecosystem": "Python",
+      "tier": 0,
+      "reason": "small popular Python framework"
+    },
+    {
+      "full_name": "Textualize/rich",
+      "commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+      "ecosystem": "Python",
+      "tier": 0,
+      "reason": "Python project with modern metadata"
+    },
+    {
+      "full_name": "BurntSushi/ripgrep",
+      "commit": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
+      "ecosystem": "Rust",
+      "tier": 0,
+      "reason": "compact real Cargo workspace"
+    },
+    {
+      "full_name": "sharkdp/bat",
+      "commit": "7323a7514f7601737640e7172be115127d6db08c",
+      "ecosystem": "Rust",
+      "tier": 0,
+      "reason": "Cargo lockfile with a substantial graph"
+    },
+    {
+      "full_name": "gin-gonic/gin",
+      "commit": "dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9",
+      "ecosystem": "Go",
+      "tier": 0,
+      "reason": "small popular Go module"
+    },
+    {
+      "full_name": "composer/composer",
+      "commit": "85ae0251528d5f155548868e637ef6c68ed5be6b",
+      "ecosystem": "PHP",
+      "tier": 0,
+      "reason": "Composer's own lockfile and manifest"
+    },
+    {
+      "full_name": "rails/rails",
+      "commit": "d2608111257a3a5e619d41235234849568cf1d74",
+      "ecosystem": "Ruby",
+      "tier": 0,
+      "reason": "large Ruby bundle from a familiar framework"
+    },
+    {
+      "full_name": "AvaloniaUI/Avalonia",
+      "commit": "def4d7523f207e296843ef44129d608428075b6a",
+      "ecosystem": ".NET",
+      "tier": 0,
+      "reason": "cross-platform .NET repository"
+    },
+    {
+      "full_name": "vuejs/core",
+      "commit": "54097087a0918b98f16c84599b1a6d654e952ca7",
+      "ecosystem": "JS/TypeScript",
+      "tier": 0,
+      "reason": "pnpm monorepo without extreme checkout size"
+    },
+    {
+      "full_name": "gabime/spdlog",
+      "commit": "57cb5fb7a8ff30079751728234623230535a5c92",
+      "ecosystem": "C++/CMake",
+      "tier": 1,
+      "reason": "CMake project also used by bomwerk"
+    },
+    {
+      "full_name": "nlohmann/json",
+      "commit": "3e2de322265763088f4aff5c50f3f07857e70e44",
+      "ecosystem": "C++/CMake",
+      "tier": 1,
+      "reason": "header-only C++ project with broad build metadata"
+    },
+    {
+      "full_name": "python-poetry/poetry",
+      "commit": "06f1cd9f2c35d6e7e6689c9e3a51426c024863ed",
+      "ecosystem": "Python",
+      "tier": 1,
+      "reason": "Poetry's own lockfile"
+    },
+    {
+      "full_name": "fastapi/fastapi",
+      "commit": "50113da16fec53b66b80d75e80a89296de4fa5a5",
+      "ecosystem": "Python",
+      "tier": 1,
+      "reason": "modern Python project that exposes coverage gaps"
+    },
+    {
+      "full_name": "tokio-rs/tokio",
+      "commit": "050cd3a9ac3878b0a70333b8c8229b510dd64d5e",
+      "ecosystem": "Rust",
+      "tier": 1,
+      "reason": "multi-package Cargo workspace"
+    },
+    {
+      "full_name": "astral-sh/uv",
+      "commit": "a22198b1b53636c4f2be0ca58d3fcf6bfb157781",
+      "ecosystem": "Rust/Python",
+      "tier": 1,
+      "reason": "mixed-language modern package manager"
+    },
+    {
+      "full_name": "prometheus/prometheus",
+      "commit": "5a078d9d2e0b9a8342cdd56585306904a409511f",
+      "ecosystem": "Go",
+      "tier": 1,
+      "reason": "large Go dependency set"
+    },
+    {
+      "full_name": "spring-projects/spring-boot",
+      "commit": "8b8294a1a111eeac61eeae21b72f11e54c99c7ad",
+      "ecosystem": "Java",
+      "tier": 1,
+      "reason": "large JVM build with Maven and Gradle surfaces"
+    },
+    {
+      "full_name": "laravel/framework",
+      "commit": "99730c53854bc27bbe23a9f52d717a0d2b5b04b9",
+      "ecosystem": "PHP",
+      "tier": 1,
+      "reason": "composer.json fallback without requiring a lockfile"
+    },
+    {
+      "full_name": "pnpm/pnpm",
+      "commit": "c09981cf7d7943d0bb7f13b5fae88ac6c8956b9e",
+      "ecosystem": "JS/Rust",
+      "tier": 1,
+      "reason": "pnpm's own workspace and mixed implementation"
+    },
+    {
+      "full_name": "freeCodeCamp/freeCodeCamp",
+      "commit": "6a2edb2d206d2e1b9d6711dbc0555ebd9c1e6f02",
+      "ecosystem": "JS/TypeScript",
+      "tier": 1,
+      "reason": "very popular, large application monorepo"
+    },
+    {
+      "full_name": "django/django",
+      "commit": "2b30f6255b5ef84afbd827993643d52ef2c0963a",
+      "ecosystem": "Python",
+      "tier": 1,
+      "reason": "very popular Python framework"
+    },
+    {
+      "full_name": "godotengine/godot",
+      "commit": "4cefd60f5a3d733506cb557d6cd26263b3fbd17f",
+      "ecosystem": "C++",
+      "tier": 2,
+      "reason": "very large C++ engine and non-CMake build edge case"
+    },
+    {
+      "full_name": "qmk/qmk_firmware",
+      "commit": "08c662f286ddfd12a985f57b584b02eca5af0ae6",
+      "ecosystem": "C",
+      "tier": 2,
+      "reason": "unusual embedded firmware tree"
+    },
+    {
+      "full_name": "jart/cosmopolitan",
+      "commit": "3293fad0a9eac7865c019be98fb993eeb933405e",
+      "ecosystem": "C",
+      "tier": 2,
+      "reason": "unusual portable-C build system"
+    },
+    {
+      "full_name": "microsoft/vcpkg",
+      "commit": "3d33b7f7a8121da6e4fa80b35618fc8e960be686",
+      "ecosystem": "CMake",
+      "tier": 2,
+      "reason": "pathological manifest-density stress case"
+    },
+    {
+      "full_name": "vercel/next.js",
+      "commit": "e674165f365590225f61bf80e29a278fcd6fee73",
+      "ecosystem": "JS/TypeScript",
+      "tier": 2,
+      "reason": "very large pnpm monorepo"
+    },
+    {
+      "full_name": "microsoft/vscode",
+      "commit": "3fb04bc2bbf66208fbe754467924f3d1239003db",
+      "ecosystem": "JS/TypeScript",
+      "tier": 2,
+      "reason": "large desktop application repository"
+    },
+    {
+      "full_name": "rust-lang/rust",
+      "commit": "c4c4a576936e9e67717d0deb8e74e02dd5dd10de",
+      "ecosystem": "Rust",
+      "tier": 2,
+      "reason": "compiler-scale Cargo workspace"
+    },
+    {
+      "full_name": "kubernetes/kubernetes",
+      "commit": "39d3afacbeca5074fb54c1af5469ad11d6ddd78e",
+      "ecosystem": "Go",
+      "tier": 2,
+      "reason": "very large Go monorepo"
+    },
+    {
+      "full_name": "apache/kafka",
+      "commit": "b310ea4655d56afb2346cc8696418e3b9f227f61",
+      "ecosystem": "Java",
+      "tier": 2,
+      "reason": "large Gradle-based JVM project"
+    },
+    {
+      "full_name": "dotnet/runtime",
+      "commit": "4a29be73a7faf8bfb745e1ce9c08b43175d1d1ec",
+      "ecosystem": ".NET/C++",
+      "tier": 2,
+      "reason": "runtime-scale mixed-language repository"
+    },
+    {
+      "full_name": "discourse/discourse",
+      "commit": "86c45d5351a6f9db7c3cf35da9ec21958c977c86",
+      "ecosystem": "Ruby/JS",
+      "tier": 2,
+      "reason": "large mixed Ruby and JavaScript application"
+    },
+    {
+      "full_name": "nextcloud/server",
+      "commit": "e99db582af5fa540e09947512fc75eaed811745a",
+      "ecosystem": "PHP/JS",
+      "tier": 2,
+      "reason": "very large mixed PHP application"
+    }
+  ]
+}

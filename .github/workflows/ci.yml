@@ -1,0 +1,125 @@
+name: ci
+on:
+  # A fork's pull request is the only way an outside contribution arrives, and
+  # `push` alone never runs for one. `push` stays limited to main so a branch
+  # with an open pull request is not built twice.
+  pull_request:
+  push:
+    branches: [main]
+  # Lets a run be started by hand, which is how the first one after publication
+  # happens and how a green result is produced without an empty commit.
+  workflow_dispatch:
+
+jobs:
+  public-history:
+    # The repository's own history is checked on every change, not once at
+    # publication: an old branch pushed here, a second root commit merged in,
+    # or a path outside the public layout has to fail before it is anyone's
+    # problem. fetch-depth 0 is required: the default shallow fetch would
+    # hide exactly what this inspects.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Audit the public history
+        run: python3 scripts/audit_public_history.py .git
+
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
+    steps:
+      - uses: actions/checkout@v4.1.0
+        with:
+          submodules: true
+      - name: Resolve vcpkg baseline commit (cache key input)
+        id: vcpkg_baseline
+        run: echo "sha=$(git -C vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.vcpkg-binary-cache
+          key: vcpkg-bincache-${{ matrix.os }}-${{ steps.vcpkg_baseline.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bincache-${{ matrix.os }}-${{ steps.vcpkg_baseline.outputs.sha }}-
+            vcpkg-bincache-${{ matrix.os }}-
+      - name: Bootstrap vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+      - name: Make scripts executable
+        run: chmod +x ./scripts/*.sh
+      - name: Set up Python (cached)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+          cache-dependency-path: scripts/ci-requirements.txt
+      - name: Install schema validation tooling
+        run: python3 -m pip install --user --break-system-packages -r scripts/ci-requirements.txt
+      - name: Configure
+        run: >
+          cmake -B build -DCMAKE_BUILD_TYPE=Debug
+          -DBOMWERK_PRO=OFF
+          -DBOMWERK_SANITIZE=${{ matrix.os == 'ubuntu-24.04' && 'ON' || 'OFF' }}
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Cache sbom-tools binary
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/sbom-tools
+          key: sbom-tools-${{ matrix.os }}-${{ hashFiles('scripts/fetch-sbom-tools.sh') }}
+      - name: Install sbom-tools (CRANE interop)
+        run: ./scripts/fetch-sbom-tools.sh
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Smoke run (dogfood: our own vendored vcpkg submodule must appear)
+        run: |
+          set +e
+          # --exclude-list keeps fixtures/ (real-world and hostile PARSER INPUT : 
+          # several files literally named vcpkg.json/conanfile.txt/CMakeLists.txt/
+          # conan.lock/.gitmodules) out of bomwerk's own dependency list; see
+          # scripts/ci-self-scan-exclude.txt for why this can't just add
+          # "fixtures" to the built-in list.
+          ./build/bomwerk scan . --exclude-list scripts/ci-self-scan-exclude.txt > scan.out 2> scan.err
+          code=$?
+          set -e
+          echo "=== exit code: $code ==="
+          echo "=== stdout: $(wc -c < scan.out) bytes ==="
+          cat scan.out
+          echo "=== stderr: $(wc -c < scan.err) bytes ==="
+          cat scan.err
+          test "$code" -le 1
+          grep -Eq 'pkg:github/microsoft/vcpkg@[0-9a-f]{40}' scan.out
+          test -s sbom.cdx.json
+          # The golden purl_spec_* ctests check hand-built fixtures; this
+          # checks a REAL scan of a real repo, where the purls come from whatever
+          # bomwerk's own dependencies happen to look like today.
+          python3 scripts/validate_purls.py sbom.cdx.json
+          # Two independent absence checks for the fixtures-exclusion fix, each
+          # using an explicit if/exit rather than `!`-negation: bash's `set -e`
+          # never aborts on a `!`-inverted command's status, so a `!`-prefixed
+          # check here would silently stop guarding anything the moment one
+          # more line was appended after it. harfbuzz is declared only by
+          # fixtures/vuln/known-vulnerable's FetchContent; the hex string is a
+          # purely synthetic commit id shared by two fixtures/golden/ cases
+          # (never a real bomwerk dependency's commit): either appearing here
+          # means the fixtures exclusion regressed.
+          if grep -q 'harfbuzz' scan.out; then
+            echo "fixtures/vuln/known-vulnerable leaked into bomwerk's own dependency list" >&2
+            exit 1
+          fi
+          if grep -q '0f1e2d3c4b5a69788796a5b4c3d2e1f009182736' scan.out; then
+            echo "a fixtures/golden/ fixture leaked into bomwerk's own dependency list" >&2
+            exit 1
+          fi
+
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang-format
+      - run: ./scripts/check-format.sh clang-format

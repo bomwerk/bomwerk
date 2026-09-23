@@ -1,0 +1,7 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of full configuration lock.
+ch.qos.logback:logback-classic:1.5.6=compileClasspath,runtimeClasspath
+org.apache.commons:commons-lang3:3.14.0=compileClasspath,runtimeClasspath,testCompileClasspath
+org.junit.jupiter:junit-jupiter:5.10.2=testCompileClasspath,testRuntimeClasspath
+empty=annotationProcessor

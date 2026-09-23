@@ -1,0 +1,22 @@
+[requires]
+# CPE-fallback fixture. `pkg:conan/zlib@1.2.11` is exactly the class this
+# path exists for: conan has NO OSV ecosystem at all (verified against OSV's
+# own ecosystem list — no Conan/ConanCenter entry exists), and the version is
+# a release string rather than a commit id, so OSV's commit index cannot help
+# either. Without the CPE fallback this component is reported as "not checked" and nothing
+# more.
+#
+# Its CPE match string is `cpe:2.3:a:*:zlib:1.2.11`, which NVD's CVE API 2.0
+# answers with 6 real CVEs — CVE-2018-25032, CVE-2022-37434 (9.8 Critical) and
+# CVE-2023-45853 among them. Verified directly against the live API while
+# building this feature.
+#
+# The wildcard vendor is what makes the match possible without a curated
+# vendor table, and also what makes it lower-confidence: NVD files this
+# product under the `zlib` vendor, but a different vendor's product named
+# `zlib` would match too. That caveat is the point of the labeling, so this
+# fixture is also the demo of the confidence tag.
+zlib/1.2.11
+
+[generators]
+CMakeDeps

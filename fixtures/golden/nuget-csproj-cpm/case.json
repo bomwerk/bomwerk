@@ -1,0 +1,5 @@
+{
+  "description": "nuget: Central Package Management (Directory.Packages.props) resolves a versionless .csproj PackageReference at Medium confidence, with directory-scoped nearest-file resolution",
+  "args": [],
+  "expect_exit": 0
+}

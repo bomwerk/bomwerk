@@ -1,0 +1,101 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "3be876c3-ac10-5d37-8ef9-ea30532fb9e5",
+      "name": "com.example:demo-java-app",
+      "purl": "pkg:maven/com.example/demo-java-app@2.4.6",
+      "supplier": {
+        "name": "com.example"
+      },
+      "type": "library",
+      "version": "2.4.6"
+    },
+    {
+      "bom-ref": "d75be3d5-686a-5b3f-a203-6682d461e68a",
+      "name": "com.google.guava:guava",
+      "purl": "pkg:maven/com.google.guava/guava@33.2.1-jre",
+      "supplier": {
+        "name": "com.google.guava"
+      },
+      "type": "library",
+      "version": "33.2.1-jre"
+    },
+    {
+      "bom-ref": "56ffa8e3-c073-5cdc-9229-2703eb0d274b",
+      "name": "org.apache.commons:commons-lang3",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.14.0",
+      "supplier": {
+        "name": "org.apache.commons"
+      },
+      "type": "library",
+      "version": "3.14.0"
+    },
+    {
+      "bom-ref": "4463f86d-f0c5-570d-adda-7816799e402c",
+      "name": "org.junit.jupiter:junit-jupiter",
+      "purl": "pkg:maven/org.junit.jupiter/junit-jupiter@5.10.2",
+      "scope": "excluded",
+      "supplier": {
+        "name": "org.junit.jupiter"
+      },
+      "type": "library",
+      "version": "5.10.2"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "3be876c3-ac10-5d37-8ef9-ea30532fb9e5"
+    },
+    {
+      "ref": "d75be3d5-686a-5b3f-a203-6682d461e68a"
+    },
+    {
+      "ref": "56ffa8e3-c073-5cdc-9229-2703eb0d274b"
+    },
+    {
+      "ref": "4463f86d-f0c5-570d-adda-7816799e402c"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:1933d69c-0dc8-5ea5-a883-97b2d01c174a",
+  "specVersion": "1.6",
+  "version": 1
+}

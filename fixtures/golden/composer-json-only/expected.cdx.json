@@ -1,0 +1,70 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "2f0cc9d7-a1e2-5a0d-a5fb-9cd83c249d62",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "vendor/acme"
+          }
+        ]
+      },
+      "name": "acme",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/acme",
+      "type": "library"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "2f0cc9d7-a1e2-5a0d-a5fb-9cd83c249d62"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "1"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:500f98f3-8f4b-5a15-afbb-8f966e0c2a47",
+  "specVersion": "1.6",
+  "version": 1
+}

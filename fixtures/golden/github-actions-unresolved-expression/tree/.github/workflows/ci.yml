@@ -1,0 +1,12 @@
+name: ci
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Clean: tag-pinned, Medium confidence.
+      - uses: actions/checkout@v4
+      # The ref is an unresolved matrix expression: degrades to Low confidence
+      # with a warning, and the purl carries no "@" segment at all rather than
+      # leaking "${{" into it.
+      - uses: actions/setup-node@${{ matrix.node-action-ref }}

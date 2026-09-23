@@ -1,0 +1,3 @@
+[submodule "tail"]
+	path = libs/tail
+	url = https://github.com/acme/tail.git

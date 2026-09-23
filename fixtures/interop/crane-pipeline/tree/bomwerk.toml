@@ -1,0 +1,8 @@
+# interop fixture: [cra] supplies the manufacturer/contact fields no
+# producer can observe from source code, so the CycloneDX writer's
+# metadata.manufacturer and the sbom.cra.json sidecar both carry them.
+[cra]
+manufacturer_name = "Acme Corp"
+manufacturer_email = "legal@acme.example"
+security_contact = "security@acme.example"
+vulnerability_disclosure_url = "https://acme.example/security"

@@ -1,0 +1,13 @@
+{
+  "name": "bomwerk",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "cli11",
+    "curl",
+    "nlohmann-json",
+    "openssl",
+    "spdlog",
+    "sqlite3",
+    "tomlplusplus"
+  ]
+}

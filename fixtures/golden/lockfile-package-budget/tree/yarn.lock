@@ -1,0 +1,11 @@
+__metadata:
+  version: 8
+
+"yarn-alpha@npm:1.0.0":
+  resolution: "yarn-alpha@npm:1.0.0"
+
+"yarn-beta@npm:2.0.0":
+  resolution: "yarn-beta@npm:2.0.0"
+
+"yarn-gamma@npm:3.0.0":
+  resolution: "yarn-gamma@npm:3.0.0"

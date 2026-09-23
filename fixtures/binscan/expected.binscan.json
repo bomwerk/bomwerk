@@ -1,0 +1,89 @@
+{
+  "_comment": [
+    "The answer this fixture exists to pin: what the binaries a build produced",
+    "say about the components an SBOM declares. Hand-authored, deliberately not",
+    "machine-blessed -- a correctness fixture that regenerates itself from the",
+    "code under test proves nothing. Derive each number from trace.jsonl and",
+    "scripts/run_binscan_case.py's generator by hand before changing it.",
+    "",
+    "The trace names five things bomwerk can open:",
+    "  build/app          linked output, DT_NEEDED libvendcrypto.so.1 + libc.so.6",
+    "  build/tool-static  linked output, statically linked: no dynamic section",
+    "  build/libzlib.a    written by the ar record",
+    "  .../libvendcrypto.a   a prebuilt vendored archive, consumed on a link line",
+    "  .../libvendcrypto.so.1 a prebuilt vendored shared object, likewise",
+    "The cc record is a COMPILE, so its `-o ...adler32.c.o` is not a link output;",
+    "a relocatable has nothing the binary pass could read anyway.",
+    "",
+    "vendored-crypto gains THREE pieces of evidence, on different proof:",
+    "  - build/app declares DT_NEEDED libvendcrypto.so.1, and a file answering to",
+    "    that soname exists under the component root (the existence check is what",
+    "    separates evidence from a name-shaped guess),",
+    "  - libvendcrypto.a lies inside the component and holds 2 members,",
+    "  - libvendcrypto.so.1 lies inside the component too: a prebuilt shared",
+    "    object under a component root IS that component, exactly as an archive is.",
+    "zlib has sources but no binary, so the pass says nothing about it. left-pad",
+    "records no location at all, so nothing can attribute to it.",
+    "",
+    "libc.so.6 resolves to no file in this repository. It is REPORTED, never",
+    "emitted as a component and never warned about: a system library missing from",
+    "your SBOM is the normal case, and warning on it would make the warning",
+    "channel useless on the first real run.",
+    "",
+    "Exit 1, not 0, and that is the point: build/tool-static is statically linked,",
+    "which is a degraded read of the product's dynamic dependencies even though",
+    "nothing went wrong. Exit 0 from binscan means every artifact was read AND",
+    "understood."
+  ],
+  "exit_code": 1,
+  "counters": {
+    "artifacts_scanned": 5,
+    "elf_artifacts": 3,
+    "dynamic_artifacts": 2,
+    "static_artifacts": 1,
+    "relocatable_artifacts": 0,
+    "malformed_artifacts": 0,
+    "dynamic_without_needed": 0,
+    "archives": 2,
+    "unrecognized_artifacts": 0,
+    "unreadable_artifacts": 0,
+    "truncated_samples": 0
+  },
+  "artifact_paths": [
+    "build/app",
+    "build/libzlib.a",
+    "build/tool-static",
+    "third_party/vendored-crypto/libvendcrypto.a",
+    "third_party/vendored-crypto/libvendcrypto.so.1"
+  ],
+  "artifact_shapes": {
+    "build/app": "dynamic",
+    "build/tool-static": "static",
+    "third_party/vendored-crypto/libvendcrypto.so.1": "dynamic"
+  },
+  "unmatched_needed": ["libc.so.6"],
+  "attributed": {
+    "third_party/vendored-crypto": {
+      "needed": ["libvendcrypto.so.1"],
+      "archive_members": 2,
+      "shared_objects": 1
+    }
+  },
+  "archive_members": {
+    "third_party/vendored-crypto/libvendcrypto.a": ["aes.o", "sha256.o"],
+    "build/libzlib.a": ["adler32.o"]
+  },
+  "symbols": {
+    "build/app": ["main"],
+    "third_party/vendored-crypto/libvendcrypto.a": ["AES_encrypt", "SHA256_Init"],
+    "third_party/vendored-crypto/libvendcrypto.so.1": ["AES_encrypt"]
+  },
+  "binary_evidence": {
+    "pkg:generic/vendored-crypto@1.0.0": [
+      "binary: 2 archive member(s) under third_party/vendored-crypto (e.g. aes.o)",
+      "binary: DT_NEEDED libvendcrypto.so.1 resolves under third_party/vendored-crypto (declared by build/app)",
+      "binary: 1 prebuilt shared object(s) under third_party/vendored-crypto (e.g. third_party/vendored-crypto/libvendcrypto.so.1)"
+    ]
+  },
+  "warning_must_mention": "statically linked"
+}

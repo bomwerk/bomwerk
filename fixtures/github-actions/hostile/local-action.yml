@@ -1,0 +1,8 @@
+name: local-action
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/local-thing
+      - uses: ../sibling-repo-action

@@ -1,0 +1,14 @@
+name: block-scalar-fake-uses
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print something that looks like a dependency
+        run: |
+          echo "uses: fake/fake@v1"
+          echo "  uses: also/fake@v1"
+      - name: Folded scalar too
+        run: >
+          uses: another/fake@v1
+      - uses: acme/real@v1

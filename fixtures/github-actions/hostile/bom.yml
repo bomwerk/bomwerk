@@ -1,0 +1,7 @@
+﻿name: bom
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: acme/widget@v1

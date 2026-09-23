@@ -1,0 +1,88 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "4f7dffba-d157-524f-bb92-1c23f6c5691a",
+      "name": "Newtonsoft.Json",
+      "purl": "pkg:nuget/Newtonsoft.Json@13.0.2",
+      "type": "library",
+      "version": "13.0.2"
+    },
+    {
+      "bom-ref": "1d45dd5d-f3aa-59e5-9918-6c0434666713",
+      "name": "Serilog",
+      "purl": "pkg:nuget/Serilog@3.1.1",
+      "type": "library",
+      "version": "3.1.1"
+    },
+    {
+      "bom-ref": "fd68473a-22f3-5008-8cf4-aadaee0d2fd5",
+      "name": "Shared.Lib",
+      "purl": "pkg:nuget/Shared.Lib@1.0.0",
+      "type": "library",
+      "version": "1.0.0"
+    },
+    {
+      "bom-ref": "9ef75e96-875c-5bb7-9423-cdc48ef461cb",
+      "name": "Shared.Lib",
+      "purl": "pkg:nuget/Shared.Lib@2.0.0",
+      "type": "library",
+      "version": "2.0.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "4f7dffba-d157-524f-bb92-1c23f6c5691a"
+    },
+    {
+      "ref": "1d45dd5d-f3aa-59e5-9918-6c0434666713"
+    },
+    {
+      "ref": "fd68473a-22f3-5008-8cf4-aadaee0d2fd5"
+    },
+    {
+      "ref": "9ef75e96-875c-5bb7-9423-cdc48ef461cb"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:6b4bb76c-8cd9-5101-9de3-7350d06f1bc2",
+  "specVersion": "1.6",
+  "version": 1
+}

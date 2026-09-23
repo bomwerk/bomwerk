@@ -1,0 +1,5 @@
+{
+  "description": "cargo: Cargo.lock — the workspace's own package (no source) is skipped; a registry checksum becomes the component's sha256, giving the first hashes block emitted by a lockfile parser",
+  "args": [],
+  "expect_exit": 0
+}

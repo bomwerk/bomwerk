@@ -1,0 +1,95 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "fbadb3c3-c9d3-5d7d-b03a-98fda9b7a07e",
+      "name": "vcpkg-cmake",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:vcpkg/vcpkg-cmake",
+      "type": "library"
+    },
+    {
+      "bom-ref": "cecb88a0-5143-59da-a475-232dd8068911",
+      "name": "vcpkg-cmake-config",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:vcpkg/vcpkg-cmake-config",
+      "type": "library"
+    },
+    {
+      "bom-ref": "7b1feb5a-4331-5795-8471-84e8d4a94c8e",
+      "cpe": "cpe:2.3:a:*:zlib:1.3.2:*:*:*:*:*:*:*",
+      "name": "zlib",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:vcpkg/zlib@1.3.2",
+      "type": "library",
+      "version": "1.3.2"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "fbadb3c3-c9d3-5d7d-b03a-98fda9b7a07e"
+    },
+    {
+      "ref": "cecb88a0-5143-59da-a475-232dd8068911"
+    },
+    {
+      "ref": "7b1feb5a-4331-5795-8471-84e8d4a94c8e"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "2"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:21acbac8-48e6-5f4e-bc4b-c7368a5302da",
+  "specVersion": "1.6",
+  "version": 1
+}

@@ -1,0 +1,5 @@
+{
+  "description": "nuget: legacy packages.config package elements emit Medium-confidence pkg:nuget components",
+  "args": [],
+  "expect_exit": 0
+}

@@ -1,0 +1,41 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "creationInfo": {
+    "created": "2025-01-01T00:00:00Z",
+    "creators": [
+      "Tool: bomwerk-@BOMWERK_VERSION@",
+      "Organization: bomwerk"
+    ]
+  },
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://bomwerk.dev/spdx/2.3/41c35338-5ffe-5fc3-b727-d0f256cfcac3",
+  "name": "golden-demo",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-acaaa616-b18e-5522-83ee-8333ee2a61d2",
+      "copyrightText": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceLocator": "pkg:github/fmtlib/fmt@2d1e2f3a4b5c6d7e8f90a1b2c3d4e5f607182930",
+          "referenceType": "purl"
+        }
+      ],
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "name": "fmt",
+      "supplier": "Organization: fmtlib",
+      "versionInfo": "2d1e2f3a4b5c6d7e8f90a1b2c3d4e5f607182930"
+    }
+  ],
+  "relationships": [
+    {
+      "relatedSpdxElement": "SPDXRef-Package-acaaa616-b18e-5522-83ee-8333ee2a61d2",
+      "relationshipType": "DESCRIBES",
+      "spdxElementId": "SPDXRef-DOCUMENT"
+    }
+  ],
+  "spdxVersion": "SPDX-2.3"
+}

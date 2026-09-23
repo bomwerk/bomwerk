@@ -1,0 +1,5 @@
+{
+  "description": "go.sum remains authoritative when matching source and license trees live below DNS namespace containers under any vendoring trigger directory, not just vendor/",
+  "args": [],
+  "expect_exit": 0
+}

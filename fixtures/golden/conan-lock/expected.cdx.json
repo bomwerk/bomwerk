@@ -1,0 +1,99 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "6d0afacc-8b93-5d58-ac1f-ebf6b1fb6d14",
+      "cpe": "cpe:2.3:a:*:cmake:3.27.0:*:*:*:*:*:*:*",
+      "name": "cmake",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:conan/cmake@3.27.0",
+      "type": "library",
+      "version": "3.27.0"
+    },
+    {
+      "bom-ref": "d379cb1f-684b-575b-85d3-55696333bcbf",
+      "cpe": "cpe:2.3:a:*:openssl:3.2.0:*:*:*:*:*:*:*",
+      "name": "openssl",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:conan/openssl@3.2.0",
+      "type": "library",
+      "version": "3.2.0"
+    },
+    {
+      "bom-ref": "12909ff1-292c-51a8-b2b5-c0f850c3c071",
+      "cpe": "cpe:2.3:a:*:zlib:1.2.13:*:*:*:*:*:*:*",
+      "name": "zlib",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:conan/zlib@1.2.13",
+      "type": "library",
+      "version": "1.2.13"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "6d0afacc-8b93-5d58-ac1f-ebf6b1fb6d14"
+    },
+    {
+      "ref": "d379cb1f-684b-575b-85d3-55696333bcbf"
+    },
+    {
+      "ref": "12909ff1-292c-51a8-b2b5-c0f850c3c071"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:2b7a4835-9f67-5093-b9fe-314f09d74b68",
+  "specVersion": "1.6",
+  "version": 1
+}

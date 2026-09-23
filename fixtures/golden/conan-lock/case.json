@@ -1,0 +1,5 @@
+{
+  "description": "conan: conanfile.txt declarations and the conan.lock conan itself resolved for the same two packages (different confidence tiers internally, not snapshot-visible — see SOURCES.md), merging into one component each, plus a lock-only build requirement",
+  "args": [],
+  "expect_exit": 0
+}

@@ -1,0 +1,5 @@
+{
+  "description": "CMake: a commit-pinned FetchContent and a mutable-tag FetchContent (different confidence tiers internally, not snapshot-visible — see SOURCES.md), both made available, plus a CPM gh: shorthand in an included second file",
+  "args": [],
+  "expect_exit": 0
+}

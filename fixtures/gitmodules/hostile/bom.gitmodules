@@ -1,0 +1,3 @@
+﻿[submodule "bom"]
+	path = libs/bom
+	url = https://github.com/acme/bom.git

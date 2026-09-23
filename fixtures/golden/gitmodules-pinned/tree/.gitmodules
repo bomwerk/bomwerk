@@ -1,0 +1,9 @@
+[submodule "libs/zlib"]
+	path = libs/zlib
+	url = https://github.com/madler/zlib.git
+[submodule "libs/mbedtls"]
+	path = libs/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls
+[submodule "libs/uninitialized"]
+	path = libs/uninitialized
+	url = https://github.com/example/never-checked-out.git

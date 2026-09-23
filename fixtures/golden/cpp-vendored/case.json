@@ -1,0 +1,5 @@
+{
+  "description": "Y15 vendored-code heuristic: a vendored zlib copy whose header declares ZLIB_VERSION (Medium confidence, extracted version, recognized zlib license) alongside an unrecognized vendored library with only a LICENSE/README (Low confidence, folder-name identity) — different confidence tiers internally, not snapshot-visible — see SOURCES.md",
+  "args": [],
+  "expect_exit": 0
+}

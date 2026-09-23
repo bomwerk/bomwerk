@@ -1,0 +1,9 @@
+name: unresolved-owner-repo
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${{ inputs.action }}
+      - name: Also fully dynamic, both segments
+        uses: ${{ matrix.owner }}/${{ matrix.repo }}@v1

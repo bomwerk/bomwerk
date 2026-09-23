@@ -1,0 +1,17 @@
+version = 1
+requires-python = ">=3.9"
+
+[[package]]
+name = "sample-service"
+version = "0.9.9"
+source = { virtual = "." }
+
+[[package]]
+name = "click"
+version = "8.1.7"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "flask"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }

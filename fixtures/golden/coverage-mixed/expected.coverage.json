@@ -1,0 +1,51 @@
+{
+  "components": [
+    {
+      "confidence": "high",
+      "coverage": "matched",
+      "identity": "pkg:cargo/libc@0.2.155",
+      "name": "libc",
+      "purl": "pkg:cargo/libc@0.2.155",
+      "version": "0.2.155"
+    },
+    {
+      "confidence": "high",
+      "coverage": "matched",
+      "identity": "pkg:cargo/serde@1.0.203",
+      "name": "serde",
+      "purl": "pkg:cargo/serde@1.0.203",
+      "version": "1.0.203"
+    },
+    {
+      "confidence": "low",
+      "coverage": "unversioned-purl",
+      "identity": "pkg:vcpkg/cli11",
+      "name": "cli11",
+      "purl": "pkg:vcpkg/cli11"
+    },
+    {
+      "confidence": "high",
+      "coverage": "unmapped-purl-type",
+      "identity": "pkg:vcpkg/zlib@1.3.1",
+      "name": "zlib",
+      "purl": "pkg:vcpkg/zlib@1.3.1",
+      "version": "1.3.1"
+    }
+  ],
+  "generated_at": "2025-01-01T00:00:00Z",
+  "summary": {
+    "by_class": {
+      "matched": 2,
+      "no-identifier": 0,
+      "unmapped-purl-type": 1,
+      "unversioned-purl": 1
+    },
+    "components": 4,
+    "matchable": 2,
+    "unmatched": 2
+  },
+  "tool": {
+    "name": "bomwerk",
+    "version": "@BOMWERK_VERSION@"
+  }
+}

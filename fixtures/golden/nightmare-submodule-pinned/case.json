@@ -1,0 +1,6 @@
+{
+  "description": "nightmare corpus, submodule-initialized posture: the same tree as nightmare-corpus plus a checked-out openssl submodule whose HEAD resolves to a pinned commit, so the run is clean (exit 0) and openssl gains a version. The diff between this snapshot and nightmare-corpus's is the second row of bomwerk/nightmare's README table. Since 2026-09-18 it also mirrors the corpus's two later ingredients: prebuilt static libraries (third_party/sqlite-prebuilt, identified at Medium as sqlite3@3.41.2 from its quoted SQLITE_VERSION; third_party/cjson-prebuilt, whose cJSON.h carries its version only as three numeric macros, so identity falls back to the folder name cjson-prebuilt with no version, and whose MIT LICENSE lacks the words 'MIT License' so no license is set) and a CMake FetchContent_Declare of tinyxml2 pinned to a synthetic commit. The .a files themselves are not here: a static scan identifies these roots from headers alone.",
+  "args": [],
+  "expect_exit": 0,
+  "coverage": true
+}

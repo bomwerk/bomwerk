@@ -1,0 +1,5 @@
+name: local-reusable-workflow
+on: [push]
+jobs:
+  build:
+    uses: ./.github/workflows/reusable.yml

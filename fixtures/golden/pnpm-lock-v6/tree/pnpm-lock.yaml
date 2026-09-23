@@ -1,0 +1,26 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  '@scope/toolkit':
+    specifier: ^2.1.0
+    version: 2.1.4(left-pad@1.3.0)
+  left-pad:
+    specifier: ^1.3.0
+    version: 1.3.0
+
+packages:
+
+  /@scope/toolkit@2.1.4(left-pad@1.3.0):
+    resolution: {integrity: sha512-3b6b09666ba38f3675927f8193928e168becbb77fd3f0b27d1f7a94540be81c9AA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      left-pad: ^1.3.0
+    dev: false
+
+  /left-pad@1.3.0:
+    resolution: {integrity: sha512-dc46eee83c4b8b3f0a05dd97eda7a2f7ecd3e0c1b5e1c1f9dcaeba7b1a67c4deBB==}
+    dev: false

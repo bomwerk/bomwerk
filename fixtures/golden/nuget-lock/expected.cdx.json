@@ -1,0 +1,68 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "3efbdad5-921b-50e9-88bb-cd5416d14e46",
+      "name": "Newtonsoft.Json",
+      "purl": "pkg:nuget/Newtonsoft.Json@13.0.3",
+      "type": "library",
+      "version": "13.0.3"
+    },
+    {
+      "bom-ref": "1d45dd5d-f3aa-59e5-9918-6c0434666713",
+      "name": "Serilog",
+      "purl": "pkg:nuget/Serilog@3.1.1",
+      "type": "library",
+      "version": "3.1.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "3efbdad5-921b-50e9-88bb-cd5416d14e46"
+    },
+    {
+      "ref": "1d45dd5d-f3aa-59e5-9918-6c0434666713"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:c0fcbb03-20ff-5af4-b6e2-9166cae6658a",
+  "specVersion": "1.6",
+  "version": 1
+}

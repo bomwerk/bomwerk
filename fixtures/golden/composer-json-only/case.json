@@ -1,0 +1,5 @@
+{
+  "description": "composer.json alone (no composer.lock): a declared require/require-dev range is never parsed into a component (composer.json is a loose manifest now, the same tier go.mod sits in -- see composer.hpp) -- this case's only component is the unrelated generic vendor/acme find; exit 1 comes from the \"found composer.json ... with no lockfile alongside\" warning, not from a php/ext-json skip count",
+  "args": [],
+  "expect_exit": 1
+}

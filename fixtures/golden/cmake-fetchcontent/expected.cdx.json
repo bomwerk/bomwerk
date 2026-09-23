@@ -1,0 +1,87 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "436ac28a-ff42-5ab7-8fa9-31f8e1a5ad3f",
+      "name": "fmt",
+      "purl": "pkg:github/fmtlib/fmt@0f1e2d3c4b5a69788796a5b4c3d2e1f009182736",
+      "supplier": {
+        "name": "fmtlib"
+      },
+      "type": "library",
+      "version": "0f1e2d3c4b5a69788796a5b4c3d2e1f009182736"
+    },
+    {
+      "bom-ref": "a15c803e-08d7-57b9-b311-483e11047ff7",
+      "name": "spdlog",
+      "purl": "pkg:github/gabime/spdlog@v1.14.1",
+      "supplier": {
+        "name": "gabime"
+      },
+      "type": "library",
+      "version": "v1.14.1"
+    },
+    {
+      "bom-ref": "233572e7-0229-5b1a-9276-27e0e584f0cf",
+      "name": "json",
+      "purl": "pkg:github/nlohmann/json@3.11.3",
+      "supplier": {
+        "name": "nlohmann"
+      },
+      "type": "library",
+      "version": "3.11.3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "436ac28a-ff42-5ab7-8fa9-31f8e1a5ad3f"
+    },
+    {
+      "ref": "a15c803e-08d7-57b9-b311-483e11047ff7"
+    },
+    {
+      "ref": "233572e7-0229-5b1a-9276-27e0e584f0cf"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:6e9eb3a6-30e3-5e98-a556-ddd04727185c",
+  "specVersion": "1.6",
+  "version": 1
+}

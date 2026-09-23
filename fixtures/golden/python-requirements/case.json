@@ -1,0 +1,5 @@
+{
+  "description": "python: requirements-*.txt and requirements_*.txt are both parsed; an exact == pin is High with a versioned purl, while a range stays Low and version-less",
+  "args": [],
+  "expect_exit": 0
+}

@@ -1,0 +1,47 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@scope/toolkit':
+        specifier: ^2.1.0
+        version: 2.1.4(left-pad@1.3.0)
+      left-pad:
+        specifier: ^1.3.0
+        version: 1.3.0
+    devDependencies:
+      '@golden/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+
+  packages/shared: {}
+
+packages:
+
+  '@scope/toolkit@2.1.4':
+    resolution: {integrity: sha512-3b6b09666ba38f3675927f8193928e168becbb77fd3f0b27d1f7a94540be81c9AA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      left-pad: ^1.3.0
+
+  left-pad@1.3.0:
+    resolution: {integrity: sha512-dc46eee83c4b8b3f0a05dd97eda7a2f7ecd3e0c1b5e1c1f9dcaeba7b1a67c4deBB==}
+
+  'tarball-only@https://example.invalid/tarball-only-1.0.0.tgz':
+    resolution: {tarball: https://example.invalid/tarball-only-1.0.0.tgz}
+    version: 1.0.0
+
+snapshots:
+
+  '@scope/toolkit@2.1.4(left-pad@1.3.0)':
+    dependencies:
+      left-pad: 1.3.0
+
+  left-pad@1.3.0: {}
+
+  'tarball-only@https://example.invalid/tarball-only-1.0.0.tgz': {}

@@ -1,0 +1,5 @@
+{
+  "description": "nuget: packages.lock.json — the same package under two target frameworks merges into ONE component; the type Project entry (first-party reference) is skipped; Direct and Transitive both emit",
+  "args": [],
+  "expect_exit": 0
+}

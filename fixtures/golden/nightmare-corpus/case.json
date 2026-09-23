@@ -1,0 +1,6 @@
+{
+  "description": "nightmare corpus, shallow-clone posture - a miniature of every static shape the public bomwerk/nightmare results table depends on: three vendored identity tiers (zlib via ZLIB_VERSION, freertos via tskKERNEL_VERSION_NUMBER at Medium; uthash and stb by folder name at Low), a conanfile.txt declaring a DIFFERENT zlib (1.3.1) than the vendored copy (1.2.11), stb's dual MIT-or-Unlicense LICENSE flattened to MIT, uthash's unrecognized LICENSE left unset, a SHA-pinned vs tag-pinned action, a bare vs overrides-pinned vcpkg dependency, and an openssl submodule declared but never checked out - which is this case's exit 1 (BW-GIT-004). Read as a pair with nightmare-submodule-pinned. Since 2026-09-18 it also mirrors the corpus's two later ingredients: prebuilt static libraries (third_party/sqlite-prebuilt, identified at Medium as sqlite3@3.41.2 from its quoted SQLITE_VERSION; third_party/cjson-prebuilt, whose cJSON.h carries its version only as three numeric macros, so identity falls back to the folder name cjson-prebuilt with no version, and whose MIT LICENSE lacks the words 'MIT License' so no license is set) and a CMake FetchContent_Declare of tinyxml2 pinned to a synthetic commit. The .a files themselves are not here: a static scan identifies these roots from headers alone.",
+  "args": [],
+  "expect_exit": 1,
+  "coverage": true
+}

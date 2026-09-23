@@ -1,0 +1,5 @@
+{
+  "description": "python: poetry.lock — a package whose groups lack \"main\" gets scope \"excluded\"; a main-group package stays scope-less",
+  "args": [],
+  "expect_exit": 0
+}

@@ -1,0 +1,8 @@
+name: malformed-yaml
+on: [push]
+jobs:
+  build: {this is not valid nesting at all [[[
+    runs-on: ubuntu-latest
+    steps:
+      - uses: acme/widget@v2
+   ] broken bracket and indentation on purpose

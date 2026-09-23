@@ -1,0 +1,78 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "0fd17a39-c5d1-533f-9813-5930b5b29911",
+      "name": "concurrent-ruby",
+      "purl": "pkg:gem/concurrent-ruby@1.2.3",
+      "type": "library",
+      "version": "1.2.3"
+    },
+    {
+      "bom-ref": "b3256228-3c31-5aae-b674-6a0f69356e96",
+      "name": "custom-gem",
+      "purl": "pkg:gem/custom-gem@0.5.0",
+      "type": "library",
+      "version": "0.5.0"
+    },
+    {
+      "bom-ref": "5beca2a7-db6c-5ba4-b70f-d9589253af3c",
+      "name": "rack",
+      "purl": "pkg:gem/rack@3.0.11",
+      "type": "library",
+      "version": "3.0.11"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "0fd17a39-c5d1-533f-9813-5930b5b29911"
+    },
+    {
+      "ref": "b3256228-3c31-5aae-b674-6a0f69356e96"
+    },
+    {
+      "ref": "5beca2a7-db6c-5ba4-b70f-d9589253af3c"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:a70e903d-243a-55dd-8a59-b9e3754fad14",
+  "specVersion": "1.6",
+  "version": 1
+}

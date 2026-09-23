@@ -1,0 +1,4 @@
+path = libs/orphan
+[submodule "ok"]
+	path = libs/ok
+	url = https://github.com/acme/ok.git

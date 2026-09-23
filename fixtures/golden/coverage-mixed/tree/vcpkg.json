@@ -1,0 +1,17 @@
+{
+  "name": "golden-vcpkg-demo",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "cli11",
+    {
+      "name": "zlib",
+      "version>=": "1.2.13"
+    }
+  ],
+  "overrides": [
+    {
+      "name": "zlib",
+      "version": "1.3.1"
+    }
+  ]
+}

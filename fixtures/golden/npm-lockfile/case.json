@@ -1,0 +1,5 @@
+{
+  "description": "npm: package-lock.json v3 — root entry skipped; dev:true becomes scope \"excluded\"; a scoped package keeps its %40scope namespace",
+  "args": [],
+  "expect_exit": 0
+}

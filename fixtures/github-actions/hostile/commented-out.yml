@@ -1,0 +1,11 @@
+name: commented-out
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # uses: acme/should-not-appear@v1
+      - name: A real step
+        run: echo hi
+        # - uses: also/should-not-appear@v1
+      #   - uses: nor/this-one@v1

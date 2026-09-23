@@ -1,0 +1,4 @@
+unrecognized-lib
+
+An internal utility vendored without an upstream release or a recognizable
+version header.

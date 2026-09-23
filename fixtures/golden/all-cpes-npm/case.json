@@ -1,0 +1,5 @@
+{
+  "description": "--all-cpes: OSV-native npm components (left untouched by the default CPE scope) gain a wildcard-vendor CPE marked bomwerk:cpe-provenance=wildcard-vendor-guess. The unmodified npm-lockfile case already proves the default scope's snapshot is unaffected by this flag existing.",
+  "args": ["--all-cpes"],
+  "expect_exit": 0
+}

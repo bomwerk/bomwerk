@@ -1,0 +1,5 @@
+{
+  "description": "yarn: Yarn Classic (v1) yarn.lock — a different, non-YAML format identified by its banner; the name comes from the first descriptor in the entry key and the version from the quoted version line; the nested dependencies edge is an edge, never a component",
+  "args": [],
+  "expect_exit": 0
+}
