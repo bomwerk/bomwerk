@@ -76,7 +76,7 @@ jobs:
         run: ./scripts/fetch-sbom-tools.sh
       - name: Test
         run: ctest --test-dir build --output-on-failure
-      - name: Smoke run (dogfood: our own vendored vcpkg submodule must appear)
+      - name: Smoke run (dogfood, our own vendored vcpkg submodule must appear)
         run: |
           set +e
           # --exclude-list keeps fixtures/ (real-world and hostile PARSER INPUT : 
