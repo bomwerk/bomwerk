@@ -16,7 +16,9 @@ and it never uploads your source.
 
 > **Status:** pre-1.0 and moving fast. There is no tagged release yet; build
 > from source. The scanner and its output formats are usable today, but
-> interfaces may still change before 1.0.
+> interfaces may still change before 1.0. What is usable today, what is
+> planned, and the test behind each claim are listed in
+> [docs/capabilities.md](docs/capabilities.md).
 
 ## Why another SBOM tool
 
@@ -71,11 +73,12 @@ lands at `build/bomwerk`.
 
 ## Quick start
 
+<!-- docs-check: skip -->
 ```console
 $ bomwerk scan .
 bomwerk 0.1.0, scanning /home/you/project
 scanned:         17 files under /home/you/project
-submodules:      1 subtree(s) skipped, each submodule is one pinned component
+submodules:      1 subtree(s) skipped, each submodule is one pinned component (--include-submodule-contents to scan their contents)
 components:      17
   - pkg:conan/libcurl@8.5.0  [medium]
   - pkg:generic/cjson-prebuilt  [low]  third_party/cjson-prebuilt
@@ -84,7 +87,7 @@ components:      17
   - pkg:npm/debug@4.3.4  [high]
   - pkg:vcpkg/nlohmann-json@3.11.3  [high]
   ...
-coverage:        17 components, 6 matchable (35.3%), 11 unmatched
+coverage:        17 components, 6 matchable (35.3%), 11 unmatched: 4 unmapped-purl-type, 2 unversioned-purl, 5 no-identifier
 manifests:       5
 output:          sbom.cdx.json (format=cyclonedx)
 ```
@@ -105,7 +108,9 @@ checked".
 | `binscan` | Read the binaries a build produced: dynamic dependencies, archive contents, symbols |
 
 Every command's full flag reference is its own `--help`, for example
-`bomwerk scan --help`. The examples below cover the ones worth knowing up front.
+`bomwerk scan --help`; the same text is kept in [docs/cli-help/](docs/cli-help/)
+and checked against the binary in CI. The examples below cover the ones worth
+knowing up front.
 
 ### `scan`
 
@@ -157,13 +162,13 @@ bomwerk binscan sbom.cdx.json
 
 | Ecosystem | Files |
 | --- | --- |
-| C / C++ | `.gitmodules`, CMake `FetchContent`/CPM, `conanfile.txt`, `conan.lock`, `vcpkg.json` |
+| C / C++ | `.gitmodules`, CMake `FetchContent`/CPM, `conanfile.txt`, `conanfile.py` (read, never executed), `conan.lock`, `vcpkg.json` |
 | JavaScript | `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock` |
 | Python | `requirements.txt`, `uv.lock`, `poetry.lock` |
 | Rust | `Cargo.lock` |
-| Go | `go.mod` |
-| Java / JVM | `pom.xml` |
-| .NET | `packages.lock.json`, `.csproj` |
+| Go | `go.sum` |
+| Java / JVM | `pom.xml`, `gradle.lockfile` |
+| .NET | `packages.lock.json`, `packages.config`, `.csproj`, `Directory.Packages.props` |
 | PHP | `composer.lock`, `composer.json` |
 | Ruby | `Gemfile.lock` |
 | Dart | `pubspec.lock` |
@@ -208,16 +213,20 @@ cannot be requested. There are no inbound ports.
 | `1` | Completed with warnings (an SBOM was written) |
 | `2` | Incomplete (the run could not do what was asked) |
 
-`--fail-on none|warnings|incomplete` decides which of those fail your pipeline.
+`scan --fail-on none|warnings|incomplete` decides which of those fail your
+pipeline.
 The default is `warnings`; `--fail-on incomplete` is the usual choice for
 third-party code you do not control.
 
 ## Configuration
 
-Every scan-shaping flag can also be set once in a `bomwerk.toml` at the root of
-the repository being scanned, so a reproducible scan needs no command line at
-all. A flag given explicitly on the command line always overrides the file;
-`--no-config` ignores it for one run.
+The common `scan` settings (what to walk, output format and paths, product
+identity, CRA manufacturer details, warning suppressions) can be set once in a
+`bomwerk.toml` at the root of the repository being scanned, so a reproducible
+scan needs no long command line. A flag given explicitly on the command line
+always overrides the file; `scan --no-config` ignores it for one run. Network,
+exit-code and trace options (`--vuln`, `--offline`, `--fail-on`, `--trace`, the
+license and CPE fallbacks) are command-line only.
 
 ```toml
 [scan]

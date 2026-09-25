@@ -1,0 +1,34 @@
+Compare an SBOM against a recorded build trace and report which components the
+build actually compiled, linked, or included.
+
+
+bomwerk trim [OPTIONS] sbom
+
+
+POSITIONALS:
+  sbom TEXT:FILE REQUIRED     CycloneDX SBOM to judge (from `bomwerk scan`)
+
+OPTIONS:
+  -h,     --help              Print this help message and exit
+          --trace TEXT [.bomwerk/trace.jsonl]  
+                              JSONL trace recorded by `bomwerk observe`
+          --root TEXT:DIR [.]  
+                              The repository the SBOM describes
+  -o,     --output TEXT       Write a CycloneDX SBOM with the proven-unused components dropped
+                              (default: report only, write nothing)
+          --html TEXT         Write a self-contained HTML report with the unused-component
+                              count and detail
+  -q,     --quiet             Skip the per-component console listing (summary lines still
+                              print)
+          --all-cpes          Synthesize CPE identifiers for every safely convertible versioned
+                              component, not just types with no OSV ecosystem mapping; requires
+                              --output
+
+Examples:
+  bomwerk scan .                              scan the current directory
+  bomwerk scan src/ -o sbom.spdx.json --format spdx
+  bomwerk observe -- cmake --build build      record what the build really compiled
+  bomwerk trim sbom.cdx.json                  report which components the build used
+  bomwerk binscan sbom.cdx.json               read the binaries the build produced
+
+Exit codes: 0 clean, 1 completed with warnings, 2 incomplete

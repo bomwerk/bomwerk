@@ -1,0 +1,26 @@
+Run a build under bomwerk's compiler shims and record what it actually compiled
+and linked.
+
+
+bomwerk observe [OPTIONS] command...
+
+
+POSITIONALS:
+  command TEXT ... REQUIRED   The build command to run, after `--` (e.g. -- cmake --build
+                              build)
+
+OPTIONS:
+  -h,     --help              Print this help message and exit
+          --trace TEXT [.bomwerk/trace.jsonl]  
+                              Where to write the JSONL trace; each run starts a fresh file
+          --clean-shims       Delete the shim directory when the build finishes (debug); a
+                              build tree configured under observe must then be reconfigured
+
+Examples:
+  bomwerk scan .                              scan the current directory
+  bomwerk scan src/ -o sbom.spdx.json --format spdx
+  bomwerk observe -- cmake --build build      record what the build really compiled
+  bomwerk trim sbom.cdx.json                  report which components the build used
+  bomwerk binscan sbom.cdx.json               read the binaries the build produced
+
+Exit codes: 0 clean, 1 completed with warnings, 2 incomplete
