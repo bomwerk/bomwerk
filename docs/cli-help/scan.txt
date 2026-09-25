@@ -1,0 +1,94 @@
+Scan a directory and report the components it declares.
+
+
+bomwerk scan [OPTIONS] [dir]
+
+
+POSITIONALS:
+  dir TEXT:DIR [.]            Directory to scan
+
+OPTIONS:
+  -h,     --help              Print this help message and exit
+  -o,     --output TEXT [sbom.cdx.json]  
+                              Where to write the SBOM
+  -q,     --quiet             Skip the per-component console listing (summary lines still
+                              print)
+  -f,     --format {cyclonedx,spdx} [cyclonedx] 
+                              SBOM format
+          --spdx-version {2.3,3.0} [3.0] 
+                              SPDX version (only with -f spdx)
+          --html TEXT         Also write a self-contained HTML report (summary, components,
+                              vulnerabilities, warnings) to this path
+          --trace TEXT:FILE   Apply an existing build trace before writing the SBOM and HTML
+                              report
+          --report-config TEXT:FILE 
+                              JSON file with report branding (company_name, contact,
+                              footer_note, accent_color, logo_path); only used with --html
+          --coverage TEXT     Also write a machine-readable match-coverage classification
+                              (matched/unmapped-purl-type/unversioned-purl/no-identifier per
+                              component) to this path
+          --warnings TEXT     Also write a machine-readable manifest of every warning this run
+                              produced (code, ecosystem, message, count, affected paths) to
+                              this path
+  -m,     --manifest-list TEXT:FILE 
+                              File listing manifest filenames to look for (one per line, '#'
+                              comments); replaces the built-in list
+  -e,     --exclude-list TEXT:FILE 
+                              File listing directory names to skip (one per line, '#'
+                              comments); replaces the built-in list
+  -A,     --all               Scan every directory, ignoring both the built-in and
+                              --exclude-list
+          --max-packages UINT:POSITIVE [10000]  
+                              Maximum package entries to parse per lockfile ecosystem
+          --max-files UINT:POSITIVE [10000]  
+                              Maximum manifest/lockfile files to scan per producer, per
+                              ecosystem
+          --include-submodule-contents 
+                              Walk into git submodule working trees instead of reporting each
+                              submodule as one pinned component
+          --conan-graph TEXT:FILE 
+                              JSON written by `conan graph info . --format=json` (run by you or
+                              CI); bomwerk reads the file and never runs conan itself
+          --product TEXT      Product identifier this SBOM describes, recorded in the output's
+                              metadata.component
+          --product-version TEXT 
+                              Product version corresponding to --product
+          --vuln, --no-vuln{false} 
+                              Match components against OSV vulnerability data
+          --offline           Use cached network-enrichment data only; make no network requests
+          --fail-on {none,warnings,incomplete} [warnings] 
+                              Which outcomes exit non-zero: none never fails, warnings
+                              (default) fails on any warning, incomplete fails only on a
+                              genuinely incomplete scan
+          --license-fallback  Fill missing Cargo/PyPI/RubyGems licenses from their public
+                              registries (cached)
+          --license-fallback-timeout UINT 
+                              Stop registry license lookups after N seconds and keep the SBOM
+                              as-is (0 = unbounded); only --license-fallback enrichment is cut
+                              short, never the scan itself
+          --license-cache-max-age UINT 
+                              Override how long a cached crates.io/PyPI/RubyGems license answer
+                              stays fresh, in seconds (default: 60 days -- these answer an
+                              exact, immutable package version; 0 forces a refresh on every
+                              run)
+          --cpe-fallback      Also query NVD by CPE for components no OSV ecosystem covers
+                              (Conan/vcpkg/generic): lower-confidence findings
+          --all-cpes          Synthesize CPE identifiers for every safely convertible versioned
+                              component, not just types with no OSV ecosystem mapping (adds
+                              npm, Go, commit-pinned, ...); CycloneDX only. Each synthesized
+                              identifier is marked
+                              bomwerk:cpe-provenance=wildcard-vendor-guess.
+          --config TEXT:FILE Excludes: --no-config 
+                              Scan config file (TOML; default: bomwerk.toml in the scanned
+                              directory)
+          --no-config Excludes: --config 
+                              Ignore any bomwerk.toml in the scanned directory
+
+Examples:
+  bomwerk scan .                              scan the current directory
+  bomwerk scan src/ -o sbom.spdx.json --format spdx
+  bomwerk observe -- cmake --build build      record what the build really compiled
+  bomwerk trim sbom.cdx.json                  report which components the build used
+  bomwerk binscan sbom.cdx.json               read the binaries the build produced
+
+Exit codes: 0 clean, 1 completed with warnings, 2 incomplete

@@ -323,6 +323,11 @@ foreach(bomwerk_test_name IN ITEMS model manifest_names sbom_format exclusions n
   bomwerk_add_test(${bomwerk_test_name})
 endforeach()
 
+# warning_recorder.hpp lives under src/cli/, not src/core/, so it is registered
+# here rather than folded into the core-only loop above; it needs nothing
+# beyond bomwerk_core (spdlog is already part of core's public link surface).
+bomwerk_add_test(warning_recorder)
+
 # Vuln tests additionally link bomwerk_vuln. They are hermetic: the OSV and NVD
 # tests inject a fake HTTP transport (never the network) and a fake sleep (never
 # the clock); the cache test uses a throwaway SQLite file under the system temp
@@ -528,6 +533,19 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME pro_boundary_validator
       COMMAND ${Python3_EXECUTABLE}
               ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_validate_pro_boundary.py)
+
+    # The capability ledger, the pinned --help texts and every documented
+    # `bomwerk ...` example must agree with the binary (docs/capabilities.md).
+    add_test(NAME docs_contract
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_docs.py
+              --bomwerk $<TARGET_FILE:bomwerk>
+              --docs-root ${CMAKE_CURRENT_SOURCE_DIR}
+              --ctest ${CMAKE_CTEST_COMMAND}
+              --build-dir ${CMAKE_CURRENT_BINARY_DIR})
+    add_test(NAME docs_contract_checker
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_check_docs.py)
 
     # The history auditor is checked on throwaway repositories, never on
     # this one, so it stays honest about what it would reject.

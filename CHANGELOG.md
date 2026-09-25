@@ -41,6 +41,13 @@ contained the paid extension's source.
   the repository's whole history on every change rather than once at
   publication. macOS is back in the build matrix. `docs/SECURITY.md` states
   how to report a vulnerability, what counts as one, and what does not.
+- `docs/capabilities.md` lists what is usable today (preview), what is planned,
+  and the test behind each claim. `docs/cli-help/` pins every command's
+  `--help`, and the `docs_contract` test fails when the help text, the ledger,
+  a documented `bomwerk ...` example or a relative link drifts from the binary.
+  The README's Quick-start output, ecosystem table (`go.sum`, `conanfile.py`,
+  `gradle.lockfile`, `packages.config`, `Directory.Packages.props`) and
+  `bomwerk.toml` scope now match the code.
 
 ### Changed
 - Community carries only what Community does: the warning taxonomy enumerates

@@ -1,0 +1,34 @@
+Read the binaries a recorded build produced and report the dynamic dependencies,
+archive contents and symbols they carry.
+
+
+bomwerk binscan [OPTIONS] sbom
+
+
+POSITIONALS:
+  sbom TEXT:FILE REQUIRED     CycloneDX SBOM to enrich (from `bomwerk scan`)
+
+OPTIONS:
+  -h,     --help              Print this help message and exit
+          --trace TEXT [.bomwerk/trace.jsonl]  
+                              JSONL trace recorded by `bomwerk observe`
+          --root TEXT:DIR [.]  
+                              The repository the SBOM describes
+          --sidecar TEXT [.bomwerk/binscan.json]  
+                              Where to store the per-artifact record and symbol sample
+          --no-sidecar        Report only; do not store the per-artifact record
+  -o,     --output TEXT       Write a CycloneDX SBOM carrying the new Binary evidence (default:
+                              report only, write no SBOM)
+  -q,     --quiet             Skip the per-artifact console listing (summary lines still print)
+          --all-cpes          Synthesize CPE identifiers for every safely convertible versioned
+                              component, not just types with no OSV ecosystem mapping; requires
+                              --output
+
+Examples:
+  bomwerk scan .                              scan the current directory
+  bomwerk scan src/ -o sbom.spdx.json --format spdx
+  bomwerk observe -- cmake --build build      record what the build really compiled
+  bomwerk trim sbom.cdx.json                  report which components the build used
+  bomwerk binscan sbom.cdx.json               read the binaries the build produced
+
+Exit codes: 0 clean, 1 completed with warnings, 2 incomplete
