@@ -46,6 +46,16 @@ class WarningRecorder
     record(core::Warning{code, std::move(message), std::move(ecosystem), std::move(affected_path)});
   }
 
+  /// Records one warning whose code is owned by a module composed on top of this library:
+  /// `info` must name static storage (a `constexpr` table entry), because `Warning` keeps
+  /// the views, not copies. Mirrors `core::Result::warn`'s same overload.
+  void record(core::WarningCodeInfo info, std::string message, std::string ecosystem = {},
+              std::filesystem::path affected_path = {})
+  {
+    record(core::Warning{core::WarningCode::kExternallyDefined, std::move(message),
+                         std::move(ecosystem), std::move(affected_path), info});
+  }
+
   void record_all(const std::vector<core::Warning>& warnings)
   {
     for (const core::Warning& warning : warnings)
