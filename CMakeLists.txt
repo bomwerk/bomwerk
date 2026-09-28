@@ -20,9 +20,20 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
       CACHE STRING "Vcpkg toolchain file")
 endif()
 
-# Version source of truth. vcpkg.json's "version-string" is a SEPARATE copy
-# (vcpkg has no way to read this file): bump both together.
-project(bomwerk VERSION 0.1.0 LANGUAGES CXX)
+# Version source of truth. vcpkg.json's "version-string" is a SEPARATE copy of
+# BOMWERK_VERSION_STRING below (vcpkg has no way to read this file): bump both
+# together. tests/python/test_version_sync.py fails when they differ.
+project(bomwerk VERSION 1.0.0 LANGUAGES CXX)
+
+# SemVer pre-release label, empty for a final release. project() cannot carry
+# one, so the full version is composed here. A plain variable rather than a
+# cache entry, so an existing build directory cannot keep a stale label.
+set(bomwerk_version_prerelease "rc.1")
+if(bomwerk_version_prerelease STREQUAL "")
+  set(BOMWERK_VERSION_STRING "${PROJECT_VERSION}")
+else()
+  set(BOMWERK_VERSION_STRING "${PROJECT_VERSION}-${bomwerk_version_prerelease}")
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -291,8 +302,8 @@ endif()
 # shim must exist whenever bomwerk does: a missing shim is a runtime failure,
 # not a link error, and this is what keeps it from ever happening.
 add_dependencies(bomwerk bomwerk-shim)
-# Single source of truth for the version is project() above.
-target_compile_definitions(bomwerk PRIVATE BOMWERK_VERSION="${PROJECT_VERSION}")
+# Single source of truth for the version is project() above, plus its pre-release label.
+target_compile_definitions(bomwerk PRIVATE BOMWERK_VERSION="${BOMWERK_VERSION_STRING}")
 
 enable_testing()
 
@@ -561,6 +572,11 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME warning_codes_reference
     COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_warning_codes_reference.py)
+
+  # vcpkg.json carries a copy of the version that vcpkg reads and CMake cannot share.
+  add_test(NAME version_sync
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_version_sync.py)
 
   add_test(NAME cyclonedx_schema_validation
     COMMAND ${Python3_EXECUTABLE}

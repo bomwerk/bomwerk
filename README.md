@@ -14,11 +14,11 @@ actually compiled and linked.
 It runs entirely on your machine. There is no account, no server, no telemetry,
 and it never uploads your source.
 
-> **Status:** pre-1.0 and moving fast. There is no tagged release yet; build
-> from source. The scanner and its output formats are usable today, but
-> interfaces may still change before 1.0. What is usable today, what is
-> planned, and the test behind each claim are listed in
-> [docs/capabilities.md](docs/capabilities.md).
+> **Status:** release candidate `1.0.0-rc.1`. There are no prebuilt binaries
+> yet; build from source. Between this candidate and 1.0.0 only fixes land, and
+> from 1.0.0 on, command syntax, exit codes and output formats change only with
+> a major version. What is usable today, what is planned, and the test behind
+> each claim are listed in [docs/capabilities.md](docs/capabilities.md).
 
 ## Why another SBOM tool
 
@@ -52,10 +52,19 @@ the cases bomwerk itself still gets wrong.
 ## Install
 
 There are no prebuilt binaries yet; build from source. You need a C++20 compiler
-(GCC 12+, Clang 15+, or AppleClang 14+), CMake 3.22+, and git.
+(GCC 12+, Clang 15+, or AppleClang 14+), CMake 3.22+, git, and the tools vcpkg
+uses to fetch and build dependencies: curl, zip, unzip, tar, pkg-config, Ninja
+and Perl. On Ubuntu 24.04 that is:
 
 ```bash
-git clone --recurse-submodules https://github.com/bomwerk/bomwerk.git
+sudo apt-get update
+sudo apt-get install -y build-essential cmake ninja-build git curl zip unzip tar pkg-config perl
+```
+
+Then build a tagged release (drop `--branch` to build `main`):
+
+```bash
+git clone --branch v1.0.0-rc.1 --recurse-submodules https://github.com/bomwerk/bomwerk.git
 cd bomwerk
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
@@ -76,7 +85,7 @@ lands at `build/bomwerk`.
 <!-- docs-check: skip -->
 ```console
 $ bomwerk scan .
-bomwerk 0.1.0, scanning /home/you/project
+bomwerk 1.0.0-rc.1, scanning /home/you/project
 scanned:         17 files under /home/you/project
 submodules:      1 subtree(s) skipped, each submodule is one pinned component (--include-submodule-contents to scan their contents)
 components:      17
