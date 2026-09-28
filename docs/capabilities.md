@@ -11,8 +11,9 @@ disagrees with them, those are what is wrong.
   syntax may still change before 1.0.
 - **planned**: not implemented. Do not document it as available.
 
-There is no tagged release yet, so nothing is **shipped**. The first tag moves
-the preview rows it contains to shipped and records the version in **Since**.
+`1.0.0-rc.1` is a release candidate, a pre-release tag, so nothing is
+**shipped** yet. **Since** already names 1.0.0, the first release that will
+contain each preview row; the 1.0.0 tag moves those rows to shipped.
 
 `scripts/check_docs.py` enforces this page in CI (ctest `docs_contract`):
 
@@ -25,25 +26,25 @@ the preview rows it contains to shipped and records the version in **Since**.
 
 | Capability | Status | Since | Evidence |
 | --- | --- | --- | --- |
-| `scan` | preview | 0.1.0 | `golden_*`, `purl_spec_*`, `cyclonedx_schema_validation` |
-| `observe` | preview | 0.1.0 | `observe_cmake_build` |
-| `trim` | preview | 0.1.0 | `trim_used_set`, `trim_nightmare_config_*` |
-| `binscan` | preview | 0.1.0 | `binscan_dynamic_deps` |
+| `scan` | preview | 1.0.0 | `golden_*`, `purl_spec_*`, `cyclonedx_schema_validation` |
+| `observe` | preview | 1.0.0 | `observe_cmake_build` |
+| `trim` | preview | 1.0.0 | `trim_used_set`, `trim_nightmare_config_*` |
+| `binscan` | preview | 1.0.0 | `binscan_dynamic_deps` |
 
 ## Notable options
 
 | Capability | Status | Since | Evidence |
 | --- | --- | --- | --- |
-| `--endpoints` (list every outbound host, enforced in the network layer) | preview | 0.1.0 | `endpoints` |
-| `scan --format spdx` (SPDX 3.0.1 and 2.3 JSON) | preview | 0.1.0 | `spdx_2_3_schema_validation`, `spdx_3_0_schema_validation` |
-| `scan --html` (self-contained offline report) | preview | 0.1.0 | `html_report` |
-| `scan --product --product-version` (CRA release identity) | preview | 0.1.0 | `cra_sidecar`, `golden_mixed-product` |
-| `scan --coverage` / `scan --warnings` sidecars | preview | 0.1.0 | `coverage_report`, `warnings_report` |
-| `scan --fail-on` | preview | 0.1.0 | `fail_on_cli` |
-| `scan --offline` / `scan --no-vuln` / `scan --cpe-fallback` | preview | 0.1.0 | `osv`, `vuln_cache`, `nvd` |
-| `scan --all-cpes` | preview | 0.1.0 | `all_cpes_cli`, `golden_all-cpes-npm` |
-| `scan --license-fallback` | preview | 0.1.0 | `license_enrichment`, `license_fallback_timeout_cli` |
-| `scan --config` / `scan --no-config` (`bomwerk.toml`) | preview | 0.1.0 | `scan_config`, `golden_repo-config` |
+| `--endpoints` (list every outbound host, enforced in the network layer) | preview | 1.0.0 | `endpoints` |
+| `scan --format spdx` (SPDX 3.0.1 and 2.3 JSON) | preview | 1.0.0 | `spdx_2_3_schema_validation`, `spdx_3_0_schema_validation` |
+| `scan --html` (self-contained offline report) | preview | 1.0.0 | `html_report` |
+| `scan --product --product-version` (CRA release identity) | preview | 1.0.0 | `cra_sidecar`, `golden_mixed-product` |
+| `scan --coverage` / `scan --warnings` sidecars | preview | 1.0.0 | `coverage_report`, `warnings_report` |
+| `scan --fail-on` | preview | 1.0.0 | `fail_on_cli` |
+| `scan --offline` / `scan --no-vuln` / `scan --cpe-fallback` | preview | 1.0.0 | `osv`, `vuln_cache`, `nvd` |
+| `scan --all-cpes` | preview | 1.0.0 | `all_cpes_cli`, `golden_all-cpes-npm` |
+| `scan --license-fallback` | preview | 1.0.0 | `license_enrichment`, `license_fallback_timeout_cli` |
+| `scan --config` / `scan --no-config` (`bomwerk.toml`) | preview | 1.0.0 | `scan_config`, `golden_repo-config` |
 
 ## Planned
 

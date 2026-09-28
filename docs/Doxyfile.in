@@ -2,7 +2,7 @@
 # when BOMWERK_DOCS=ON. Build with: cmake --build <build> --target docs
 
 PROJECT_NAME           = "bomwerk"
-PROJECT_NUMBER         = "@PROJECT_VERSION@"
+PROJECT_NUMBER         = "@BOMWERK_VERSION_STRING@"
 PROJECT_BRIEF          = "Build-accurate SBOMs & EU Cyber Resilience Act evidence"
 OUTPUT_DIRECTORY       = "@CMAKE_BINARY_DIR@/docs"
 STRIP_FROM_PATH        = "@CMAKE_CURRENT_SOURCE_DIR@"

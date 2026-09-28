@@ -4,8 +4,10 @@
 namespace bomwerk::cli
 {
 
-/// Program version "MAJOR.MINOR.PATCH". Single source of truth is the CMake
-/// `project()` version, injected as the BOMWERK_VERSION compile definition.
+/// Program version "MAJOR.MINOR.PATCH", plus a SemVer pre-release label on a
+/// release candidate ("1.0.0-rc.1"). Single source of truth is the CMake
+/// `project()` version and its label, injected as the BOMWERK_VERSION compile
+/// definition.
 const char* version();
 
 /// Apply the root-app polish: name, description, `-V/--version`, the footer

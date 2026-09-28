@@ -50,6 +50,11 @@ contained the paid extension's source.
   `bomwerk.toml` scope now match the code.
 
 ### Changed
+- Release candidate `1.0.0-rc.1`: `bomwerk --version` carries the SemVer
+  pre-release label, `vcpkg.json` is checked against the CMake version by the
+  `version_sync` test, the README lists every prerequisite a clean Ubuntu 24.04
+  machine needs, and `docs/capabilities.md` names 1.0.0 as the release each
+  preview row ships in.
 - Community carries only what Community does: the warning taxonomy enumerates
   only causes this build can raise, `bomwerk --endpoints` lists only hosts this
   build can contact, and the cache schema creates only tables this build reads
