@@ -196,7 +196,7 @@ int main()
 
     const std::string document = write_html_report({unproven}, make_context());
     BOMWERK_TEST_CHECK(contains(
-        document, "metric-value\">: </span><span class=\"metric-label\">unused (no build trace)"));
+        document, "metric-value\">-</span><span class=\"metric-label\">unused (no build trace)"));
     BOMWERK_TEST_CHECK(!contains(document, "<h2>Unused components</h2>"));
     BOMWERK_TEST_CHECK(!contains(document, ">UNUSED</span>"));
   }
@@ -252,7 +252,7 @@ int main()
     const std::string document = write_html_report({rootless}, context);
     BOMWERK_TEST_CHECK(contains(
         document,
-        "metric-value\">: </span><span class=\"metric-label\">unused (nothing locatable)"));
+        "metric-value\">-</span><span class=\"metric-label\">unused (nothing locatable)"));
     BOMWERK_TEST_CHECK(!contains(document, "<h2>Unused components</h2>"));
   }
 
@@ -281,6 +281,30 @@ int main()
     BOMWERK_TEST_CHECK(contains(document, "files scanned (not recorded)"));
     BOMWERK_TEST_CHECK(contains(document, "<code>bomwerk trim</code>"));
     BOMWERK_TEST_CHECK(!contains(document, "<code>--no-vuln</code>"));
+  }
+
+  // Given a component with no supplier, license or version and a scan with no
+  // build trace and no vulnerability pass, when rendered, then every empty
+  // value shows the dash placeholder and none shows a bare colon.
+  {
+    ReportContext context = make_context();
+    context.scan_file_count_available = false;
+    context.build_trace_applied = false;
+    context.vulnerability_check_enabled = false;
+    Component bare = make_component("bare", "", "pkg:generic/bare", Confidence::Low);
+    bare.supplier.clear();
+    bare.license.clear();
+    const std::string document = write_html_report({bare}, context);
+    BOMWERK_TEST_CHECK(contains(
+        document, "metric-value\">-</span><span class=\"metric-label\">unused (no build trace)"));
+    BOMWERK_TEST_CHECK(contains(
+        document,
+        "metric-value\">-</span><span class=\"metric-label\">files scanned (not recorded)"));
+    BOMWERK_TEST_CHECK(contains(
+        document, "metric-value\">-</span><span class=\"metric-label\">advisories (not checked)"));
+    BOMWERK_TEST_CHECK(contains(document, "<td>-</td>"));
+    BOMWERK_TEST_CHECK(!contains(document, "metric-value\">: <"));
+    BOMWERK_TEST_CHECK(!contains(document, "<td>: </td>"));
   }
 
   // Given an offline (cache-only) match, when rendered, then the report

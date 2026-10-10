@@ -338,10 +338,13 @@ std::string_view logo_mime_for_extension(std::string_view extension_lower)
   return {};
 }
 
-/// ": " for an empty optional field, the escaped value otherwise.
+/// What every empty or unknown value renders as (cells and metric tiles).
+constexpr std::string_view kEmptyPlaceholder = "-";
+
+/// The placeholder for an empty optional field, the escaped value otherwise.
 std::string cell_text_or_dash(const std::string& value)
 {
-  return value.empty() ? std::string(": ") : escape_html(value);
+  return value.empty() ? std::string(kEmptyPlaceholder) : escape_html(value);
 }
 
 std::string advisory_count_label(std::size_t advisory_count)
@@ -684,16 +687,18 @@ void append_summary_section(std::string& document, const ReportContext& context,
   }
   else
   {
-    append_metric_tile(document, "warn", ": ", "files scanned (not recorded)");
+    append_metric_tile(document, "warn", std::string(kEmptyPlaceholder),
+                       "files scanned (not recorded)");
   }
   append_metric_tile(document, "", std::to_string(component_count), "components");
   if (!context.build_trace_applied)
   {
-    append_metric_tile(document, "warn", ": ", "unused (no build trace)");
+    append_metric_tile(document, "warn", std::string(kEmptyPlaceholder), "unused (no build trace)");
   }
   else if (build_usage_summary.judged == 0)
   {
-    append_metric_tile(document, "warn", ": ", "unused (nothing locatable)");
+    append_metric_tile(document, "warn", std::string(kEmptyPlaceholder),
+                       "unused (nothing locatable)");
   }
   else
   {
@@ -740,8 +745,10 @@ void append_summary_section(std::string& document, const ReportContext& context,
   else
   {
     // Never a reassuring zero when nothing was checked (--no-vuln).
-    append_metric_tile(document, "warn", ": ", "vulnerable components (not checked)");
-    append_metric_tile(document, "warn", ": ", "advisories (not checked)");
+    append_metric_tile(document, "warn", std::string(kEmptyPlaceholder),
+                       "vulnerable components (not checked)");
+    append_metric_tile(document, "warn", std::string(kEmptyPlaceholder),
+                       "advisories (not checked)");
   }
   append_metric_tile(document, context.warnings.empty() ? "" : "warn",
                      std::to_string(context.warnings.size()), "warnings");
@@ -760,7 +767,7 @@ void append_version_cell(std::string& document, const std::string& version)
 {
   if (version.empty())
   {
-    document += ": ";
+    document += kEmptyPlaceholder;
     return;
   }
   if (core::is_hex_object_id(version))
