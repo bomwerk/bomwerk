@@ -250,9 +250,9 @@ int main()
     ReportContext context = make_context();
     context.build_trace_applied = true;
     const std::string document = write_html_report({rootless}, context);
-    BOMWERK_TEST_CHECK(contains(
-        document,
-        "metric-value\">-</span><span class=\"metric-label\">unused (nothing locatable)"));
+    BOMWERK_TEST_CHECK(
+        contains(document,
+                 "metric-value\">-</span><span class=\"metric-label\">unused (nothing locatable)"));
     BOMWERK_TEST_CHECK(!contains(document, "<h2>Unused components</h2>"));
   }
 
