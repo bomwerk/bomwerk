@@ -85,6 +85,11 @@ if(BOMWERK_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
 endif()
+if(APPLE)
+  # Xcode 15+ ld warns when CMake repeats libbomwerk_core.a on a link line
+  # (it is a PUBLIC dependency of every other library); the repeat is harmless.
+  add_link_options(-Wl,-no_warn_duplicate_libraries)
+endif()
 
 find_package(CLI11 CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
@@ -727,7 +732,7 @@ else()
   # acceptable risk when this guard covered just the schema-validation nicety,
   # but a local build ("100% tests passed") should not go quiet about skipping
   # that much coverage. CI itself is unaffected: GitHub-hosted ubuntu-24.04/
-  # macos-14 runners always have python3, so this only surfaces for a bare dev
+  # macos-15 runners always have python3, so this only surfaces for a bare dev
   # machine.
   message(WARNING "python3 not found: skipping "
                   "cyclonedx_schema_validation, golden_*, purl_spec_*, observe_cmake_build, "
