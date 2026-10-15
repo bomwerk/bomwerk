@@ -14,7 +14,7 @@ actually compiled and linked.
 It runs entirely on your machine. There is no account, no server, no telemetry,
 and it never uploads your source.
 
-> **Status:** release candidate `1.0.0-rc.1`. There are no prebuilt binaries
+> **Status:** release candidate `1.0.0-rc.2`. There are no prebuilt binaries
 > yet; build from source. Between this candidate and 1.0.0 only fixes land, and
 > from 1.0.0 on, command syntax, exit codes and output formats change only with
 > a major version. What is usable today, what is planned, and the test behind
@@ -64,7 +64,7 @@ sudo apt-get install -y build-essential cmake ninja-build git curl zip unzip tar
 Then build a tagged release (drop `--branch` to build `main`):
 
 ```bash
-git clone --branch v1.0.0-rc.1 --recurse-submodules https://github.com/bomwerk/bomwerk.git
+git clone --branch v1.0.0-rc.2 --recurse-submodules https://github.com/bomwerk/bomwerk.git
 cd bomwerk
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
@@ -85,7 +85,7 @@ lands at `build/bomwerk`.
 <!-- docs-check: skip -->
 ```console
 $ bomwerk scan .
-bomwerk 1.0.0-rc.1, scanning /home/you/project
+bomwerk 1.0.0-rc.2, scanning /home/you/project
 scanned:         17 files under /home/you/project
 submodules:      1 subtree(s) skipped, each submodule is one pinned component (--include-submodule-contents to scan their contents)
 components:      17

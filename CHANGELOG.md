@@ -65,3 +65,9 @@ contained the paid extension's source.
 - Fixture descriptions, notes and comments no longer carry internal tracker
   identifiers, and the `=>` glyph replaces a typographic arrow throughout, so
   everything in the tree reads without access to anything outside it.
+- Release candidate `1.0.0-rc.2`: the HTML report fix listed under Fixed. CI builds macOS on
+  `macos-15`, and Apple links no longer warn about the repeated core library (#6).
+
+### Fixed
+- The HTML report renders an empty or unknown value as `-` instead of `: `, in table
+  cells and summary tiles (#5).

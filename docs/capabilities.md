@@ -11,7 +11,7 @@ disagrees with them, those are what is wrong.
   syntax may still change before 1.0.
 - **planned**: not implemented. Do not document it as available.
 
-`1.0.0-rc.1` is a release candidate, a pre-release tag, so nothing is
+`1.0.0-rc.2` is a release candidate, a pre-release tag, so nothing is
 **shipped** yet. **Since** already names 1.0.0, the first release that will
 contain each preview row; the 1.0.0 tag moves those rows to shipped.
 
