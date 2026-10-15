@@ -28,7 +28,7 @@ project(bomwerk VERSION 1.0.0 LANGUAGES CXX)
 # SemVer pre-release label, empty for a final release. project() cannot carry
 # one, so the full version is composed here. A plain variable rather than a
 # cache entry, so an existing build directory cannot keep a stale label.
-set(bomwerk_version_prerelease "rc.1")
+set(bomwerk_version_prerelease "rc.2")
 if(bomwerk_version_prerelease STREQUAL "")
   set(BOMWERK_VERSION_STRING "${PROJECT_VERSION}")
 else()

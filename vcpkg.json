@@ -1,6 +1,6 @@
 {
   "name": "bomwerk",
-  "version-string": "1.0.0-rc.1",
+  "version-string": "1.0.0-rc.2",
   "dependencies": [
     "cli11",
     "curl",
