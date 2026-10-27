@@ -20,6 +20,13 @@ and it never uploads your source.
 > a major version. What is usable today, what is planned, and the test behind
 > each claim are listed in [docs/capabilities.md](docs/capabilities.md).
 
+[![bomwerk 1.0.0-rc.2 in about a minute: scan, observe and trim, and the Pro
+Article 14 draft, run against the nightmare corpus](docs/assets/demo-1.0.0-rc.2.jpg)](https://youtu.be/_T6Wko0zadw)
+
+*Watch: `1.0.0-rc.2` in about a minute, recorded from a source build of the
+tag against [nightmare](https://github.com/bomwerk/nightmare). Advisory data
+as of 2026-10-23.*
+
 ## Why another SBOM tool
 
 Most scanners answer "what does this repository *declare*?" by reading manifests
