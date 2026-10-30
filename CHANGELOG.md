@@ -71,3 +71,17 @@ contained the paid extension's source.
 ### Fixed
 - The HTML report renders an empty or unknown value as `-` instead of `: `, in table
   cells and summary tiles (#5).
+- A build variable no parser could resolve no longer ends up in a component purl
+  (`pkg:generic/${NAME}`, `pkg:nuget/Azure.Identity@$(AzureIdentityVersion)`).
+  CMake `${...}` is expanded from the `set()` commands of any CMake file in the
+  tree, MSBuild `$(...)` from the project, the `Directory.Build.props` and
+  `Directory.Packages.props` above it, what they import and `eng/Versions.props`,
+  and a pom's own coordinates now resolve (`${revision}`, `project.artifactId`).
+  What stays unresolved is left out: a name drops the dependency, a version or
+  URL is omitted and the component is reported at low confidence, and each case
+  warns (`BW-CORE-015`) with the file and line. A Maven dependency with an
+  unresolved `groupId` or `artifactId` is now dropped instead of kept, and one
+  with an unresolved `version` is kept without it instead of dropped. NuGet's
+  exact-version notation `[1.2.3]` is read as `1.2.3`. A repository whose
+  `.csproj` files use properties that cannot be resolved now exits 1 until
+  `BW-CORE-015:nuget` is suppressed.

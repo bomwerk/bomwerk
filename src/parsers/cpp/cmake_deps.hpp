@@ -59,6 +59,19 @@ struct ParseLimits
 /// yields `pkg:github/google/googletest@v1.14.0` (Medium confidence: a
 /// mutable tag) and `pkg:github/fmtlib/fmt@10.2.1`.
 ///
+/// Variables: `${name}` in a declaration is expanded from the `set(<name>
+/// <value>)` commands found in ANY CMake file of the scanned tree (a variable
+/// set in one file and used in another is the common shape). A name set to
+/// more than one distinct value, set to a list, bound as a `function()` or
+/// `macro()` parameter or as a `foreach()` variable is ambiguous and never
+/// expands; nothing is evaluated (`if()`, `string()`, `list()` and friends are
+/// not run). What stays unresolved never reaches a purl:
+/// - a name that is an unresolved variable, with no literal repository to name
+///   the dependency instead, drops the declaration;
+/// - an unresolved repository, URL, `URL_HASH` or version is left out of the
+///   component, which keeps its literal name at Low confidence;
+/// and either way one warning names file and line.
+///
 /// CMake-version note: matching is grammar-level, never evaluated, so any file
 /// CMake ≥ 3.0 accepts lexes identically here regardless of the version that
 /// builds it. The recognized commands span FetchContent (CMake 3.11+;

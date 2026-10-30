@@ -20,6 +20,7 @@ hard-wired into the harness). The live OSV demo with a real commit is
 | `gitmodules-pinned` | detached-HEAD and packed-refs commit resolution; one submodule declared but never initialized | 1 |
 | `cmake-fetchcontent` | commit-pinned (High) and mutable-tag (Medium) FetchContent, plus a CPM `gh:` shorthand in a second file | 0 |
 | `cmake-archive` | FetchContent source archives: `URL_HASH` => `checksum`+`download_url` purl qualifiers and a `hashes` block (High), an unhashed `URL` => `download_url` alone (Medium). The only case emitting a qualified purl, so it is what `scripts/validate_purls.py` checks that shape against | 0 |
+| `cmake-unresolved-variables` | CMake variables in declarations: a tag `${abseil-cpp-version}` is expanded from a `set()` in a different file (`cmake/dependencies.cmake`), a declaration whose name is only a variable (`ExternalProject_Add(${DEP_NAME} ...)`) is dropped with a warning, and a literal name with a variable URL is kept as a versionless `pkg:generic` component at Low confidence. No purl carries a `${...}`; the two warnings are the case's exit 1 | 1 |
 | `conan-lock` | `conanfile.txt` declarations merging with the `conan.lock` conan itself resolved | 0 |
 | `vcpkg-manifest` | a bare dependency, and a `version>=` floor superseded by an exact `overrides` pin | 0 |
 | `vcpkg-ports-registry` | a `ports/<name>/vcpkg.json` port definition reports its own name+version as a component (High), in addition to its `dependencies` (Low/unversioned): the path-anchored fix, contrasted with `vcpkg-manifest`'s consumer-manifest case where the top-level name/version are never a dependency | 0 |
@@ -33,7 +34,7 @@ hard-wired into the harness). The live OSV demo with a real commit is
 | `go-vendor-namespace` | Go modules come only from `go.sum`; matching source and license trees under `vendor/github.com/...`, `LICENSES/vendor/k8s.io/...`, and other trigger directories such as `thirdparty/github.com/...` must not add generic host placeholders | 0 |
 | `cargo-lock` | Cargo.lock: the workspace's own package (no `source`) skipped; a registry checksum becomes the component's sha256, the first `hashes` block from a lockfile parser | 0 |
 | `maven-pom` | pom.xml: literal and `${property}`-resolved versions; `<scope>test</scope>` => `scope: "excluded"`; the `dependencyManagement` pin must NOT appear. Also exercises the pom's own self-identity emission: its own coordinates are additionally emitted as a High-confidence self-identity component | 0 |
-| `maven-unresolved-identity` | pom.xml: a `<groupId>` referencing an undefined property is kept (never dropped) with the raw `${...}` text as identity, downgraded to Low confidence; this warning is the case's exit 1. Also exercises the pom's own self-identity emission: its own (fully-resolved) coordinates are additionally emitted as a High-confidence self-identity component, adding no warning of its own | 1 |
+| `maven-unresolved-identity` | pom.xml: a `<groupId>` referencing an undefined property leaves the dependency with no identity, so it is dropped with a warning naming file and line and no purl carries the raw `${...}` text; this warning is the case's exit 1. Also exercises the pom's own self-identity emission: its own (fully-resolved) coordinates are additionally emitted as a High-confidence self-identity component, adding no warning of its own | 1 |
 | `maven-pom-license` | pom.xml: a pom's own `<licenses><license><name>` text is captured verbatim (no SPDX normalization) onto its self-identity component, contrasted with `maven-pom`'s case where no `<licenses>` block is present, same as vcpkg's `vcpkg-ports-registry` own-identity precedent but for a declared license rather than a bare name+version | 0 |
 | `gradle-lockfile` | gradle.lockfile: `group:artifact:version` triplets; an all-`test*`-configurations entry => `scope: "excluded"`; the `empty=` line ignored | 0 |
 | `nuget-lock` | packages.lock.json: the same package under two target frameworks merges into ONE component; the `Project` reference (first-party) skipped | 0 |
@@ -54,6 +55,7 @@ hard-wired into the harness). The live OSV demo with a real commit is
 | `all-cpes-npm` | `--all-cpes`: OSV-native npm components, which the default CPE scope leaves untouched, gain a wildcard-vendor CPE marked `bomwerk:cpe-provenance=wildcard-vendor-guess`. `npm-lockfile` is the untouched baseline | 0 |
 | `nuget-csproj` | `.csproj` `PackageReference` elements with no `packages.lock.json` present => Medium-confidence `pkg:nuget` components | 0 |
 | `nuget-csproj-cpm` | Central Package Management: a versionless `.csproj` `PackageReference` resolved from `Directory.Packages.props` at Medium confidence, nearest file per directory | 0 |
+| `nuget-unresolved-properties` | MSBuild properties in a `.csproj`: a central `Version="$(AzureIdentityVersion)"` is expanded from `eng/Versions.props` (the .NET Arcade layout), a project-local property is expanded, a version naming an undefined property is kept without a version at Low confidence, and a name built from an undefined property is dropped. No purl carries a `$(...)`; the two warnings are the case's exit 1 | 1 |
 | `nuget-packages-config` | legacy `packages.config` `<package>` elements => Medium-confidence `pkg:nuget` components | 0 |
 | `spdx23-mixed` | the SPDX 2.3 (flat JSON) writer over the `mixed-product` tree: `fmt` merged to one package from two producers; `--product` becomes the document name and every package gets a `DESCRIBES` relationship | 0 |
 | `spdx30-mixed` | the SPDX 3.0.1 (JSON-LD) writer over the `mixed-product` tree: `fmt` vendored as a submodule AND declared via FetchContent at the same commit => one `software_Package`; `--product`/`--product-version` name the `SpdxDocument` | 0 |
@@ -61,13 +63,16 @@ hard-wired into the harness). The live OSV demo with a real commit is
 | `nightmare-submodule-pinned` | the same tree with the openssl submodule's HEAD checked out => a versioned `pkg:github/openssl/openssl` and a clean run. Read as a pair with the case above: the diff between the two snapshots is the shallow-clone row of the public README | 0 |
 
 `gitmodules-pinned`, `nightmare-corpus`, `yarn-berry-lock`, `pnpm-lock-v9`,
-`composer-json-only`, `maven-unresolved-identity`, `github-actions-unresolved-expression`,
+`composer-json-only`, `maven-unresolved-identity`, `cmake-unresolved-variables`,
+`nuget-unresolved-properties`, `github-actions-unresolved-expression`,
 and `lockfile-package-budget`
 are the cases that expect a non-zero exit, and that is the point. The first
-seven cover degraded runs: an uninitialized submodule (twice), a skipped first-party
+nine cover degraded runs: an uninitialized submodule (twice), a skipped first-party
 workspace member, a dependency resolved from a URL rather than the registry, a
 composer.json's skipped platform pseudo-requirements, a pom.xml `<groupId>`
-that could not be resolved from its properties, and a GitHub Actions ref that
+that could not be resolved from its properties, a CMake declaration and a
+NuGet reference whose name or version stayed an unresolved variable, and a
+GitHub Actions ref that
 is an unresolved `${{ ... }}` expression, so they pin exit 1. The
 package-budget case pins exit 2: known lockfile truncation is incomplete even
 though the deterministic partial SBOM is written successfully.

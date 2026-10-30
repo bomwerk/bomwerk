@@ -1,0 +1,83 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "aabe54d5-f76d-5c4c-905e-96ea4f98569d",
+      "name": "Azure.Identity",
+      "purl": "pkg:nuget/Azure.Identity@1.21.0",
+      "type": "library",
+      "version": "1.21.0"
+    },
+    {
+      "bom-ref": "7c6d4923-a485-5fbe-a757-890824ed37c0",
+      "name": "Missing.Version",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:nuget/Missing.Version",
+      "type": "library"
+    },
+    {
+      "bom-ref": "6f093a84-876e-5e1e-8917-a5a2ffcbafa4",
+      "name": "Own.Property",
+      "purl": "pkg:nuget/Own.Property@3.4.5",
+      "type": "library",
+      "version": "3.4.5"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "aabe54d5-f76d-5c4c-905e-96ea4f98569d"
+    },
+    {
+      "ref": "7c6d4923-a485-5fbe-a757-890824ed37c0"
+    },
+    {
+      "ref": "6f093a84-876e-5e1e-8917-a5a2ffcbafa4"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "1"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:12dbd460-f874-5e0c-9519-385938f919ea",
+  "specVersion": "1.6",
+  "version": 1
+}

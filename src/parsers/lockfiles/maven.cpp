@@ -1,5 +1,6 @@
 #include "parsers/lockfiles/maven.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 #include <map>
@@ -9,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/build_variables.hpp"
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/percent.hpp"
@@ -16,6 +18,7 @@
 #include "core/submodule_paths.hpp"
 #include "core/text.hpp"
 #include "core/warning_code.hpp"
+#include "core/xml_scan.hpp"
 
 namespace fs = std::filesystem;
 
@@ -26,11 +29,6 @@ namespace
 
 constexpr std::string_view kPomName = "pom.xml";
 constexpr std::string_view kGradleLockfileName = "gradle.lockfile";
-
-constexpr std::string_view kCommentOpen = "<!--";
-constexpr std::string_view kCommentClose = "-->";
-constexpr std::string_view kCdataOpen = "<![CDATA[";
-constexpr std::string_view kCdataClose = "]]>";
 
 /// The one maven scope that means "not part of the shipped product".
 constexpr std::string_view kMavenTestScope = "test";
@@ -43,106 +41,10 @@ constexpr std::string_view kTestConfigurationPrefix = "test";
 /// to no dependencies at all.
 constexpr std::string_view kGradleEmptyCoordinate = "empty";
 
-/// True for the ASCII whitespace XML allows inside tags.
-bool is_xml_whitespace(char character)
-{
-  return character == ' ' || character == '\t' || character == '\r' || character == '\n';
-}
-
-/// Remove XML comments and unwrap CDATA sections so the tag scanner below
-/// never trips over commented-out or escaped markup. An unterminated comment
-/// or CDATA section swallows the rest of the file: degrading, never throwing.
-std::string strip_comments_and_unwrap_cdata(std::string_view xml)
-{
-  std::string cleaned;
-  cleaned.reserve(xml.size());
-  std::size_t position = 0;
-  while (position < xml.size())
-  {
-    if (xml.compare(position, kCommentOpen.size(), kCommentOpen) == 0)
-    {
-      const std::size_t comment_close = xml.find(kCommentClose, position + kCommentOpen.size());
-      if (comment_close == std::string_view::npos)
-      {
-        break;
-      }
-      position = comment_close + kCommentClose.size();
-      continue;
-    }
-    if (xml.compare(position, kCdataOpen.size(), kCdataOpen) == 0)
-    {
-      const std::size_t cdata_close = xml.find(kCdataClose, position + kCdataOpen.size());
-      if (cdata_close == std::string_view::npos)
-      {
-        break;
-      }
-      cleaned.append(xml, position + kCdataOpen.size(), cdata_close - position - kCdataOpen.size());
-      position = cdata_close + kCdataClose.size();
-      continue;
-    }
-    cleaned.push_back(xml[position]);
-    ++position;
-  }
-  return cleaned;
-}
-
-/// One matched XML element: where its span starts, its inner text, and where
-/// scanning may resume after the closing tag.
-struct ElementMatch
-{
-  std::size_t span_start = 0;
-  std::string_view inner_text;
-  std::size_t resume_position = 0;
-};
-
-/// Find the next `<tag …>…</tag>` element at or after `search_start`. The
-/// opening tag may carry attributes; a self-closing `<tag …/>` yields empty
-/// inner text. The closing tag must be the literal `</tag>`: anything the
-/// scanner cannot pair is treated as absent (degrade, never guess).
-std::optional<ElementMatch> find_element(std::string_view xml, std::string_view tag_name,
-                                         std::size_t search_start)
-{
-  std::size_t position = search_start;
-  while (position < xml.size())
-  {
-    const std::size_t open = xml.find('<', position);
-    if (open == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    const std::size_t name_start = open + 1;
-    if (xml.compare(name_start, tag_name.size(), tag_name) != 0)
-    {
-      position = open + 1;
-      continue;
-    }
-    const std::size_t after_name = name_start + tag_name.size();
-    if (after_name >= xml.size() ||
-        (xml[after_name] != '>' && xml[after_name] != '/' && !is_xml_whitespace(xml[after_name])))
-    {
-      position = open + 1;  // a longer tag name that merely starts the same
-      continue;
-    }
-    const std::size_t open_end = xml.find('>', after_name);
-    if (open_end == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    if (xml[open_end - 1] == '/')
-    {
-      return ElementMatch{open, std::string_view{}, open_end + 1};
-    }
-    const std::string closing_tag = "</" + std::string(tag_name) + ">";
-    const std::size_t close = xml.find(closing_tag, open_end + 1);
-    if (close == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    return ElementMatch{open, xml.substr(open_end + 1, close - open_end - 1),
-                        close + closing_tag.size()};
-  }
-  return std::nullopt;
-}
+using core::xml_scan::ElementMatch;
+using core::xml_scan::find_element;
+using core::xml_scan::line_number_at;
+using core::xml_scan::strip_comments_and_unwrap_cdata;
 
 /// Trimmed inner text of the first `<tag>` within `xml`; nullopt when absent.
 std::optional<std::string> first_element_text(std::string_view xml, std::string_view tag_name)
@@ -180,7 +82,9 @@ std::optional<std::string> first_pom_license_name(std::string_view xml)
 
 /// Erase every `<tag>…</tag>` span. Used for `<dependencyManagement>`
 /// (version pins, not dependencies) and `<exclusions>` (their nested
-/// groupId/artifactId would poison the flat extraction below).
+/// groupId/artifactId would poison the flat extraction below). The newlines of
+/// an erased span stay, so a line number counted in the result is still the
+/// line of the original file.
 std::string remove_elements(std::string_view xml, std::string_view tag_name)
 {
   std::string remaining;
@@ -195,13 +99,18 @@ std::string remove_elements(std::string_view xml, std::string_view tag_name)
       break;
     }
     remaining.append(xml.substr(position, match->span_start - position));
+    const std::string_view removed_span =
+        xml.substr(match->span_start, match->resume_position - match->span_start);
+    remaining.append(
+        static_cast<std::size_t>(std::count(removed_span.begin(), removed_span.end(), '\n')), '\n');
     position = match->resume_position;
   }
   return remaining;
 }
 
 /// Child elements of the first `<properties>` block as name->value. One flat
-/// level: exactly what `${property}` resolution needs, nothing more.
+/// level: exactly what `${property}` resolution needs, nothing more. When a
+/// name repeats, the first definition wins.
 std::map<std::string, std::string> collect_pom_properties(std::string_view xml)
 {
   std::map<std::string, std::string> properties;
@@ -210,40 +119,9 @@ std::map<std::string, std::string> collect_pom_properties(std::string_view xml)
   {
     return properties;
   }
-  const std::string_view body = block->inner_text;
-  std::size_t position = 0;
-  while (position < body.size())
+  for (core::xml_scan::ChildElement& child : core::xml_scan::child_elements(block->inner_text))
   {
-    const std::size_t open = body.find('<', position);
-    if (open == std::string_view::npos)
-    {
-      break;
-    }
-    if (open + 1 >= body.size() || body[open + 1] == '/')
-    {
-      position = open + 1;
-      continue;
-    }
-    std::size_t name_end = open + 1;
-    while (name_end < body.size() && body[name_end] != '>' && body[name_end] != '/' &&
-           !is_xml_whitespace(body[name_end]))
-    {
-      ++name_end;
-    }
-    const std::string property_name(body.substr(open + 1, name_end - open - 1));
-    if (property_name.empty())
-    {
-      position = open + 1;
-      continue;
-    }
-    const std::optional<ElementMatch> child = find_element(body, property_name, open);
-    if (!child.has_value())
-    {
-      position = open + 1;
-      continue;
-    }
-    properties.emplace(property_name, std::string(core::trimmed_view(child->inner_text)));
-    position = child->resume_position;
+    properties.emplace(std::move(child.name), std::move(child.text));
   }
   return properties;
 }
@@ -252,11 +130,10 @@ std::map<std::string, std::string> collect_pom_properties(std::string_view xml)
 constexpr std::size_t kMinPropertyReferenceLength = 3;
 
 /// Outcome of a one-level `${property}` lookup, shared by `<version>`,
-/// `<groupId>` and `<artifactId>`. `value` is always what a
-/// caller should use for a literal or successfully-substituted field; for an
-/// unresolved reference it is `raw_text`, UNCHANGED, so a caller that wants to
-/// keep going with the original text already has it (groupId/artifactId do;
-/// version does not: see parse_pom).
+/// `<groupId>` and `<artifactId>`, and for the pom's own coordinates. `value`
+/// is what a caller should use for a literal or successfully-substituted
+/// field; for an unresolved reference it is `raw_text`, UNCHANGED, and must
+/// never reach a purl (`is_usable_literal` is the test).
 struct PropertyResolution
 {
   std::string value;
@@ -325,8 +202,12 @@ void emit_maven_component(std::string_view group_id, std::string_view artifact_i
   core::Component component;
   component.name = std::string(group_id) + ":" + std::string(artifact_id);
   component.version = std::string(version);
-  component.purl = "pkg:maven/" + core::percent_encode(group_id) + "/" +
-                   core::percent_encode(artifact_id) + "@" + core::percent_encode(version);
+  component.purl =
+      "pkg:maven/" + core::percent_encode(group_id) + "/" + core::percent_encode(artifact_id);
+  if (!version.empty())
+  {
+    component.purl += "@" + core::percent_encode(version);
+  }
   // The groupId is maven's own namespace for who publishes the artifact
   // (Maven Central enforces one groupId per publisher/organization), so it
   // doubles as NTIA/CRA supplier evidence with no extra parsing.
@@ -337,10 +218,20 @@ void emit_maven_component(std::string_view group_id, std::string_view artifact_i
   components.push_back(std::move(component));
 }
 
+/// True when a resolution produced a literal that can go into a purl: the
+/// field was not a reference at all, or its property resolved to a non-empty
+/// value that carries no reference of its own.
+bool is_usable_literal(const PropertyResolution& resolution)
+{
+  return resolution.resolved && !resolution.value.empty() &&
+         !core::contains_unexpanded_variable(resolution.value);
+}
+
 /// Parse one pom.xml with the minimal scanner (see the header for its exact
-/// scope). Declarations, not resolver output -> Confidence::Medium, except a
-/// dependency whose groupId/artifactId could not be fully resolved from
-/// `<properties>`, which is downgraded to Low.
+/// scope). Declarations, not resolver output -> Confidence::Medium. A
+/// dependency whose groupId or artifactId cannot be resolved from the pom's
+/// own `<properties>` is dropped with a warning naming file and line; one whose
+/// version cannot be resolved is kept without a version at Low confidence.
 void parse_pom(std::string_view bytes, const std::string& label, std::size_t package_limit,
                std::size_t& package_budget, std::vector<core::Component>& components,
                core::Result<std::vector<core::Component>>& result)
@@ -389,6 +280,37 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
   // verbatim, no SPDX normalization.
   const std::optional<std::string> project_license = first_pom_license_name(coordinate_region);
 
+  // The pom's own coordinates may themselves be references (`${revision}` is
+  // the usual one), so the declared properties come first and the project.*
+  // pseudo-properties are filled in from whatever resolved.
+  std::map<std::string, std::string> properties = collect_pom_properties(working);
+  if (parent_version.has_value() && !parent_version->empty())
+  {
+    properties["project.parent.version"] = *parent_version;
+  }
+  if (parent_group_id.has_value() && !parent_group_id->empty())
+  {
+    properties["project.parent.groupId"] = *parent_group_id;
+  }
+  const PropertyResolution own_group_id =
+      resolve_property_reference(project_group_id.value_or(std::string{}), properties);
+  const PropertyResolution own_artifact_id =
+      resolve_property_reference(project_artifact_id.value_or(std::string{}), properties);
+  const PropertyResolution own_version =
+      resolve_property_reference(project_version.value_or(std::string{}), properties);
+  if (is_usable_literal(own_version))
+  {
+    properties["project.version"] = own_version.value;
+  }
+  if (is_usable_literal(own_group_id))
+  {
+    properties["project.groupId"] = own_group_id.value;
+  }
+  if (is_usable_literal(own_artifact_id))
+  {
+    properties["project.artifactId"] = own_artifact_id.value;
+  }
+
   // The pom's own coordinates ARE this file's identity: unlike a
   // <dependency> entry, never one of the pom's own dependencies. Same gap
   // class as vcpkg's ports-registry own-identity fix. Emitted
@@ -397,16 +319,19 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
   // module's own pom from the top-level pom of the project bomwerk itself is
   // scanning, so a self-scan will list its own product as a component of its
   // own SBOM: an accepted tradeoff, deliberately narrower for vcpkg because
-  // that signal exists there. Declared, not resolved -> Confidence::High,
-  // matching vcpkg's own-identity reasoning: a hardcoded fact in the file,
-  // not an interpolated reference.
-  if (project_group_id.has_value() && !project_group_id->empty() &&
-      project_artifact_id.has_value() && !project_artifact_id->empty() &&
-      project_version.has_value() && !project_version->empty())
+  // that signal exists there. Declared, not resolved -> Confidence::High when
+  // every coordinate is a hardcoded fact in the file, Medium when one came
+  // from a `<properties>` entry.
+  if (is_usable_literal(own_group_id) && is_usable_literal(own_artifact_id) &&
+      is_usable_literal(own_version))
   {
-    emit_maven_component(*project_group_id, *project_artifact_id, *project_version,
-                         core::Scope::Required, core::Confidence::High, label + " own-identity",
-                         components, result);
+    const bool is_interpolated = !own_group_id.property_name.empty() ||
+                                 !own_artifact_id.property_name.empty() ||
+                                 !own_version.property_name.empty();
+    emit_maven_component(own_group_id.value, own_artifact_id.value, own_version.value,
+                         core::Scope::Required,
+                         is_interpolated ? core::Confidence::Medium : core::Confidence::High,
+                         label + " own-identity", components, result);
     if (project_license.has_value())
     {
       components.back().license = *project_license;
@@ -422,23 +347,8 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
                 "maven");
   }
 
-  std::map<std::string, std::string> properties = collect_pom_properties(working);
-  if (project_version.has_value() && !project_version->empty())
-  {
-    properties["project.version"] = *project_version;
-  }
-  if (project_group_id.has_value() && !project_group_id->empty())
-  {
-    properties["project.groupId"] = *project_group_id;
-  }
-  if (parent_version.has_value() && !parent_version->empty())
-  {
-    properties["project.parent.version"] = *parent_version;
-  }
-
   std::size_t malformed_dependency_count = 0;
-  std::size_t unresolved_version_count = 0;
-  std::size_t unresolved_identity_count = 0;
+  std::size_t missing_version_count = 0;
   std::size_t position = 0;
   while (true)
   {
@@ -459,47 +369,49 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
       continue;
     }
 
-    // Version resolution: literal, or ONE `${property}` lookup: a value that
-    // itself still contains `${` stays unresolved (no recursion, by design).
-    std::optional<std::string> version = first_element_text(body, "version");
-    std::string version_property_name;
-    if (version.has_value())
-    {
-      const PropertyResolution version_resolution =
-          resolve_property_reference(*version, properties);
-      if (version_resolution.resolved)
-      {
-        version = version_resolution.value;
-        version_property_name = version_resolution.property_name;
-      }
-      else
-      {
-        version.reset();
-      }
-    }
-    if (!version.has_value() || version->empty())
-    {
-      ++unresolved_version_count;
-      continue;
-    }
-
-    // groupId/artifactId resolution: the SAME one-level lookup as
-    // version above, but an unresolved reference is DOWNGRADED and KEPT, never
-    // dropped: matching every other "can't fully resolve an identifier" case
-    // in this codebase (cmake_deps::apply_unresolved_downgrade, vcpkg, python,
-    // submodules, conan) rather than version's own drop-on-unresolved
-    // behavior: losing a real dependency from a CRA-evidence SBOM because one
-    // field didn't resolve is worse than keeping it, clearly flagged.
+    // groupId/artifactId: literal, or ONE `${property}` lookup (no recursion,
+    // by design). A component with no name is no component: an unresolved
+    // identity is dropped, with a warning that names the place to look.
     const PropertyResolution group_id_resolution =
         resolve_property_reference(*group_id, properties);
     const PropertyResolution artifact_id_resolution =
         resolve_property_reference(*artifact_id, properties);
-    const bool identity_unresolved =
-        !group_id_resolution.resolved || !artifact_id_resolution.resolved;
-    if (identity_unresolved)
+    const std::string location =
+        label + ":" + std::to_string(line_number_at(working, dependency->span_start));
+    if (!is_usable_literal(group_id_resolution) || !is_usable_literal(artifact_id_resolution))
     {
-      ++unresolved_identity_count;
+      result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+                  "maven: " + location + ": dependency '" +
+                      core::escaped_for_diagnostic(*group_id) + ":" +
+                      core::escaped_for_diagnostic(*artifact_id) +
+                      "' has an unresolved groupId/artifactId; skipped",
+                  "maven", fs::path(label));
+      continue;
     }
+
+    // Version: a missing `<version>` is not a variable and is skipped as
+    // before; a `${property}` that does not resolve keeps the dependency
+    // without a version, at Low confidence, never with the raw text.
+    const std::optional<std::string> declared_version = first_element_text(body, "version");
+    if (!declared_version.has_value() || declared_version->empty())
+    {
+      ++missing_version_count;
+      continue;
+    }
+    const PropertyResolution version_resolution =
+        resolve_property_reference(*declared_version, properties);
+    const bool version_unresolved = !is_usable_literal(version_resolution);
+    if (version_unresolved)
+    {
+      result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+                  "maven: " + location + ": dependency '" +
+                      core::escaped_for_diagnostic(*group_id) + ":" +
+                      core::escaped_for_diagnostic(*artifact_id) + "' has an unresolved version '" +
+                      core::escaped_for_diagnostic(*declared_version) +
+                      "'; kept without a version at low confidence",
+                  "maven", fs::path(label));
+    }
+    const std::string version = version_unresolved ? std::string{} : version_resolution.value;
 
     if (package_budget == 0)
     {
@@ -530,24 +442,24 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
     {
       detail += " scope=" + *declared_scope;
     }
-    if (group_id_resolution.resolved && !group_id_resolution.property_name.empty())
+    if (!group_id_resolution.property_name.empty())
     {
       detail += " groupId-from-property " + group_id_resolution.property_name;
     }
-    if (artifact_id_resolution.resolved && !artifact_id_resolution.property_name.empty())
+    if (!artifact_id_resolution.property_name.empty())
     {
       detail += " artifactId-from-property " + artifact_id_resolution.property_name;
     }
-    if (!version_property_name.empty())
+    if (!version_unresolved && !version_resolution.property_name.empty())
     {
-      detail += " version-from-property " + version_property_name;
+      detail += " version-from-property " + version_resolution.property_name;
     }
-    // A pom declares, it does not resolve -> Medium, unless its groupId/
-    // artifactId could not be fully resolved, in which case the identity
-    // itself is untrustworthy -> Low.
+    // A pom declares, it does not resolve -> Medium, unless its version could
+    // not be resolved, in which case the component has no version to stand on
+    // -> Low.
     const core::Confidence confidence =
-        identity_unresolved ? core::Confidence::Low : core::Confidence::Medium;
-    emit_maven_component(group_id_resolution.value, artifact_id_resolution.value, *version, scope,
+        version_unresolved ? core::Confidence::Low : core::Confidence::Medium;
+    emit_maven_component(group_id_resolution.value, artifact_id_resolution.value, version, scope,
                          confidence, std::move(detail), components, result);
   }
 
@@ -558,20 +470,11 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
                     " dependency element(s) without groupId/artifactId skipped: " + label,
                 "maven");
   }
-  if (unresolved_version_count > 0)
+  if (missing_version_count > 0)
   {
     result.warn(core::WarningCode::kEntriesSkippedUnresolved,
-                "maven: " + std::to_string(unresolved_version_count) +
-                    " dependency(ies) without a resolvable version skipped: " + label,
-                "maven");
-  }
-  if (unresolved_identity_count > 0)
-  {
-    result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
-                "maven: " + std::to_string(unresolved_identity_count) +
-                    " dependency(ies) with an unresolved groupId/artifactId property reported at "
-                    "low confidence: " +
-                    label,
+                "maven: " + std::to_string(missing_version_count) +
+                    " dependency(ies) without a version skipped: " + label,
                 "maven");
   }
 }

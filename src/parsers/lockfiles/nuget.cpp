@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/build_variables.hpp"
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
@@ -19,6 +20,8 @@
 #include "core/submodule_paths.hpp"
 #include "core/text.hpp"
 #include "core/warning_code.hpp"
+#include "core/xml_scan.hpp"
+#include "parsers/lockfiles/msbuild_properties.hpp"
 
 namespace fs = std::filesystem;
 
@@ -57,10 +60,16 @@ constexpr std::string_view kIdAttribute = "id";
 constexpr std::string_view kVersionConfigAttribute = "version";
 
 /// Build the `pkg:nuget` purl. NuGet names have no namespace; the lockfile's
-/// casing is preserved.
+/// casing is preserved. An empty version (a declared version that is an
+/// unresolved MSBuild property) leaves the purl without `@version`.
 std::string build_nuget_purl(const std::string& package_name, const std::string& version)
 {
-  return "pkg:nuget/" + core::percent_encode(package_name) + "@" + core::percent_encode(version);
+  std::string purl = "pkg:nuget/" + core::percent_encode(package_name);
+  if (!version.empty())
+  {
+    purl += "@" + core::percent_encode(version);
+  }
+  return purl;
 }
 
 /// Canonicalize `component.purl` in place, warning when it fails validation
@@ -83,115 +92,27 @@ void canonicalize_purl(core::Component& component,
 /// Append one `pkg:nuget` component built from a declared (not resolved)
 /// manifest entry: `.csproj`/`packages.config`: at `Confidence::Medium`: a
 /// manifest declares a version, it does not resolve one, the same "declares,
-/// doesn't resolve" shape maven.cpp's pom.xml reads at Medium confidence.
+/// doesn't resolve" shape maven.cpp's pom.xml reads at Medium confidence. A
+/// declaration whose version stayed an unresolved property is emitted without
+/// a version, at `Confidence::Low`.
 void emit_declared_nuget_component(const std::string& package_name, const std::string& version,
-                                   std::string detail, std::vector<core::Component>& components,
+                                   std::string detail, core::Confidence confidence,
+                                   std::vector<core::Component>& components,
                                    core::Result<std::vector<core::Component>>& result)
 {
   core::Component component;
   component.name = package_name;
   component.version = version;
   component.purl = build_nuget_purl(component.name, component.version);
-  component.evidence.push_back(
-      {core::Source::Manifest, std::move(detail), core::Confidence::Medium});
+  component.evidence.push_back({core::Source::Manifest, std::move(detail), confidence});
   canonicalize_purl(component, result);
   components.push_back(std::move(component));
 }
 
-/// True for the ASCII whitespace XML allows inside tags.
-bool is_xml_whitespace(char character)
-{
-  return character == ' ' || character == '\t' || character == '\r' || character == '\n';
-}
-
-/// One matched opening tag's raw attribute text (the span between the tag
-/// name and the closing `>`/`/>`) and where scanning may resume after it.
-/// Element bodies are not tracked: `.csproj`/`packages.config` entries carry
-/// their identity entirely in attributes on the opening tag.
-struct TagMatch
-{
-  std::string_view attribute_text;
-  std::size_t resume_position = 0;
-};
-
-/// Find the next `<tag ...>` or `<tag .../>` opening at or after
-/// `search_start`. Anything the scanner cannot pair: an unterminated tag :
-/// degrades to "not found", never a crash (Hard Rule 1).
-std::optional<TagMatch> find_next_tag(std::string_view xml, std::string_view tag_name,
-                                      std::size_t search_start)
-{
-  std::size_t position = search_start;
-  while (position < xml.size())
-  {
-    const std::size_t open = xml.find('<', position);
-    if (open == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    const std::size_t name_start = open + 1;
-    if (xml.compare(name_start, tag_name.size(), tag_name) != 0)
-    {
-      position = open + 1;
-      continue;
-    }
-    const std::size_t after_name = name_start + tag_name.size();
-    if (after_name >= xml.size() ||
-        (xml[after_name] != '>' && xml[after_name] != '/' && !is_xml_whitespace(xml[after_name])))
-    {
-      position = open + 1;  // a longer tag name that merely starts the same
-      continue;
-    }
-    const std::size_t open_end = xml.find('>', after_name);
-    if (open_end == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    const std::size_t attribute_end = (xml[open_end - 1] == '/') ? open_end - 1 : open_end;
-    return TagMatch{xml.substr(after_name, attribute_end - after_name), open_end + 1};
-  }
-  return std::nullopt;
-}
-
-/// First `name="value"` (or `name='value'`) attribute in `attribute_text`;
-/// nullopt when absent or unterminated. `attribute_name` must sit on a word
-/// boundary so `Version` never matches inside a longer attribute name.
-std::optional<std::string> find_attribute_value(std::string_view attribute_text,
-                                                std::string_view attribute_name)
-{
-  std::size_t position = 0;
-  while (position < attribute_text.size())
-  {
-    const std::size_t name_position = attribute_text.find(attribute_name, position);
-    if (name_position == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    position = name_position + 1;
-    const bool has_left_boundary =
-        name_position == 0 || is_xml_whitespace(attribute_text[name_position - 1]);
-    const std::size_t after_name = name_position + attribute_name.size();
-    if (!has_left_boundary || after_name >= attribute_text.size() ||
-        attribute_text[after_name] != '=')
-    {
-      continue;
-    }
-    const std::size_t quote_position = after_name + 1;
-    if (quote_position >= attribute_text.size() ||
-        (attribute_text[quote_position] != '"' && attribute_text[quote_position] != '\''))
-    {
-      continue;
-    }
-    const char quote = attribute_text[quote_position];
-    const std::size_t value_start = quote_position + 1;
-    const std::size_t value_end = attribute_text.find(quote, value_start);
-    if (value_end == std::string_view::npos)
-    {
-      return std::nullopt;
-    }
-    return std::string(attribute_text.substr(value_start, value_end - value_start));
-  }
-  return std::nullopt;
-}
+using core::xml_scan::find_attribute_value;
+using core::xml_scan::find_next_tag;
+using core::xml_scan::line_number_at;
+using core::xml_scan::TagMatch;
 
 /// One parsed `Directory.Packages.props`: the package-name-to-version map
 /// Central Package Management declares for its directory and everything
@@ -393,6 +314,37 @@ void parse_packages_lock(const std::string& bytes, const std::string& label,
   }
 }
 
+/// NuGet's exact-version notation `[1.2.3]` names exactly that version; any
+/// other bracket or comma form is a range and stays as written.
+/// Example: `without_exact_version_brackets("[11.3.0]")` -> `"11.3.0"`.
+std::string without_exact_version_brackets(const std::string& version)
+{
+  constexpr std::size_t kBracketPairLength = 2;
+  if (version.size() > kBracketPairLength && version.front() == '[' && version.back() == ']' &&
+      version.find(',') == std::string::npos)
+  {
+    return core::trimmed(std::string_view(version).substr(1, version.size() - kBracketPairLength));
+  }
+  return version;
+}
+
+/// The property a whole-value `$(Name)` reference names, or an empty string
+/// when `text` is anything else.
+/// Example: `single_property_name("$(AzureIdentityVersion)")` -> `"AzureIdentityVersion"`.
+std::string single_property_name(std::string_view text)
+{
+  constexpr std::string_view kReferenceOpen = "$(";
+  constexpr std::string_view kReferenceClose = ")";
+  if (text.size() <= kReferenceOpen.size() + kReferenceClose.size() ||
+      !text.starts_with(kReferenceOpen) || !text.ends_with(kReferenceClose) ||
+      text.find(kReferenceClose) != text.size() - kReferenceClose.size())
+  {
+    return {};
+  }
+  return std::string(text.substr(kReferenceOpen.size(),
+                                 text.size() - kReferenceOpen.size() - kReferenceClose.size()));
+}
+
 /// Parse one `.csproj`'s `<PackageReference Include="Name" Version="1.2.3" />`
 /// elements into components. A `.csproj` declares a version, it does not
 /// resolve one (no lockfile backs it) -> Confidence::Medium. Only the
@@ -408,14 +360,38 @@ void parse_packages_lock(const std::string& bytes, const std::string& label,
 /// case (the version still only declares, never resolves via a lockfile).
 /// No covering file, or no matching entry in it, degrades to the same
 /// missing-Version skip as before CPM support existed.
+///
+/// A name or version written as an MSBuild property (`$(Name)`) is expanded
+/// from the properties in scope (`msbuild::PropertyScopes`). A purl never
+/// carries an unexpanded reference: a name that stays unresolved drops the
+/// entry, a version that stays unresolved keeps it without a version at
+/// Confidence::Low, and each case warns with the file and line.
 void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
                   const std::map<fs::path, DirectoryPackagesFile>& directory_packages_by_directory,
-                  const std::string& label, std::size_t package_limit, std::size_t& package_budget,
+                  msbuild::PropertyScopes& property_scopes, const std::string& label,
+                  std::size_t package_limit, std::size_t& package_budget,
                   std::vector<core::Component>& components,
                   core::Result<std::vector<core::Component>>& result)
 {
   std::size_t skipped_entry_count = 0;
   std::size_t search_position = 0;
+
+  // The project's property table is built the first time an entry needs one:
+  // most projects spell every name and version literally.
+  std::optional<core::VariableTable> project_properties;
+  const auto expand = [&](const std::string& text)
+  {
+    if (text.find('$') == std::string::npos)
+    {
+      return text;
+    }
+    if (!project_properties.has_value())
+    {
+      project_properties = property_scopes.table_for_project(csproj_directory, bytes);
+    }
+    return core::expand_variables(text, *project_properties, core::kMsbuildVariableDialect);
+  };
+
   while (true)
   {
     const std::optional<TagMatch> tag =
@@ -425,10 +401,16 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
       break;
     }
     search_position = tag->resume_position;
+    const auto location = [&]()
+    {
+      const std::size_t tag_offset =
+          static_cast<std::size_t>(tag->attribute_text.data() - bytes.data());
+      return label + ":" + std::to_string(line_number_at(bytes, tag_offset));
+    };
 
-    const std::optional<std::string> package_name =
+    const std::optional<std::string> declared_name =
         find_attribute_value(tag->attribute_text, kIncludeAttribute);
-    if (!package_name.has_value() || package_name->empty())
+    if (!declared_name.has_value() || declared_name->empty())
     {
       ++skipped_entry_count;
       continue;
@@ -436,12 +418,12 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
 
     const std::optional<std::string> version_attribute =
         find_attribute_value(tag->attribute_text, kVersionAttribute);
-    std::string resolved_version;
+    std::string declared_version;
     std::string evidence_detail = label;
     if (version_attribute.has_value())
     {
-      resolved_version = core::trimmed(*version_attribute);
-      if (resolved_version.empty())
+      declared_version = core::trimmed(*version_attribute);
+      if (declared_version.empty())
       {
         ++skipped_entry_count;
         continue;
@@ -455,7 +437,7 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
       if (directory_packages_file != nullptr)
       {
         const auto found = directory_packages_file->versions_by_lowercase_name.find(
-            core::to_lower_ascii(*package_name));
+            core::to_lower_ascii(*declared_name));
         if (found != directory_packages_file->versions_by_lowercase_name.end())
         {
           central_version = found->second;
@@ -466,9 +448,40 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
         ++skipped_entry_count;
         continue;
       }
-      resolved_version = *central_version;
+      declared_version = *central_version;
       evidence_detail = label + " (version from " + directory_packages_file->label + ")";
     }
+
+    const std::string package_name = expand(*declared_name);
+    if (core::contains_unexpanded_variable(package_name))
+    {
+      result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+                  "nuget: " + location() + ": PackageReference '" +
+                      core::escaped_for_diagnostic(*declared_name) +
+                      "' has an unresolved name; skipped",
+                  "nuget", fs::path(label));
+      continue;
+    }
+
+    std::string resolved_version = expand(declared_version);
+    const bool version_unresolved = core::contains_unexpanded_variable(resolved_version);
+    if (version_unresolved)
+    {
+      result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+                  "nuget: " + location() + ": PackageReference '" +
+                      core::escaped_for_diagnostic(package_name) + "' has an unresolved version '" +
+                      core::escaped_for_diagnostic(declared_version) +
+                      "'; kept without a version at low confidence",
+                  "nuget", fs::path(label));
+      resolved_version.clear();
+    }
+    else if (resolved_version != declared_version)
+    {
+      const std::string property_name = single_property_name(declared_version);
+      evidence_detail += property_name.empty() ? " (version expanded from MSBuild properties)"
+                                               : " (version-from-property " + property_name + ")";
+    }
+    resolved_version = without_exact_version_brackets(resolved_version);
 
     if (package_budget == 0)
     {
@@ -481,8 +494,9 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
     }
     --package_budget;
 
-    emit_declared_nuget_component(*package_name, resolved_version, evidence_detail, components,
-                                  result);
+    emit_declared_nuget_component(
+        package_name, resolved_version, evidence_detail,
+        version_unresolved ? core::Confidence::Low : core::Confidence::Medium, components, result);
   }
 
   if (skipped_entry_count > 0)
@@ -541,7 +555,8 @@ void parse_packages_config(const std::string& bytes, const std::string& label,
     }
     --package_budget;
 
-    emit_declared_nuget_component(*package_name, trimmed_version, label, components, result);
+    emit_declared_nuget_component(*package_name, trimmed_version, label, core::Confidence::Medium,
+                                  components, result);
   }
 
   if (skipped_entry_count > 0)
@@ -582,6 +597,21 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
     }
     return true;
   };
+
+  // MSBuild property tables for `$(Name)` references. Every file they read
+  // counts against the same file budget as the manifests above, and a file
+  // that is also a Directory.Packages.props is read once here and once by
+  // phase 1: the budget is generous, the double count is harmless.
+  msbuild::PropertyScopes property_scopes(file_index, root, options.max_file_bytes,
+                                          [&]()
+                                          {
+                                            if (file_limit_reached())
+                                            {
+                                              return false;
+                                            }
+                                            ++scanned_file_count;
+                                            return true;
+                                          });
 
   // Phase 1: every Directory.Packages.props first, so CPM resolution in phase
   // 2 sees the complete directory->version map regardless of how a props file
@@ -671,10 +701,15 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
     else
     {
       parse_csproj(file_read.bytes, relative_path.parent_path(), directory_packages_by_directory,
-                   label, options.max_total_packages, package_budget, components, result);
+                   property_scopes, label, options.max_total_packages, package_budget, components,
+                   result);
     }
   }
 
+  for (const core::Warning& warning : property_scopes.warnings())
+  {
+    result.warn(warning);
+  }
   result.value = core::merge_all(std::move(components));
   return result;
 }

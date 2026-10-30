@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/model.hpp"
+#include "core/warning.hpp"
 #include "parsers/lockfiles/maven.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
@@ -167,8 +168,10 @@ int main()
   }
 
   // Given deps whose versions are missing or reference an undefined property,
-  // when parsed, then they are skipped and counted into ONE per-file warning :
-  // never emitted with a guessed version.
+  // when parsed, then the one with no <version> is skipped and counted into ONE
+  // per-file warning, and the one whose ${property} is undefined is kept
+  // WITHOUT a version, at Low confidence, with its own warning naming file and
+  // line: never emitted with the raw `${...}` text or a guessed version.
   {
     TempTree tree;
     tree.write("pom.xml", R"(<project>
@@ -195,16 +198,33 @@ int main()
 )");
 
     const Result<std::vector<Component>> result = maven_parser::parse(tree.root());
-    // 1 surviving dependency + 1 self-identity.
-    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    // 1 surviving dependency + 1 versionless dependency + 1 self-identity.
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
     BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:maven/org.kept/survivor@1.0.0") != nullptr);
     BOMWERK_TEST_CHECK(
         find_by_purl(result.value, "pkg:maven/com.example/version-resolution-demo@1.0.0") !=
         nullptr);
-    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
-    BOMWERK_TEST_CHECK(result.warnings[0].message.find("without a resolvable version") !=
-                       std::string::npos);
-    BOMWERK_TEST_CHECK(result.warnings[0].message.find("2 ") != std::string::npos);
+    const Component* versionless = find_by_purl(result.value, "pkg:maven/org.broken/bad-property");
+    BOMWERK_TEST_CHECK(versionless != nullptr);
+    BOMWERK_TEST_CHECK(versionless->version.empty());
+    BOMWERK_TEST_CHECK(highest_confidence(*versionless) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 2);
+    bool has_missing_version_warning = false;
+    bool has_unresolved_version_warning = false;
+    for (const bomwerk::core::Warning& warning : result.warnings)
+    {
+      has_missing_version_warning =
+          has_missing_version_warning ||
+          (warning.message.find("without a version skipped") != std::string::npos &&
+           warning.message.find("1 ") != std::string::npos);
+      has_unresolved_version_warning =
+          has_unresolved_version_warning ||
+          (warning.code == bomwerk::core::WarningCode::kUnresolvedVariableOrInterpolation &&
+           warning.message.find("pom.xml:10") != std::string::npos &&
+           warning.message.find("org.broken:bad-property") != std::string::npos);
+    }
+    BOMWERK_TEST_CHECK(has_missing_version_warning);
+    BOMWERK_TEST_CHECK(has_unresolved_version_warning);
   }
 
   // Given a commented-out dependency, a CDATA-wrapped version and an
@@ -252,9 +272,9 @@ int main()
 
   // Given a pom with no <parent> and no own <groupId> (so project.groupId is
   // never populated), and one dependency whose <groupId> references that
-  // undefined property, when parsed, then the dependency is KEPT: never
-  // dropped: with the raw, unresolved text as its identity, downgraded to
-  // Low confidence and counted into one warning.
+  // undefined property, when parsed, then the dependency is DROPPED: a purl
+  // never carries the raw `${project.groupId}`. Two warnings: the dropped
+  // dependency (naming file and line) and the skipped self-identity.
   {
     TempTree tree;
     tree.write("pom.xml", R"(<project>
@@ -271,34 +291,28 @@ int main()
 )");
 
     const Result<std::vector<Component>> result = maven_parser::parse(tree.root());
-    // No self-identity component: this pom has no own
-    // <groupId>, by design: that's the whole point of this fixture.
-    BOMWERK_TEST_CHECK(result.value.size() == 1);
-    BOMWERK_TEST_CHECK(result.value[0].name == "${project.groupId}:inherited-identity");
-    BOMWERK_TEST_CHECK(result.value[0].purl ==
-                       "pkg:maven/%24%7Bproject.groupId%7D/inherited-identity@1.0.0");
-    BOMWERK_TEST_CHECK(result.value[0].supplier == "${project.groupId}");
-    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
-    // 2 warnings: the pre-existing unresolved-identity one, plus the new
-    // self-identity-skipped one (this pom's own groupId is unresolvable too).
+    BOMWERK_TEST_CHECK(result.value.empty());
     BOMWERK_TEST_CHECK(result.warnings.size() == 2);
-    const bool has_unresolved_identity_warning =
-        result.warnings[0].message.find("unresolved groupId/artifactId") != std::string::npos ||
-        result.warnings[1].message.find("unresolved groupId/artifactId") != std::string::npos;
-    BOMWERK_TEST_CHECK(has_unresolved_identity_warning);
-    const bool has_self_identity_skipped_warning =
-        result.warnings[0].message.find("self-identity skipped") != std::string::npos ||
-        result.warnings[1].message.find("self-identity skipped") != std::string::npos;
+    bool has_dropped_dependency_warning = false;
+    bool has_self_identity_skipped_warning = false;
+    for (const bomwerk::core::Warning& warning : result.warnings)
+    {
+      has_dropped_dependency_warning =
+          has_dropped_dependency_warning ||
+          (warning.message.find("unresolved groupId/artifactId") != std::string::npos &&
+           warning.message.find("pom.xml:5") != std::string::npos);
+      has_self_identity_skipped_warning =
+          has_self_identity_skipped_warning ||
+          warning.message.find("self-identity skipped") != std::string::npos;
+    }
+    BOMWERK_TEST_CHECK(has_dropped_dependency_warning);
     BOMWERK_TEST_CHECK(has_self_identity_skipped_warning);
-    BOMWERK_TEST_CHECK(result.warnings[0].message.find("1 ") != std::string::npos ||
-                       result.warnings[1].message.find("1 ") != std::string::npos);
   }
 
   // Given four dependencies in one pom: groupId-only unresolved, artifactId-
   // only unresolved, both unresolved, and a clean literal survivor: when
-  // parsed, then none are dropped, the three broken ones are Low confidence,
-  // the survivor stays Medium, and both-unresolved counts ONCE, not twice,
-  // toward the single aggregate warning.
+  // parsed, then the three broken ones are dropped, one warning each naming
+  // its line, and the survivor and the self-identity are untouched.
   {
     TempTree tree;
     tree.write("pom.xml", R"(<project>
@@ -332,33 +346,88 @@ int main()
 
     const Result<std::vector<Component>> result = maven_parser::parse(tree.root());
     BOMWERK_TEST_CHECK(result.complete);
-    // 4 dependencies + 1 self-identity.
-    BOMWERK_TEST_CHECK(result.value.size() == 5);
-    const Component* both_unresolved = find_by_purl(
-        result.value,
-        "pkg:maven/%24%7Bundefined.both.group%7D/%24%7Bundefined.both.artifact%7D@3.0.0");
-    const Component* group_unresolved =
-        find_by_purl(result.value, "pkg:maven/%24%7Bundefined.vendor%7D/mystery-lib@1.0.0");
-    const Component* artifact_unresolved =
-        find_by_purl(result.value, "pkg:maven/org.example/%24%7Bundefined.artifact%7D@2.0.0");
+    // 1 surviving dependency + 1 self-identity.
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
     const Component* clean_survivor =
         find_by_purl(result.value, "pkg:maven/org.kept/clean-survivor@4.0.0");
     const Component* self_identity =
         find_by_purl(result.value, "pkg:maven/com.example/identity-matrix@1.0.0");
-    BOMWERK_TEST_CHECK(both_unresolved != nullptr);
-    BOMWERK_TEST_CHECK(group_unresolved != nullptr);
-    BOMWERK_TEST_CHECK(artifact_unresolved != nullptr);
     BOMWERK_TEST_CHECK(clean_survivor != nullptr);
     BOMWERK_TEST_CHECK(self_identity != nullptr);
-    BOMWERK_TEST_CHECK(highest_confidence(*both_unresolved) == Confidence::Low);
-    BOMWERK_TEST_CHECK(highest_confidence(*group_unresolved) == Confidence::Low);
-    BOMWERK_TEST_CHECK(highest_confidence(*artifact_unresolved) == Confidence::Low);
     BOMWERK_TEST_CHECK(highest_confidence(*clean_survivor) == Confidence::Medium);
     BOMWERK_TEST_CHECK(highest_confidence(*self_identity) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 3);
+    BOMWERK_TEST_CHECK(result.warnings[0].message.find("pom.xml:6") != std::string::npos);
+    BOMWERK_TEST_CHECK(result.warnings[1].message.find("pom.xml:11") != std::string::npos);
+    BOMWERK_TEST_CHECK(result.warnings[2].message.find("pom.xml:16") != std::string::npos);
+    for (const bomwerk::core::Warning& warning : result.warnings)
+    {
+      BOMWERK_TEST_CHECK(warning.code ==
+                         bomwerk::core::WarningCode::kUnresolvedVariableOrInterpolation);
+    }
+  }
+
+  // Given a pom whose own version is `${revision}` (defined in <properties>)
+  // and one dependency on `${project.artifactId}` at `${project.version}`,
+  // when parsed, then the own coordinates resolve first: the self-identity and
+  // the dependency carry the real values, and the self-identity drops from
+  // High to Medium because one coordinate came from a property.
+  {
+    TempTree tree;
+    tree.write("pom.xml", R"(<project>
+  <groupId>com.example</groupId>
+  <artifactId>revision-demo</artifactId>
+  <version>${revision}</version>
+  <properties>
+    <revision>3.1.4</revision>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.other</groupId>
+      <artifactId>${project.artifactId}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+</project>
+)");
+
+    const Result<std::vector<Component>> result = maven_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    const Component* self_identity =
+        find_by_purl(result.value, "pkg:maven/com.example/revision-demo@3.1.4");
+    const Component* dependency =
+        find_by_purl(result.value, "pkg:maven/org.other/revision-demo@3.1.4");
+    BOMWERK_TEST_CHECK(self_identity != nullptr);
+    BOMWERK_TEST_CHECK(dependency != nullptr);
+    BOMWERK_TEST_CHECK(highest_confidence(*self_identity) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(dependency->evidence[0].detail.find(
+                           "artifactId-from-property project.artifactId") != std::string::npos);
+    BOMWERK_TEST_CHECK(dependency->evidence[0].detail.find(
+                           "version-from-property project.version") != std::string::npos);
+  }
+
+  // Given a Maven archetype template whose own coordinates are `${groupId}`,
+  // `${artifactId}` and `${version}` (kafka's streams quickstart), when parsed,
+  // then no component is emitted for it and the skipped self-identity is the
+  // only warning.
+  {
+    TempTree tree;
+    tree.write("pom.xml", R"(<project>
+  <groupId>${groupId}</groupId>
+  <artifactId>${artifactId}</artifactId>
+  <version>${version}</version>
+  <properties>
+    <slf4j.version>2.0.16</slf4j.version>
+  </properties>
+</project>
+)");
+
+    const Result<std::vector<Component>> result = maven_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.empty());
     BOMWERK_TEST_CHECK(result.warnings.size() == 1);
-    BOMWERK_TEST_CHECK(result.warnings[0].message.find("unresolved groupId/artifactId") !=
-                       std::string::npos);
-    BOMWERK_TEST_CHECK(result.warnings[0].message.find("3 ") != std::string::npos);
+    BOMWERK_TEST_CHECK(result.warnings[0].code ==
+                       bomwerk::core::WarningCode::kSelfIdentityUnresolvable);
   }
 
   // Given <properties> defining both a group and an artifact name, and one

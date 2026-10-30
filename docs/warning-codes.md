@@ -174,3 +174,39 @@ cannot fix.
 | `BW-VULN-005` | A feed response was malformed |
 | `BW-VULN-006` | Vulnerability match coverage is incomplete for this run |
 | `BW-VULN-008` | License-fallback enrichment is incomplete for this run |
+
+## Unresolved build variables (`BW-CORE-015`)
+
+CMake `${NAME}`, MSBuild `$(Name)` and Maven `${name}` are resolved by the build
+system at configure time, so a manifest can name a dependency, or pin its
+version, with text that only means something once the build runs. bomwerk never
+runs a build, so it expands what the scanned tree itself defines and leaves out
+the rest. A purl never contains an unexpanded variable.
+
+What is read, by ecosystem:
+
+| Ecosystem | Variables expanded from |
+| --- | --- |
+| CMake | `set(<name> <value>)` in any CMake file of the tree, including in a different file than the declaration |
+| NuGet | the project's own `<PropertyGroup>`, every `Directory.Build.props` and `Directory.Packages.props` above it, whatever those import from inside the scan root, and the root's `eng/Versions.props` and `eng/Version.Details.props` |
+| Maven | the pom's own `<properties>`, `project.version`, `project.groupId`, `project.artifactId` and the `project.parent.*` pseudo-properties, one level deep |
+
+A variable defined more than once with different values is ambiguous and is
+never expanded, so a version is never taken from the wrong file. In CMake a
+`function()` or `macro()` parameter, a `foreach()` variable and a `set()` of a
+list count as ambiguous too. Nothing is evaluated: CMake `if()`, `string()` and
+`list()`, MSBuild `Condition` attributes and property functions, and anything
+needing a parent pom in another file stay unresolved.
+
+What happens to a dependency that still carries a variable:
+
+| Unresolved part | Result |
+| --- | --- |
+| The name, with no literal repository to name it instead | The dependency is dropped |
+| The version, a CMake repository, URL or `URL_HASH` | The field is left out, and the component stays at low confidence |
+| A Maven `groupId` or `artifactId` | The dependency is dropped |
+| A Maven pom's own `groupId`, `artifactId` or `version` | The pom's own component is skipped (`BW-CORE-014`) |
+
+Each case raises `BW-CORE-015` with the file and line in the message. A
+component kept without a version has no purl version to match against a
+vulnerability feed, so the coverage summary counts it as `unversioned-purl`.

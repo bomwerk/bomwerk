@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <AzureIdentityVersion>1.21.0</AzureIdentityVersion>
+  </PropertyGroup>
+</Project>

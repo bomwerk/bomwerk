@@ -104,6 +104,7 @@ find_package(tomlplusplus CONFIG REQUIRED)
 
 add_library(bomwerk_core
   src/core/base64.cpp
+  src/core/build_variables.cpp
   src/core/cvss.cpp
   src/core/exclusions.cpp
   src/core/file_index.cpp
@@ -126,6 +127,7 @@ add_library(bomwerk_core
   src/core/timestamp.cpp
   src/core/uuid.cpp
   src/core/warning_code.cpp
+  src/core/xml_scan.cpp
   src/core/yaml_subset.cpp)
 target_include_directories(bomwerk_core PUBLIC src)
 # Logging is cross-cutting; spdlog is part of core's public surface. toml++ is
@@ -149,6 +151,7 @@ add_library(bomwerk_parsers
   src/parsers/lockfiles/composer.cpp
   src/parsers/lockfiles/go.cpp
   src/parsers/lockfiles/maven.cpp
+  src/parsers/lockfiles/msbuild_properties.cpp
   src/parsers/lockfiles/npm.cpp
   src/parsers/lockfiles/nuget.cpp
   src/parsers/lockfiles/pnpm.cpp
@@ -333,7 +336,7 @@ endif()
 # Core-only tests link just bomwerk_core (the default).
 foreach(bomwerk_test_name IN ITEMS model manifest_names sbom_format exclusions name_list percent
                                   purl match_coverage text file_io file_index manifest_walk timestamp
-                                  uuid base64
+                                  uuid base64 build_variables xml_scan
                                   cvss git_config git_dir git_url scan_config unparsed_manifests
                                   yaml_subset warning_code warning_console_format)
   bomwerk_add_test(${bomwerk_test_name})
@@ -400,6 +403,7 @@ bomwerk_add_test(python bomwerk_parsers)
 bomwerk_add_test(cargo bomwerk_parsers)
 bomwerk_add_test(maven bomwerk_parsers)
 bomwerk_add_test(nuget bomwerk_parsers)
+bomwerk_add_test(msbuild_properties bomwerk_parsers)
 bomwerk_add_test(composer bomwerk_parsers)
 bomwerk_add_test(rubygems bomwerk_parsers)
 bomwerk_add_test(yarn bomwerk_parsers)

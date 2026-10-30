@@ -13,7 +13,7 @@ libFuzzer seed corpus once a fuzz harness exists.
 | `unterminated-bracket-comment.cmake` | `#[[ … ]]` bracket comment never closed |
 | `hash-in-url.cmake` | `#` inside a URL / CPM shorthand ref must NOT be treated as a comment |
 | `deep-nesting.cmake` | nested generator expressions + deep `(( … ))` (paren-depth bound) |
-| `pervasive-vars.cmake` | `${var}` in every field -> emitted at low confidence, warned |
+| `pervasive-vars.cmake` | `${var}` in every field -> declarations dropped with a warning; no purl carries a variable |
 
 Byte-level edge cases (CRLF line endings, embedded NUL, a UTF-8 BOM, and a
 file larger than the 1 MiB cap) are covered by the inline `test_cmake_scanner`

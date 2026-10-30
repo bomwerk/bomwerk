@@ -59,6 +59,20 @@ struct ParseOptions
 ///   covering `Directory.Packages.props`, or no matching entry in it,
 ///   degrades to the same missing-Version skip as a plain `.csproj` with no
 ///   `Version`.
+/// - A `.csproj` `Include` or `Version` (and a central `PackageVersion`'s
+///   `Version`) written as an MSBuild property, `$(Name)`, is expanded from
+///   the properties in scope: the `<PropertyGroup>` entries of the project,
+///   of every ancestor `Directory.Build.props` / `Directory.Packages.props`,
+///   of whatever those `<Import>` from inside the scan root, and of the root's
+///   `eng/Versions.props` and `eng/Version.Details.props` (the .NET Arcade
+///   layout, always read when present). A property defined twice with
+///   different values is ambiguous and never expands. The exact-version
+///   notation `[1.2.3]` is read as `1.2.3`. A purl never carries an
+///   unexpanded reference: an `Include` that stays unresolved drops the entry,
+///   a `Version` that stays unresolved keeps it without a version at Low
+///   confidence, and each case warns with file and line. `Condition`
+///   attributes are not evaluated, and MSBuild property functions
+///   (`$([MSBuild]::...)`) are never run: both count as unresolved.
 ///
 /// The same package resolved/declared under several target frameworks or
 /// manifests becomes ONE component with one evidence entry per source :

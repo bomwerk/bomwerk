@@ -18,6 +18,23 @@ using bomwerk::test::TempTree;
 
 namespace nuget_parser = bomwerk::parsers::lockfiles::nuget;
 
+namespace
+{
+
+const Component* find_by_purl(const std::vector<Component>& components, const std::string& purl)
+{
+  for (const Component& component : components)
+  {
+    if (component.purl == purl)
+    {
+      return &component;
+    }
+  }
+  return nullptr;
+}
+
+}  // namespace
+
 int main()
 {
   // Given a v1 lockfile with a Direct, a Transitive and a Project entry, when
@@ -436,6 +453,130 @@ int main()
     }
     BOMWERK_TEST_CHECK(found_props_warning);
     BOMWERK_TEST_CHECK(found_csproj_warning);
+  }
+
+  // Given efcore's Central Package Management shape (a versionless
+  // PackageReference, a central `Version="$(AzureIdentityVersion)"`, and the
+  // property defined in eng/Versions.props), when parsed, then the real version
+  // reaches the purl at Medium confidence and the evidence names the property.
+  {
+    TempTree tree;
+    tree.write("eng/Versions.props",
+               "<Project><PropertyGroup><AzureIdentityVersion>1.21.0</AzureIdentityVersion>"
+               "</PropertyGroup></Project>");
+    tree.write(
+        "Directory.Packages.props",
+        "<Project>\n"
+        "  <ItemGroup>\n"
+        "    <PackageVersion Include=\"Azure.Identity\" Version=\"$(AzureIdentityVersion)\" />\n"
+        "  </ItemGroup>\n"
+        "</Project>\n");
+    tree.write("src/App.csproj",
+               "<Project><ItemGroup><PackageReference Include=\"Azure.Identity\" /></ItemGroup>"
+               "</Project>");
+    const Result<std::vector<Component>> result = nuget_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:nuget/Azure.Identity@1.21.0");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(result.value[0].evidence[0].detail.find(
+                           "version-from-property AzureIdentityVersion") != std::string::npos);
+  }
+
+  // Given a property defined in the project itself, a version in NuGet's
+  // exact-version notation `[$(AvaloniaVersion)]` (Avalonia's shape), and a
+  // literal `[1.2.3]`, when parsed, then the brackets are read as an exact
+  // version and the purls carry bare versions; a real range stays a range.
+  {
+    TempTree tree;
+    tree.write(
+        "App.csproj",
+        "<Project>\n"
+        "  <PropertyGroup><AvaloniaVersion>11.3.0</AvaloniaVersion></PropertyGroup>\n"
+        "  <ItemGroup>\n"
+        "    <PackageReference Include=\"Avalonia.Android\" Version=\"[$(AvaloniaVersion)]\" />\n"
+        "    <PackageReference Include=\"Pinned\" Version=\"[1.2.3]\" />\n"
+        "    <PackageReference Include=\"Ranged\" Version=\"[1.0,2.0)\" />\n"
+        "  </ItemGroup>\n"
+        "</Project>\n");
+    const Result<std::vector<Component>> result = nuget_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:nuget/Avalonia.Android@11.3.0") != nullptr);
+    BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:nuget/Pinned@1.2.3") != nullptr);
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
+  }
+
+  // Given a version that is a property nobody defines, and a name built from
+  // another undefined property, when parsed, then the first entry is kept
+  // WITHOUT a version at Low confidence and the second is dropped, each with a
+  // warning naming file and line: no purl carries `$(...)`.
+  {
+    TempTree tree;
+    tree.write(
+        "App.csproj",
+        "<Project>\n"
+        "  <ItemGroup>\n"
+        "    <PackageReference Include=\"Known.Package\" Version=\"$(UndefinedVersion)\" />\n"
+        "    <PackageReference Include=\"Runtime.$(ToolsRID).Tool\" Version=\"1.0.0\" />\n"
+        "    <PackageReference Include=\"Literal\" Version=\"4.5.6\" />\n"
+        "  </ItemGroup>\n"
+        "</Project>\n");
+    const Result<std::vector<Component>> result = nuget_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    const Component* versionless = find_by_purl(result.value, "pkg:nuget/Known.Package");
+    BOMWERK_TEST_CHECK(versionless != nullptr);
+    BOMWERK_TEST_CHECK(versionless->version.empty());
+    BOMWERK_TEST_CHECK(highest_confidence(*versionless) == Confidence::Low);
+    BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:nuget/Literal@4.5.6") != nullptr);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 2);
+    BOMWERK_TEST_CHECK(result.warnings[0].message.find("App.csproj:3") != std::string::npos);
+    BOMWERK_TEST_CHECK(result.warnings[1].message.find("App.csproj:4") != std::string::npos);
+    for (const bomwerk::core::Warning& warning : result.warnings)
+    {
+      BOMWERK_TEST_CHECK(warning.code ==
+                         bomwerk::core::WarningCode::kUnresolvedVariableOrInterpolation);
+    }
+    for (const Component& component : result.value)
+    {
+      BOMWERK_TEST_CHECK(component.purl.find("$(") == std::string::npos);
+      BOMWERK_TEST_CHECK(component.purl.find("%24%28") == std::string::npos);
+    }
+  }
+
+  // Given a property defined with two different values in two props files,
+  // when a project uses it as a version, then it does not expand: a wrong
+  // version is worse than none.
+  {
+    TempTree tree;
+    tree.write("Directory.Build.props",
+               "<Project><PropertyGroup><LibVersion>1.0.0</LibVersion></PropertyGroup></Project>");
+    tree.write("Directory.Packages.props",
+               "<Project><PropertyGroup><LibVersion>2.0.0</LibVersion></PropertyGroup></Project>");
+    tree.write("App.csproj",
+               "<Project><ItemGroup><PackageReference Include=\"Lib\" Version=\"$(LibVersion)\" />"
+               "</ItemGroup></Project>");
+    const Result<std::vector<Component>> result = nuget_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:nuget/Lib");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+  }
+
+  // Given a central version that is itself an unresolved property, when a
+  // versionless PackageReference uses it, then the package is kept without a
+  // version at Low confidence.
+  {
+    TempTree tree;
+    tree.write("Directory.Packages.props",
+               "<Project><ItemGroup><PackageVersion Include=\"Lib\" Version=\"$(Nowhere)\" />"
+               "</ItemGroup></Project>");
+    tree.write("App.csproj",
+               "<Project><ItemGroup><PackageReference Include=\"Lib\" /></ItemGroup></Project>");
+    const Result<std::vector<Component>> result = nuget_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:nuget/Lib");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
   }
 
   std::puts("test_nuget: OK");

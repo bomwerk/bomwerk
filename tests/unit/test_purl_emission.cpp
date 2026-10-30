@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "core/build_variables.hpp"
 #include "core/file_index.hpp"
 #include "core/model.hpp"
 #include "core/purl.hpp"
@@ -27,6 +28,8 @@
 #include "parsers/cpp/conan.hpp"
 #include "parsers/cpp/submodules.hpp"
 #include "parsers/cpp/vcpkg.hpp"
+#include "parsers/lockfiles/maven.hpp"
+#include "parsers/lockfiles/nuget.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
 
@@ -37,6 +40,8 @@ namespace cmake_deps = bomwerk::parsers::cpp::cmake_deps;
 namespace conan = bomwerk::parsers::cpp::conan;
 namespace submodules = bomwerk::parsers::cpp::submodules;
 namespace vcpkg = bomwerk::parsers::cpp::vcpkg;
+namespace maven_parser = bomwerk::parsers::lockfiles::maven;
+namespace nuget_parser = bomwerk::parsers::lockfiles::nuget;
 namespace vendored_cpp = bomwerk::heuristics::vendored_cpp;
 
 namespace
@@ -46,6 +51,20 @@ namespace
 const std::string kSha = "0123456789abcdef0123456789abcdef01234567";
 const std::string kSha256 =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";  // 64-hex
+
+/// True when `purl` carries a build-system variable reference in any
+/// spelling, raw or percent-encoded (`${x}`, `$(x)`, `$<x>`, `%(x)`).
+bool purl_carries_variable(const std::string& purl)
+{
+  for (const char* encoded_marker : {"%24%7B", "%24%28", "%24%3C", "%25%28"})
+  {
+    if (purl.find(encoded_marker) != std::string::npos)
+    {
+      return true;
+    }
+  }
+  return bomwerk::core::contains_unexpanded_variable(purl);
+}
 
 /// The invariant itself, applied to one producer's whole output. `shape` names
 /// the dependency shape under test so a failure says which producer regressed.
@@ -63,6 +82,16 @@ void check_purl_invariant(const std::vector<Component>& components, const std::s
     {
       std::fprintf(stderr, "%s: component '%s' was emitted with an EMPTY purl\n", shape.c_str(),
                    component.name.c_str());
+      std::abort();
+    }
+
+    // A variable the build system resolves at configure time (`${NAME}`,
+    // `$(Version)`) identifies nothing: it must be expanded or left out, never
+    // emitted.
+    if (purl_carries_variable(component.purl))
+    {
+      std::fprintf(stderr, "%s: component '%s' carries an unresolved variable in purl '%s'\n",
+                   shape.c_str(), component.name.c_str(), component.purl.c_str());
       std::abort();
     }
 
@@ -225,6 +254,62 @@ int main()
     check_purl_invariant(conan::parse(tree.root()).value, "conan hostile", "pkg:conan/");
     check_purl_invariant(vcpkg::parse(tree.root()).value, "vcpkg hostile", "pkg:vcpkg/");
     check_purl_invariant(cmake_deps::parse(tree.root()).value, "cmake hostile", "pkg:generic/");
+  }
+
+  // Given CMake declarations whose name, repository, URL or version is an
+  // unresolved variable, alongside one literal dependency, when parsed, then
+  // every emitted purl is free of variables: the unresolved fields are left
+  // out and a declaration with no name is dropped.
+  {
+    TempTree tree;
+    tree.write("CMakeLists.txt",
+               "FetchContent_Declare(${NAME} URL ${URL})\n"
+               "ExternalProject_Add(fixed URL ${URL} URL_HASH SHA256=${HASH})\n"
+               "FetchContent_Declare(tagged GIT_REPOSITORY https://github.com/acme/tagged "
+               "GIT_TAG ${TAG})\n"
+               "FetchContent_Declare(literal GIT_REPOSITORY https://github.com/acme/literal "
+               "GIT_TAG v1.0)\n"
+               "CPMAddPackage(\"gh:${ORG}/${REPO}@${VERSION}\")\n"
+               "FetchContent_MakeAvailable(tagged literal)\n");
+    const auto result = cmake_deps::parse(tree.root());
+    check_purl_invariant(result.value, "cmake unresolved variables", "pkg:");
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
+  }
+
+  // Given NuGet references whose name or version is an MSBuild property nobody
+  // defines, alongside one literal reference, when parsed, then every emitted
+  // purl is free of variables.
+  {
+    TempTree tree;
+    tree.write("App.csproj",
+               "<Project><ItemGroup>"
+               "<PackageReference Include=\"Runtime.$(Rid).Tool\" Version=\"1.0.0\" />"
+               "<PackageReference Include=\"NoVersion\" Version=\"$(Undefined)\" />"
+               "<PackageReference Include=\"Literal\" Version=\"2.0.0\" />"
+               "</ItemGroup></Project>");
+    const auto result = nuget_parser::parse(tree.root());
+    check_purl_invariant(result.value, "nuget unresolved properties", "pkg:nuget/");
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+  }
+
+  // Given a pom whose own identity is an archetype template and whose
+  // dependencies use undefined properties, alongside one literal dependency,
+  // when parsed, then every emitted purl is free of variables.
+  {
+    TempTree tree;
+    tree.write("pom.xml",
+               "<project><groupId>${groupId}</groupId><artifactId>${artifactId}</artifactId>"
+               "<version>${version}</version><dependencies>"
+               "<dependency><groupId>${undefined.group}</groupId><artifactId>a</artifactId>"
+               "<version>1</version></dependency>"
+               "<dependency><groupId>org.x</groupId><artifactId>b</artifactId>"
+               "<version>${undefined.version}</version></dependency>"
+               "<dependency><groupId>org.x</groupId><artifactId>c</artifactId>"
+               "<version>3</version></dependency>"
+               "</dependencies></project>");
+    const auto result = maven_parser::parse(tree.root());
+    check_purl_invariant(result.value, "maven unresolved properties", "pkg:maven/");
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
   }
 
   std::puts("test_purl_emission: OK");
