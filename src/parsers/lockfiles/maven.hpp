@@ -50,8 +50,8 @@ struct ParseOptions
 ///   resolve. `<scope>test</scope>` => `Scope::Excluded`;
 ///   `<optional>true</optional>` => `Scope::Optional`; other declared scopes
 ///   (`provided`, `runtime`, …) stay Required with the scope recorded in the
-///   evidence detail. A dependency whose `<groupId>`/`<artifactId>` could not
-///   be fully resolved from `<properties>` is downgraded to Low instead (see
+///   evidence detail. A dependency whose `<version>` is a `${property}` that
+///   could not be resolved is kept WITHOUT a version at Low instead (see
 ///   below): the one way a pom.xml entry lands below Medium.
 ///
 /// pom.xml is read by a deliberately minimal XML scanner, not a full parser
@@ -62,11 +62,15 @@ struct ParseOptions
 ///   dependencies), as are `<exclusions>` spans (their nested
 ///   groupId/artifactId would poison the flat extraction);
 /// - a `${property}` version is resolved ONE level against the same pom's
-///   `<properties>` block plus the `project.version` / `project.groupId` /
-///   `project.parent.version` pseudo-properties; the pom's own coordinates
-///   come from the nearest `<groupId>`/`<version>` before the first
+///   `<properties>` block plus the `project.parent.version` and
+///   `project.parent.groupId` pseudo-properties, and `project.version`,
+///   `project.groupId` and `project.artifactId` once the pom's own
+///   coordinates have resolved; those coordinates come from the
+///   nearest `<groupId>`/`<artifactId>`/`<version>` before the first
 ///   `<dependencies>` block (conventional pom order), falling back to the
-///   `<parent>` coordinates. No recursion, no cross-file inheritance;
+///   `<parent>` coordinates for groupId and version. The own coordinates may
+///   themselves be `${property}` references (`${revision}`). No recursion, no
+///   cross-file inheritance;
 /// - those same coordinates are ALSO emitted as one `pkg:maven`
 ///   self-identity component per pom.xml, unconditionally :
 ///   Maven has no directory-shape signal like vcpkg's `ports/<name>/` to
@@ -78,19 +82,21 @@ struct ParseOptions
 ///   `<license>` entry only; no SPDX normalization: parsers/ never
 ///   includes output/);
 /// - `<groupId>`/`<artifactId>` get the SAME one-level `${property}`
-///   resolution as `<version>`, sharing its exact lookup rules
-///   (no recursion; a value only partially containing `${` is unresolvable).
-///   Unlike `<version>`, an unresolved `<groupId>`/`<artifactId>` is never
-///   dropped: the raw, unresolved text is kept as the component's identity
-///   (so a `${project.groupId}` inherited from a parent reactor pom this
-///   parser deliberately never reads surfaces verbatim, rather than
-///   vanishing), the dependency's confidence is downgraded to Low, and it is
-///   counted into one per-file warning: matching how every other producer
-///   in this codebase treats an identifier it cannot fully resolve
-///   (`cmake_deps`, vcpkg, Python, submodules, conan): downgrade and report,
-///   never guess, but never make the finding disappear either;
-/// - a dependency whose version is absent or stays unresolved is counted and
-///   reported once per file: never emitted with a guessed version;
+///   resolution as `<version>`, sharing its exact lookup rules (no recursion;
+///   a value only partially containing `${` is unresolvable). A purl never
+///   carries an unresolved reference, so the two fields are treated alike:
+///   - a dependency whose `<groupId>` or `<artifactId>` stays unresolved has
+///     no identity to report and is dropped, with one warning per dependency
+///     naming file and line (a `${project.groupId}` inherited from a parent
+///     reactor pom this parser deliberately never reads is the usual case);
+///   - a dependency whose `<version>` is a `${property}` that stays unresolved
+///     is kept with no version, at Low confidence, with the same warning;
+///   - a dependency with no `<version>` at all is not a variable: it is
+///     counted and reported once per file, never emitted with a guessed
+///     version;
+/// - the pom's own identity is skipped, with one warning, when any of its
+///   three coordinates stays unresolved (a Maven archetype template such as
+///   `${groupId}:${artifactId}:${version}` never becomes a component);
 /// - XML entities are not decoded, and `<dependency>` elements inside
 ///   `<profiles>` or `<build>` plugin sections are scanned like any other:
 ///   built-in manifest defaults are scan candidates, not proof of use.

@@ -1,0 +1,76 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "58362ae7-f8ad-5dbb-bf32-e2d5c5c46d71",
+      "name": "curl_external",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/curl_external",
+      "type": "library"
+    },
+    {
+      "bom-ref": "05dd4f51-1cbf-5230-89db-4b1dc79f95f9",
+      "name": "abseil",
+      "purl": "pkg:github/abseil/abseil-cpp@20250512.1",
+      "supplier": {
+        "name": "abseil"
+      },
+      "type": "library",
+      "version": "20250512.1"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "58362ae7-f8ad-5dbb-bf32-e2d5c5c46d71"
+    },
+    {
+      "ref": "05dd4f51-1cbf-5230-89db-4b1dc79f95f9"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "1"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:a9de4f03-3e08-5763-85f9-97a0bdaab669",
+  "specVersion": "1.6",
+  "version": 1
+}

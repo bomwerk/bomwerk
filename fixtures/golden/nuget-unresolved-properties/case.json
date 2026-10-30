@@ -1,0 +1,5 @@
+{
+  "description": "nuget: MSBuild properties in a .csproj. A central version `$(AzureIdentityVersion)` resolves from eng/Versions.props, a project-local property resolves, a version naming an undefined property is kept without a version, and a name built from an undefined property is dropped; the two warnings are this case's exit 1",
+  "args": [],
+  "expect_exit": 1
+}

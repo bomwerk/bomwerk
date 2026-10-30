@@ -1,0 +1,5 @@
+{
+  "description": "CMake: variables in declarations. A tag written `${abseil-cpp-version}` resolves from a `set()` in a different file, a declaration whose name is only a variable is dropped, and a literal name whose URL is a variable is kept without it as a versionless generic component; the two warnings are this case's exit 1",
+  "args": [],
+  "expect_exit": 1
+}

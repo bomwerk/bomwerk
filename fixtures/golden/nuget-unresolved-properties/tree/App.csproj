@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OwnVersion>3.4.5</OwnVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Own.Property" Version="$(OwnVersion)" />
+    <PackageReference Include="Missing.Version" Version="$(NowhereDefined)" />
+    <PackageReference Include="Runtime.$(Rid).Tool" Version="1.0.0" />
+  </ItemGroup>
+</Project>

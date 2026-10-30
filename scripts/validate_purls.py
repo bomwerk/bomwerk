@@ -5,14 +5,17 @@ Usage: validate_purls.py <sbom.json> [<sbom.json> ...]
 
 Reads CycloneDX (components[].purl) and SPDX 2.3/3.0 (externalRefs with
 referenceType "purl", or software_packageUrl) documents, and for each component
-asserts three things:
+asserts four things:
 
   1. a purl is present and non-empty -- bomwerk is the identity source of truth
      for every downstream consumer, so a component without one silently breaks
      THEIR vulnerability matching, not just ours;
   2. the reference parser (packageurl-python, the purl-spec implementation)
      accepts it;
-  3. parsing is a fixed point -- re-parsing the reference serializer's own
+  3. no field carries a build-system variable no parser resolved (`${x}`,
+     `$(x)`, `$<x>`, `%(x)`): such a purl identifies nothing and reaches the
+     SBOM, the HTML report and the vulnerability lookup alike;
+  4. parsing is a fixed point -- re-parsing the reference serializer's own
      output yields an identical (type, namespace, name, version, qualifiers,
      subpath) tuple.
 
@@ -70,6 +73,31 @@ def qualifier_items(qualifiers):
                 pairs.append((key, value))
         return tuple(sorted(pairs))
     return tuple(sorted(qualifiers.items()))
+
+
+# Spellings of a build-system variable reference that no static reading
+# resolved: CMake `${x}` / `$ENV{x}` / `$CACHE{x}` / `$<x>`, MSBuild `$(x)` and
+# item metadata `%(x)`.
+UNEXPANDED_VARIABLE_MARKERS = ("${", "$(", "$<", "%(", "$ENV{", "$CACHE{")
+
+
+def unexpanded_variable_fields(purl):
+    """Names of the purl fields that still carry an unresolved build variable.
+    Checked on the PARSED fields, which are percent-decoded, so the encoded
+    spelling (`%24%7B`) cannot slip past."""
+    fields = {
+        "namespace": purl.namespace,
+        "name": purl.name,
+        "version": purl.version,
+        "subpath": purl.subpath,
+    }
+    for key, value in qualifier_items(purl.qualifiers):
+        fields[f"qualifier {key}"] = value
+    return [
+        field
+        for field, value in fields.items()
+        if value and any(marker in value for marker in UNEXPANDED_VARIABLE_MARKERS)
+    ]
 
 
 def purl_identity(purl):
@@ -130,6 +158,14 @@ def validate_document(sbom_path):
             parsed = PackageURL.from_string(raw_purl)
         except ValueError as error:
             failures.append(f"{label}: purl-spec parser rejected {raw_purl!r}: {error}")
+            continue
+
+        leaked_fields = unexpanded_variable_fields(parsed)
+        if leaked_fields:
+            failures.append(
+                f"{label}: {raw_purl!r} carries an unresolved build variable in "
+                f"{', '.join(leaked_fields)}"
+            )
             continue
 
         try:

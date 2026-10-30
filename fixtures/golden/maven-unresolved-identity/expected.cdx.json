@@ -2,16 +2,6 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
-      "bom-ref": "c03fc4ec-2528-5005-a25d-9670feae290c",
-      "name": "${undefined.vendor}:unresolved-vendor-lib",
-      "purl": "pkg:maven/%24%7Bundefined.vendor%7D/unresolved-vendor-lib@2.0.0",
-      "supplier": {
-        "name": "${undefined.vendor}"
-      },
-      "type": "library",
-      "version": "2.0.0"
-    },
-    {
       "bom-ref": "5770bb19-e475-577b-8dfd-c9cc78671118",
       "name": "com.example:identity-demo",
       "purl": "pkg:maven/com.example/identity-demo@1.0.0",
@@ -34,9 +24,6 @@
   ],
   "dependencies": [
     {
-      "ref": "c03fc4ec-2528-5005-a25d-9670feae290c"
-    },
-    {
       "ref": "5770bb19-e475-577b-8dfd-c9cc78671118"
     },
     {
@@ -47,11 +34,11 @@
     "properties": [
       {
         "name": "bomwerk:coverage:components",
-        "value": "3"
+        "value": "2"
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "3"
+        "value": "2"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -81,7 +68,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:a657845c-075e-58e4-a438-388b1af0124a",
+  "serialNumber": "urn:uuid:387920c8-0177-517a-8eb7-008f1983353d",
   "specVersion": "1.6",
   "version": 1
 }

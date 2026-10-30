@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/build_variables.hpp"
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/git_url.hpp"
@@ -82,14 +83,6 @@ constexpr std::string_view kArchiveSuffixes[] = {".tar.gz", ".tgz", ".tar.bz2", 
                                                  ".zip",    ".7z",  ".tar"};
 
 constexpr std::string_view kUnknownComponentName = "unknown";
-
-/// A value CMake resolves only at configure time: a `${var}` reference or a
-/// `$<...>` generator expression: cannot be pinned by static parsing, so the
-/// component built from it is low-confidence.
-bool contains_unresolved(std::string_view text)
-{
-  return text.find("${") != std::string_view::npos || text.find("$<") != std::string_view::npos;
-}
 
 bool is_all_digits(std::string_view text)
 {
@@ -297,19 +290,56 @@ struct Extracted
   std::string legacy_vcs_url;   ///< the legacy repository URL
   std::string unrecognized_shorthand_prefix;  ///< "xx" from an unknown "xx:" CPM arg
   bool declare_only = false;
+  bool name_unresolved = false;  ///< the name was a variable no static reading resolved
+
+  /// Fields that stayed an unresolved variable after expansion and were left
+  /// out of the identity (e.g. "version", "URL"), in the order they were found.
+  std::vector<std::string> stripped_fields;
 };
+
+/// Empties every identity field of `extracted` that still carries an
+/// unresolved variable, remembering which: a purl never contains `${...}`.
+/// A name left empty here is derived from a literal repository later, if there
+/// is one.
+void strip_unresolved_fields(Extracted& extracted)
+{
+  const auto strip = [&extracted](std::string& field, std::string_view field_label)
+  {
+    if (core::contains_unexpanded_variable(field))
+    {
+      field.clear();
+      extracted.stripped_fields.emplace_back(field_label);
+    }
+  };
+  const std::size_t stripped_before_name = extracted.stripped_fields.size();
+  strip(extracted.name, "name");
+  extracted.name_unresolved = extracted.stripped_fields.size() > stripped_before_name;
+  strip(extracted.git_url, "repository");
+  strip(extracted.version, "version");
+  strip(extracted.archive_url, "URL");
+  strip(extracted.url_hash, "URL_HASH");
+  strip(extracted.legacy_vcs_url, "repository");
+}
 
 /// Pull the fields we care about out of one declaration command. `declare_only`
 /// is true for CPMDeclarePackage and for a FetchContent_Declare whose name never
 /// appears in a FetchContent_MakeAvailable call. `lower_name` is
 /// `command.name` already lower-cased by the caller (parse() needs it too, to
 /// route the command before this function ever sees it), so it is not
-/// recomputed here.
+/// recomputed here. Every argument is expanded against `variables` first, and
+/// whatever identity field still carries a variable afterwards is emptied and
+/// recorded in `stripped_fields`.
 Extracted extract_declaration(const CmakeCommand& command, const std::string& lower_name,
-                              const std::set<std::string>& made_available)
+                              const std::set<std::string>& made_available,
+                              const core::VariableTable& variables)
 {
   Extracted extracted;
-  const std::vector<std::string>& arguments = command.arguments;
+  std::vector<std::string> arguments;
+  arguments.reserve(command.arguments.size());
+  for (const std::string& argument : command.arguments)
+  {
+    arguments.push_back(core::expand_variables(argument, variables, core::kCmakeVariableDialect));
+  }
   const bool is_cpm = lower_name == "cpmaddpackage" || lower_name == "cpmfindpackage" ||
                       lower_name == "cpmdeclarepackage";
 
@@ -399,6 +429,7 @@ Extracted extract_declaration(const CmakeCommand& command, const std::string& lo
     }
   }
 
+  strip_unresolved_fields(extracted);
   if (extracted.name.empty() && !extracted.git_url.empty())
   {
     extracted.name = core::parse_git_remote(extracted.git_url).repo;
@@ -424,29 +455,44 @@ struct SourcedCommand
   std::string lower_name;  ///< already-lowered command.name, computed once in parse()
 };
 
-/// If `unresolved`, downgrade `confidence` to Low and warn that
-/// `component_name` carries an unresolved `${var}`/`$<...>`: the one piece of
-/// logic every purl-building branch below needs, so it lives in one place
-/// instead of three copies that could drift.
-void apply_unresolved_downgrade(bool unresolved, const std::string& source_label,
-                                const std::string& component_name, core::Confidence& confidence,
-                                core::Result<std::vector<core::Component>>& result)
+/// When `extracted` had identity fields left out because they stayed
+/// unresolved variables, lower `confidence` to Low and warn once, naming file
+/// and line: the one piece of logic every purl-building branch below needs, so
+/// it lives in one place instead of three copies that could drift.
+void report_stripped_fields(const Extracted& extracted, const std::string& source_label,
+                            const std::string& location, const std::string& component_name,
+                            core::Confidence& confidence,
+                            core::Result<std::vector<core::Component>>& result)
 {
-  if (unresolved)
+  if (extracted.stripped_fields.empty())
   {
-    confidence = core::Confidence::Low;
-    result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
-                "cmake: '" + source_label + "' dependency '" + component_name +
-                    "' has an unresolved variable; reported at low confidence",
-                "cmake");
+    return;
   }
+  confidence = core::Confidence::Low;
+  std::string fields;
+  for (const std::string& field : extracted.stripped_fields)
+  {
+    if (!fields.empty())
+    {
+      fields += ", ";
+    }
+    fields += field;
+  }
+  result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+              "cmake: " + location + ": dependency '" +
+                  core::escaped_for_diagnostic(component_name) +
+                  "' has an unresolved variable in its " + fields +
+                  "; left out of its identity, reported at low confidence",
+              "cmake", fs::path(source_label));
 }
 
 std::optional<core::Component> component_from_declaration(
     const CmakeCommand& command, const std::string& source_label, const std::string& lower_name,
-    const std::set<std::string>& made_available, core::Result<std::vector<core::Component>>& result)
+    const std::set<std::string>& made_available, const core::VariableTable& variables,
+    core::Result<std::vector<core::Component>>& result)
 {
-  const Extracted extracted = extract_declaration(command, lower_name, made_available);
+  const Extracted extracted = extract_declaration(command, lower_name, made_available, variables);
+  const std::string location = source_label + ":" + std::to_string(command.line);
 
   if (!extracted.unrecognized_shorthand_prefix.empty())
   {
@@ -463,12 +509,35 @@ std::optional<core::Component> component_from_declaration(
   const bool has_repository = !extracted.git_url.empty();
   const bool has_archive = !extracted.archive_url.empty();
   const bool has_legacy_vcs = !extracted.legacy_vcs_url.empty();
+
+  // A name that is an unresolved variable, with no literal repository to name
+  // the dependency instead, leaves nothing to report: `pkg:generic/${NAME}`
+  // would identify nothing.
+  if (extracted.name_unresolved && !has_repository)
+  {
+    result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+                "cmake: " + location + ": " + command.name +
+                    " call has a name that is an unresolved variable; skipped",
+                "cmake", fs::path(source_label));
+    return std::nullopt;
+  }
   if (!has_repository && !has_archive && !has_legacy_vcs && extracted.name.empty())
   {
-    result.warn(core::WarningCode::kDependencyMissingSource,
-                "cmake: '" + source_label + "' has a " + command.name +
-                    " call with no name, repository or URL; skipped",
-                "cmake");
+    if (extracted.stripped_fields.empty())
+    {
+      result.warn(core::WarningCode::kDependencyMissingSource,
+                  "cmake: '" + source_label + "' has a " + command.name +
+                      " call with no name, repository or URL; skipped",
+                  "cmake");
+    }
+    else
+    {
+      result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
+                  "cmake: " + location + ": " + command.name +
+                      " call has no name and its repository or URL is an unresolved variable; "
+                      "skipped",
+                  "cmake", fs::path(source_label));
+    }
     return std::nullopt;
   }
 
@@ -479,7 +548,6 @@ std::optional<core::Component> component_from_declaration(
 
   if (has_repository)
   {
-    const bool unresolved = contains_unresolved(extracted.git_url) || contains_unresolved(version);
     // Normalize here as well as inside build_git_purl so the emitted `version`
     // field and the purl's version agree; a tag passes through untouched.
     version = core::normalized_object_id(version);
@@ -495,10 +563,6 @@ std::optional<core::Component> component_from_declaration(
     {
       confidence = core::Confidence::High;
     }
-    else
-    {
-      apply_unresolved_downgrade(unresolved, source_label, component.name, confidence, result);
-    }
   }
   else if (has_archive)
   {
@@ -511,8 +575,6 @@ std::optional<core::Component> component_from_declaration(
                       extracted.archive_url, source_label);
       }
     }
-    const bool unresolved =
-        contains_unresolved(extracted.archive_url) || contains_unresolved(version);
     std::string checksum_qualifier;
     const std::size_t equals = extracted.url_hash.find('=');
     if (equals != std::string::npos && equals + 1 < extracted.url_hash.size())
@@ -547,13 +609,9 @@ std::optional<core::Component> component_from_declaration(
     component.version = version;
     component.purl =
         build_archive_purl(component.name, version, extracted.archive_url, checksum_qualifier);
-    if (!checksum_qualifier.empty() && !unresolved)
+    if (!checksum_qualifier.empty())
     {
       confidence = core::Confidence::High;
-    }
-    else
-    {
-      apply_unresolved_downgrade(unresolved, source_label, component.name, confidence, result);
     }
   }
   else if (has_legacy_vcs)
@@ -561,8 +619,6 @@ std::optional<core::Component> component_from_declaration(
     // svn/hg/cvs (legacy ExternalProject/FetchContent keywords): no first-class
     // purl type exists, so pin the exact URL in a vcs_url qualifier, mirroring
     // the generic git fallback.
-    const bool unresolved =
-        contains_unresolved(extracted.legacy_vcs_url) || contains_unresolved(version);
     component.version = version;
     component.purl = "pkg:generic/" + core::percent_encode(component.name);
     if (!version.empty())
@@ -571,8 +627,7 @@ std::optional<core::Component> component_from_declaration(
     }
     component.purl += "?vcs_url=" + core::percent_encode(extracted.legacy_vcs_kind + "+" +
                                                          extracted.legacy_vcs_url);
-    apply_unresolved_downgrade(unresolved, source_label, component.name, confidence, result);
-    if (!unresolved && extracted.legacy_vcs_kind == "svn" && is_all_digits(version))
+    if (extracted.legacy_vcs_kind == "svn" && is_all_digits(version))
     {
       confidence = core::Confidence::High;  // an SVN revision number is immutable
     }
@@ -586,11 +641,18 @@ std::optional<core::Component> component_from_declaration(
       component.purl += "@" + core::percent_encode(version);
     }
     confidence = core::Confidence::Low;
-    result.warn(core::WarningCode::kDependencyMissingSource,
-                "cmake: '" + source_label + "' declares '" + component.name +
-                    "' with no repository or URL; reported as a generic component",
-                "cmake");
+    // When the repository or URL was an unresolved variable, the warning below
+    // says so; "declares no repository or URL" would be wrong.
+    if (extracted.stripped_fields.empty())
+    {
+      result.warn(core::WarningCode::kDependencyMissingSource,
+                  "cmake: '" + source_label + "' declares '" + component.name +
+                      "' with no repository or URL; reported as a generic component",
+                  "cmake");
+    }
   }
+
+  report_stripped_fields(extracted, source_label, location, component.name, confidence, result);
 
   if (extracted.declare_only)
   {
@@ -627,6 +689,74 @@ std::optional<core::Component> component_from_declaration(
   }
   component.evidence.push_back({core::Source::Manifest, detail, confidence});
   return component;
+}
+
+constexpr std::string_view kCacheKeyword = "CACHE";
+constexpr std::string_view kParentScopeKeyword = "PARENT_SCOPE";
+constexpr std::string_view kEnvironmentPrefix = "ENV{";
+
+/// `foreach(<variable> ...)` and `unset(<variable> ...)` bind only their first
+/// argument.
+constexpr std::size_t kSingleBoundArgumentCount = 1;
+
+/// Records what one `set(<name> <value>)` defines. A variable counts as
+/// defined only by a command naming exactly one value (the `CACHE ...` and
+/// `PARENT_SCOPE` tails do not count as values): a list, an empty `set(<name>)`
+/// or a command the lexer could not fully read makes it ambiguous, because
+/// guessing a value into a component identity is worse than leaving it out.
+void record_set_definition(const CmakeCommand& command, core::VariableTable& variables)
+{
+  if (command.arguments.empty())
+  {
+    return;
+  }
+  const std::string& name = command.arguments.front();
+  if (name.starts_with(kEnvironmentPrefix))
+  {
+    return;  // an environment variable, not a CMake variable
+  }
+  std::vector<const std::string*> values;
+  for (std::size_t index = 1; index < command.arguments.size(); ++index)
+  {
+    const std::string& argument = command.arguments[index];
+    if (std::string_view(argument) == kCacheKeyword ||
+        std::string_view(argument) == kParentScopeKeyword)
+    {
+      break;
+    }
+    values.push_back(&argument);
+  }
+  if (command.well_formed && values.size() == 1)
+  {
+    core::record_variable_definition(variables, core::kCmakeVariableDialect, name, *values.front());
+    return;
+  }
+  core::mark_variable_ambiguous(variables, core::kCmakeVariableDialect, name);
+}
+
+/// Marks ambiguous every variable `command` binds to a value only known when it
+/// runs: the parameters of `function()` and `macro()` (arguments after the
+/// command's own name), the loop variable of `foreach()`, and anything
+/// `unset()` removes. Without this, `${NAME}` inside a function body would take
+/// the value of an unrelated `set(NAME ...)` elsewhere in the tree.
+void mark_bound_variables_ambiguous(const CmakeCommand& command, std::string_view lower_name,
+                                    core::VariableTable& variables)
+{
+  const bool is_definition_command = lower_name == "function" || lower_name == "macro";
+  const std::size_t first_bound_index = is_definition_command ? 1 : 0;
+  const std::size_t end_index = (lower_name == "foreach" || lower_name == "unset")
+                                    ? std::min(command.arguments.size(), kSingleBoundArgumentCount)
+                                    : command.arguments.size();
+  for (std::size_t index = first_bound_index; index < end_index; ++index)
+  {
+    core::mark_variable_ambiguous(variables, core::kCmakeVariableDialect, command.arguments[index]);
+  }
+}
+
+bool is_variable_binding_command(std::string_view lower_name)
+{
+  return lower_name == "function" || lower_name == "macro" || lower_name == "foreach" ||
+         lower_name == "unset";
 }
 
 }  // namespace
@@ -685,7 +815,11 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
   }
 
   std::vector<SourcedCommand> declarations;
-  std::set<std::string> made_available;
+  // Variable definitions come from every CMake file in the tree, not only the
+  // declaring one (protobuf sets `abseil-cpp-version` in dependencies.cmake
+  // and uses it in abseil-cpp.cmake), so expansion waits for the last file.
+  core::VariableTable variables;
+  std::vector<std::string> made_available_arguments;
   bool declarations_capped = false;
   for (const fs::path& relative_path : cmake_files)
   {
@@ -742,7 +876,7 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
             // `FetchContent_MakeAvailable(googletest)` refers to the same
             // dependency; normalize case here to match extract_declaration's
             // lookup below.
-            made_available.insert(core::to_lower_ascii(argument));
+            made_available_arguments.push_back(argument);
           }
         }
         else
@@ -753,6 +887,14 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
                   " call; its arguments are not trusted to confirm any dependency was built",
               "cmake");
         }
+      }
+      else if (lower_name == "set")
+      {
+        record_set_definition(command, variables);
+      }
+      else if (is_variable_binding_command(lower_name))
+      {
+        mark_bound_variables_ambiguous(command, lower_name, variables);
       }
       else if (is_declaration_command(lower_name))
       {
@@ -773,12 +915,19 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
     }
   }
 
+  std::set<std::string> made_available;
+  for (const std::string& argument : made_available_arguments)
+  {
+    made_available.insert(core::to_lower_ascii(
+        core::expand_variables(argument, variables, core::kCmakeVariableDialect)));
+  }
+
   std::vector<core::Component> components;
   for (const SourcedCommand& declaration : declarations)
   {
     std::optional<core::Component> component =
         component_from_declaration(declaration.command, declaration.source_label,
-                                   declaration.lower_name, made_available, result);
+                                   declaration.lower_name, made_available, variables, result);
     if (component.has_value())
     {
       spdlog::debug("cmake {} -> {}", declaration.source_label, component->purl);

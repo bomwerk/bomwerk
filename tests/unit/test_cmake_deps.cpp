@@ -199,20 +199,25 @@ int main()
   }
 
   // Given a GIT_REPOSITORY that is entirely an unresolved variable (HDF5's
-  // HDFLibMacros.cmake pattern), when parsed, then the generic purl carries the
-  // declared name rather than "unknown", the component name matches, a warning
-  // is raised and confidence is Low.
+  // HDFLibMacros.cmake pattern), when parsed, then the repository and tag are
+  // left out of the identity: the generic purl carries only the declared name
+  // (no `${...}`, no version), a warning names file and line, and confidence
+  // is Low.
   {
     TempTree tree;
     tree.write("CMakeLists.txt",
                "FetchContent_Declare(HDF5_ZLIB GIT_REPOSITORY ${ZLIB_URL} GIT_TAG ${ZLIB_BRANCH})\n"
                "FetchContent_MakeAvailable(HDF5_ZLIB)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].name == "HDF5_ZLIB");
-    assert(result.value[0].purl.rfind("pkg:generic/HDF5_ZLIB@", 0) == 0);
-    assert(!result.warnings.empty());
-    assert(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].name == "HDF5_ZLIB");
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/HDF5_ZLIB");
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(result.warnings[0].code ==
+                       bomwerk::core::WarningCode::kUnresolvedVariableOrInterpolation);
+    BOMWERK_TEST_CHECK(result.warnings[0].message.find("CMakeLists.txt:1") != std::string::npos);
   }
 
   // Given a FetchContent archive (URL + URL_HASH), when parsed, then a generic
@@ -376,20 +381,134 @@ int main()
     BOMWERK_TEST_CHECK(malformed_make_available_warned);
   }
 
-  // Given an unresolved ${VAR} tag, when parsed, then the component is still
-  // emitted (literal kept), at Low confidence, with a warning, and the run stays
-  // complete: never dropped, never exit-2 (Hard Rule 1).
+  // Given an unresolved ${VAR} tag, when parsed, then the component is kept
+  // WITHOUT a version (never with the literal `${DEP_VERSION}`), at Low
+  // confidence, with a warning, and the run stays complete: never exit-2
+  // (Hard Rule 1).
   {
     TempTree tree;
     tree.write("CMakeLists.txt",
                "FetchContent_Declare(dep GIT_REPOSITORY https://github.com/acme/dep.git "
                "GIT_TAG ${DEP_VERSION})\nFetchContent_MakeAvailable(dep)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].version == "${DEP_VERSION}");
-    assert(highest_confidence(result.value[0]) == Confidence::Low);
-    assert(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/dep");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+  }
+
+  // Given a variable set in ANOTHER CMake file (protobuf's dependencies.cmake
+  // pattern), when parsed, then the declaration expands it: the real version
+  // reaches the purl and nothing warns.
+  {
+    TempTree tree;
+    tree.write("cmake/dependencies.cmake", "set(abseil-cpp-version \"20250512.1\")\n");
+    tree.write("cmake/abseil-cpp.cmake",
+               "FetchContent_Declare(abseil GIT_REPOSITORY https://github.com/abseil/abseil-cpp\n"
+               "  GIT_TAG \"${abseil-cpp-version}\")\nFetchContent_MakeAvailable(abseil)\n");
+    const auto result = cmake_deps::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/abseil/abseil-cpp@20250512.1");
+    BOMWERK_TEST_CHECK(result.value[0].version == "20250512.1");
+  }
+
+  // Given a variable that is set twice to different values, and a `set` with a
+  // list value, when a declaration uses each, then neither expands: both
+  // versions are left out, so a wrong value never reaches a purl.
+  {
+    TempTree tree;
+    tree.write(
+        "CMakeLists.txt",
+        "set(TWICE v1)\nif(OLD)\n  set(TWICE v2)\nendif()\nset(PAIR a b)\n"
+        "FetchContent_Declare(one GIT_REPOSITORY https://github.com/acme/one GIT_TAG ${TWICE})\n"
+        "FetchContent_Declare(two GIT_REPOSITORY https://github.com/acme/two GIT_TAG ${PAIR})\n"
+        "FetchContent_MakeAvailable(one two)\n");
+    const auto result = cmake_deps::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/one");
+    BOMWERK_TEST_CHECK(result.value[1].purl == "pkg:github/acme/two");
+    BOMWERK_TEST_CHECK(result.warnings.size() == 2);
+  }
+
+  // Given a variable that is a function parameter (protobuf's
+  // add_examples_build(NAME)) and an unrelated set(NAME ...) elsewhere, when a
+  // declaration inside the function names itself `${NAME}`, then it is
+  // dropped with a warning naming file and line: the parameter is ambiguous,
+  // never the unrelated value.
+  {
+    TempTree tree;
+    tree.write("cmake/examples.cmake",
+               "function(add_examples_build NAME)\n"
+               "  ExternalProject_Add(${NAME} URL https://example.com/x-1.0.tar.gz)\n"
+               "endfunction()\n");
+    tree.write("CMakeLists.txt", "set(NAME unrelated)\n");
+    const auto result = cmake_deps::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.empty());
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(result.warnings[0].code ==
+                       bomwerk::core::WarningCode::kUnresolvedVariableOrInterpolation);
+    BOMWERK_TEST_CHECK(result.warnings[0].message.find("examples.cmake:2") != std::string::npos);
+  }
+
+  // Given a name that is a variable but a literal GIT_REPOSITORY, when parsed,
+  // then the dependency is named after the repository instead of being dropped.
+  {
+    TempTree tree;
+    tree.write("CMakeLists.txt",
+               "FetchContent_Declare(${DEP_NAME} GIT_REPOSITORY https://github.com/acme/widget.git "
+               "GIT_TAG v3.0)\nFetchContent_MakeAvailable(${DEP_NAME})\n");
+    const auto result = cmake_deps::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].name == "widget");
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/widget@v3.0");
+  }
+
+  // Given a literal name whose URL is an unresolved variable (neovim's
+  // ExternalProject_Add(treesitter_lua_wasm URL ${...})), when parsed, then
+  // the component keeps its name without the URL, at Low confidence, and the
+  // only warning is the unresolved-variable one, not "no repository or URL".
+  {
+    TempTree tree;
+    tree.write("CMakeLists.txt", "ExternalProject_Add(treesitter_lua_wasm URL ${LUA_WASM_URL})\n");
+    const auto result = cmake_deps::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/treesitter_lua_wasm");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(result.warnings[0].code ==
+                       bomwerk::core::WarningCode::kUnresolvedVariableOrInterpolation);
+  }
+
+  // Given two variables that reference each other, when a declaration uses
+  // one, then expansion gives up (no hang) and the version is left out.
+  {
+    TempTree tree;
+    tree.write(
+        "CMakeLists.txt",
+        "set(FIRST ${SECOND})\nset(SECOND ${FIRST})\n"
+        "FetchContent_Declare(loop GIT_REPOSITORY https://github.com/acme/loop GIT_TAG ${FIRST})\n"
+        "FetchContent_MakeAvailable(loop)\n");
+    const auto result = cmake_deps::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/loop");
+  }
+
+  // Given every hostile CMake fixture, when parsed, then no purl carries a
+  // variable reference in any of its spellings.
+  {
+    const fs::path hostile_directory = fs::path(BOMWERK_FIXTURES_DIR) / "cmake" / "hostile";
+    const auto result = cmake_deps::parse(hostile_directory);
+    BOMWERK_TEST_CHECK(result.complete);
+    for (const Component& component : result.value)
+    {
+      BOMWERK_TEST_CHECK(component.purl.find("${") == std::string::npos);
+      BOMWERK_TEST_CHECK(component.purl.find("%24%7B") == std::string::npos);
+      BOMWERK_TEST_CHECK(component.purl.find("$<") == std::string::npos);
+      BOMWERK_TEST_CHECK(component.purl.find("%24%3C") == std::string::npos);
+    }
   }
 
   // Given the same dependency declared in two files, when parsed, then it is
