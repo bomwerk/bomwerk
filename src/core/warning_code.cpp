@@ -341,6 +341,42 @@ const WarningCodeInfo& warning_code_info(WarningCode code)
           "BW-BINSCAN-004", "binary-level dependency evidence is partial for this run"};
       return kInfo;
     }
+    case WarningCode::kFingerprintIndexUnreadable:
+    {
+      static constexpr WarningCodeInfo kInfo{"BW-FINGERPRINT-001",
+                                             "the fingerprint corpus index could not be read"};
+      return kInfo;
+    }
+    case WarningCode::kFingerprintIndexSchemaUnsupported:
+    {
+      static constexpr WarningCodeInfo kInfo{
+          "BW-FINGERPRINT-002", "the fingerprint corpus index uses an unsupported schema version"};
+      return kInfo;
+    }
+    case WarningCode::kFingerprintIndexEntrySkipped:
+    {
+      static constexpr WarningCodeInfo kInfo{"BW-FINGERPRINT-003",
+                                             "fingerprint corpus index entries were skipped"};
+      return kInfo;
+    }
+    case WarningCode::kFingerprintVersionDisagreement:
+    {
+      static constexpr WarningCodeInfo kInfo{
+          "BW-FINGERPRINT-004", "the fingerprint corpus and a declared version disagree"};
+      return kInfo;
+    }
+    case WarningCode::kFingerprintMatchWithoutComponent:
+    {
+      static constexpr WarningCodeInfo kInfo{"BW-FINGERPRINT-005",
+                                             "a fingerprint match had no component to enrich"};
+      return kInfo;
+    }
+    case WarningCode::kFingerprintFileBudgetReached:
+    {
+      static constexpr WarningCodeInfo kInfo{"BW-FINGERPRINT-006",
+                                             "the fingerprint matcher stopped at its file budget"};
+      return kInfo;
+    }
     case WarningCode::kSbomDocumentInvalid:
     {
       static constexpr WarningCodeInfo kInfo{"BW-SBOM-001", "an SBOM document could not be read"};

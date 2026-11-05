@@ -163,6 +163,28 @@ nlohmann::json component_to_json(const core::Component& component, core::MatchCo
     binary_property["value"] = evidence.detail;
     properties.push_back(std::move(binary_property));
   }
+  // What the BYTES say, as opposed to what a version header declared. A
+  // component whose version came from a content match against a pinned
+  // upstream release has to say so: that is the difference between "the header
+  // claims V11.1.0" and "11 of 14 files are byte-identical to V11.1.0", and a
+  // CRA reader cannot weigh the claim without it. Same namespaced-property
+  // route as binary evidence above, for the same reason: the spec has no field
+  // of its own for it.
+  //
+  // No producer emits Source::Fingerprint unless `scan --fingerprint-index`
+  // named a corpus, so this is inert for every existing scan and every golden
+  // snapshot.
+  for (const core::Evidence& evidence : component.evidence)
+  {
+    if (evidence.source != core::Source::Fingerprint)
+    {
+      continue;
+    }
+    nlohmann::json fingerprint_property;
+    fingerprint_property["name"] = std::string(core::kFingerprintPropertyName);
+    fingerprint_property["value"] = evidence.detail;
+    properties.push_back(std::move(fingerprint_property));
+  }
   if (!properties.empty())
   {
     component_json["properties"] = std::move(properties);

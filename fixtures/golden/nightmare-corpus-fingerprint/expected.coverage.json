@@ -1,0 +1,28 @@
+{
+  "components": [
+    {
+      "confidence": "high",
+      "coverage": "unmapped-purl-type",
+      "identity": "pkg:generic/cjson@1.7.15",
+      "name": "cjson",
+      "purl": "pkg:generic/cjson@1.7.15",
+      "version": "1.7.15"
+    }
+  ],
+  "generated_at": "2025-01-01T00:00:00Z",
+  "summary": {
+    "by_class": {
+      "matched": 0,
+      "no-identifier": 0,
+      "unmapped-purl-type": 1,
+      "unversioned-purl": 0
+    },
+    "components": 1,
+    "matchable": 0,
+    "unmatched": 1
+  },
+  "tool": {
+    "name": "bomwerk",
+    "version": "@BOMWERK_VERSION@"
+  }
+}

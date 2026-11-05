@@ -14,11 +14,11 @@ matches upstream:
 |---|---|---|
 | Vendored library with a CVE | zlib 1.2.11 under `third_party/zlib`, compiled in `config-a` | `pkg:generic/zlib@1.2.11`, Medium. `conanfile.txt` declares zlib **1.3.1**, so both are reported, and only `trim` can tell which one ships |
 | Pinned, forgotten submodule | openssl 3.0.7 at `third_party/openssl` | shallow clone: `pkg:github/openssl/openssl` with no version, `BW-GIT-004`, exit 1; initialized: versioned, exit 0 |
-| Vendor fork | FreeRTOS V11.1.0 with one modified `list.c` | `pkg:generic/freertos@V11.1.0`: **the fork is not detected**, see below |
+| Vendor fork | FreeRTOS V11.1.0 with one modified `list.c` | `pkg:generic/freertos@V11.1.0`. A plain scan cannot see the fork; with `--fingerprint-index` the component also carries a count of how many of that directory's files are byte-identical to the pinned release, and `list.c` is not among them. See below |
 | Unused library | stb, referenced by no target in either build | `pkg:generic/stb`, Low; `trim`: UNUSED in both configurations |
 | `#ifdef` variants | presets `config-a` / `config-b` | plain `scan` gives the same answer for both, and `observe` + `trim` give different used-sets |
 | Prebuilt static library, quoted version header | SQLite 3.41.2 as `sqlite3.h` + `libsqlite3.a` under `third_party/sqlite-prebuilt`, linked in `config-a` | `pkg:generic/sqlite3@3.41.2`, Medium, no license (public-domain blessing); `trim`: used (1 link input) in `config-a`, UNUSED in `config-b` |
-| Prebuilt static library, numeric version macros | cJSON 1.7.15 as `cJSON.h` + `libcjson.a` under `third_party/cjson-prebuilt`, linked in `config-a` | `pkg:generic/cjson-prebuilt`, Low, **no version, folder-derived name** (a scored miss); `trim`: used (1 link input) in `config-a` |
+| Prebuilt static library, numeric version macros | cJSON 1.7.15 as `cJSON.h` + `libcjson.a` under `third_party/cjson-prebuilt`, linked in `config-a` | `pkg:generic/cjson-prebuilt`, Low, **no version, folder-derived name** (a scored miss); with `--fingerprint-index` the bytes of `cJSON.h` identify it as `pkg:generic/cjson@1.7.15`; `trim`: used (1 link input) in `config-a` |
 | CMake `FetchContent` | tinyxml2 9.0.0 pinned by commit, fetched only with `-DNIGHTMARE_ENABLE_XML=ON` | `pkg:github/leethomason/tinyxml2@<commit>` |
 
 ## Which bomwerk tests lock which claim
@@ -36,26 +36,62 @@ red here before the public README goes stale:
 - `test_vendored_cpp` covers the `freertos` version-header signature
   (`include/task.h` -> `tskKERNEL_VERSION_NUMBER`) that this corpus added, plus the
   negative case where an unrelated `task.h` must not claim FreeRTOS.
+- `golden_nightmare-corpus-fingerprint` pins what `--fingerprint-index` adds, on a
+  miniature of the one directory whose version no header states. Its corpus index is
+  built from the fixture's own bytes, so the wiring is proved without upstream
+  content entering this repository.
 
 The real build, the network-backed CVE lookups and the rival-tool numbers cannot be
 hermetic. They run in the public repo's own CI.
+
+Neither can the fingerprint corpus: a real index is built from pinned upstream
+releases, which needs the network, and checking it against this corpus needs a
+nightmare checkout. `scripts/run_fingerprint_corpus.py` is that check, run by hand or
+on a schedule. It hashes the vendored files itself and looks the digests up in the
+index, so it reports whether the CORPUS knows those bytes with no bomwerk binary in
+the picture: when a scan shows no fingerprint evidence, that is what separates a gap
+in the corpus from a bug in the matcher. Its expectations come from nightmare's own
+`third_party/pins.json`, including the two that matter most: `list.c` must NOT match,
+because pins.json records it as modified, and `include/FreeRTOSConfig.h` must match
+even though upstream ships it from `examples/template_configuration/`.
 
 ## Known gaps the corpus makes visible
 
 Published on purpose. A torture test whose author scores 5/5 is a brochure.
 
-- **Forks are invisible.** The heuristic reports the version a header declares; it has
-  no file hashes to compare against upstream. No tool in the comparison detects the
-  FreeRTOS fork, bomwerk included.
+- **Forks are reported as a count, not as a verdict.** A plain scan reports the version
+  a header declares and has nothing to compare against upstream, so the FreeRTOS fork
+  passes as pristine `V11.1.0`, and no tool in the comparison detects it. With
+  `scan --fingerprint-index` and a corpus covering FreeRTOS, bomwerk has the file
+  hashes, and the component carries evidence naming how many of that directory's files
+  are byte-identical to the pinned release. `list.c` is not one of them. With the tier-0
+  manifest in `scripts/fingerprint_corpus.json` the count reads "9 of 14 hashed files
+  match freertos V11.1.0": the exact number depends on which upstream files that
+  manifest indexes, so read the ratio, not the integer. `include/FreeRTOSConfig.h` is
+  among the nine even though upstream ships it from
+  `examples/template_configuration/`, because the match is on content and ignores paths
+  entirely.
+
+  That is the ingredient, not the conclusion. Nothing yet says "this library is
+  modified", and a gap that needs a flag and a corpus you build yourself is not a closed
+  gap.
 - **A leading `v` breaks CPE matching.** `V11.1.0` synthesizes
   `cpe:2.3:a:*:freertos:v11.1.0`, while NVD files `11.1.0`. The same applies to `pkg:golang`
   under `--all-cpes`. The golden snapshot pins the current behavior, so the fix will
   show up as an intended diff.
 - **Dual licenses are flattened.** stb is *MIT **or** Unlicense*; the first-match
   license recognizer reports `MIT` only.
-- **Numeric version macros are not read.** cJSON writes its version only as
-  `CJSON_VERSION_MAJOR/MINOR/PATCH`; the signature table matches quoted strings only,
-  so identity falls back to the folder name, suffix included (`cjson-prebuilt`).
+- **A version split across several macros is not read.** cJSON writes its version only as
+  `CJSON_VERSION_MAJOR/MINOR/PATCH`, three numbers on three lines, so identity falls back
+  to the folder name, suffix included (`cjson-prebuilt`). The heuristic reads a version
+  from ONE macro on ONE line, either a quoted string (`ZLIB_VERSION "1.2.11"`) or a bare
+  dotted number (uthash's `UTHASH_VERSION 2.4.0`), and does not assemble one from parts.
+  A bare integer never qualifies: stb's `STBI_VERSION 1` is an API revision, not a
+  release, so stb stays unversioned, which is also what the answer key says.
+
+  cJSON is the case content matching answers rather than fixes: with
+  `--fingerprint-index`, the bytes of `cJSON.h` identify the release outright and the
+  component becomes `pkg:generic/cjson@1.7.15`, no version string parsed at all.
 - **License text without a known name is not recognized.** cJSON's MIT text never says
   "MIT License", and SQLite's public-domain blessing is not a license name; both come
   back with no license.

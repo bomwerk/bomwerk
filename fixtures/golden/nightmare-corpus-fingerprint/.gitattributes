@@ -1,0 +1,12 @@
+# The committed fingerprint-index.json holds SHA-256 digests of the files under
+# tree/, so those bytes have to be identical in every checkout. This repository
+# is cloned on Windows too, where core.autocrlf rewrites line endings on
+# checkout, which would change every digest and silently stop the index from
+# matching anything. Telling git these paths are not text is what keeps the
+# golden snapshot reproducible across platforms.
+#
+# This is the same gap the matcher documents and declines to paper over: it
+# hashes raw bytes so an operator can verify a claim with sha256sum, and
+# line-ending tolerance belongs in the corpus builder as extra entries, not in
+# the comparison.
+* -text

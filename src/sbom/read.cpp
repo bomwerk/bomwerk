@@ -118,17 +118,26 @@ core::Component component_from_json(const nlohmann::json& component_json,
   // silently ignored rather than guessed at, leaving the component at
   // Unspecified, the same forward-compatibility posture the scope reader above
   // already takes for an unrecognized value.
+  // Bounded because this reads an untrusted document (rule 1), and the writer
+  // emits one per matched vendor root, which is one per component in practice.
+  constexpr std::size_t kMaxRestoredFingerprintEvidence = 8;
+  std::vector<std::string> fingerprint_details;
   const auto properties_entry = component_json.find("properties");
   if (properties_entry != component_json.end() && properties_entry->is_array())
   {
     for (const nlohmann::json& property_entry : *properties_entry)
     {
-      if (string_field(property_entry, "name") == core::kCpeProvenancePropertyName &&
-          string_field(property_entry, "value") ==
-              core::to_string(core::CpeProvenance::SynthesizedWildcardVendor))
+      const std::string property_name = string_field(property_entry, "name");
+      const std::string property_value = string_field(property_entry, "value");
+      if (property_name == core::kCpeProvenancePropertyName &&
+          property_value == core::to_string(core::CpeProvenance::SynthesizedWildcardVendor))
       {
         component.cpe_provenance = core::CpeProvenance::SynthesizedWildcardVendor;
-        break;
+      }
+      else if (property_name == core::kFingerprintPropertyName && !property_value.empty() &&
+               fingerprint_details.size() < kMaxRestoredFingerprintEvidence)
+      {
+        fingerprint_details.push_back(property_value);
       }
     }
   }
@@ -212,6 +221,14 @@ core::Component component_from_json(const nlohmann::json& component_json,
   // product's own declared bill of materials, not a heuristic guess.
   component.evidence.push_back(
       core::Evidence{core::Source::Manifest, "SBOM input", core::Confidence::High});
+  // Content-match evidence is the one scan-time fact the writer does record, so
+  // it is restored. Its confidence is not in the document; Low claims nothing
+  // the SBOM-input evidence above (High) does not already outrank.
+  for (std::string& detail : fingerprint_details)
+  {
+    component.evidence.push_back(
+        core::Evidence{core::Source::Fingerprint, std::move(detail), core::Confidence::Low});
+  }
   return component;
 }
 

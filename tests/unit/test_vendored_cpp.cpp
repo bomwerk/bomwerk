@@ -408,6 +408,140 @@ int main()
     }
   }
 
+  // Given uthash's own header shape, a BARE dotted macro
+  // (`#define UTHASH_VERSION 2.4.0`, no quotes, so the quoted-string rows can
+  // never read it), when parsed, then the version is read at Medium and the
+  // purl carries it. This is nightmare's uthash, whose answer key says
+  // `pkg:generic/uthash@2.4.0`. Read at upstream's own path (`src/uthash.h`)
+  // too, since a header is matched by basename.
+  {
+    for (const char* header_path :
+         {"third_party/uthash/uthash.h", "third_party/uthash/src/uthash.h"})
+    {
+      TempTree tree;
+      tree.write(header_path,
+                 "#ifndef UTHASH_H\n"
+                 "#define UTHASH_H\n"
+                 "\n"
+                 "#define UTHASH_VERSION 2.4.0\n"
+                 "\n"
+                 "#include <string.h>\n"
+                 "#endif\n");
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.complete);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].name == "uthash");
+      BOMWERK_TEST_CHECK(result.value[0].version == "2.4.0");
+      BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/uthash@2.4.0");
+      BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
+      // The evidence quotes the header as written: no quotes appear around a
+      // value the file did not quote.
+      bool saw_unquoted_evidence = false;
+      for (const auto& evidence : result.value[0].evidence)
+      {
+        if (evidence.detail.find("#define UTHASH_VERSION 2.4.0") != std::string::npos)
+        {
+          saw_unquoted_evidence = true;
+        }
+        BOMWERK_TEST_CHECK(evidence.detail.find("\"2.4.0\"") == std::string::npos);
+      }
+      BOMWERK_TEST_CHECK(saw_unquoted_evidence);
+    }
+  }
+
+  // Given a bare macro value that is not a clean dotted version, when parsed,
+  // then no version is asserted and identity falls back to the folder name at
+  // Low. Each shape is a way a wrong or invented version could reach a purl:
+  // a bare integer (an API revision, which is why stb's `STBI_VERSION 1` stays
+  // unversioned), a suffix glued to the number, a trailing dot, a doubled dot,
+  // a line continuation, and a value too long to be a version.
+  {
+    const std::string too_long = std::string(40, '1') + "." + std::string(40, '2');
+    const std::vector<std::string> rejected_values = {
+        "2", "2.", ".2.4", "2..4", "2.4.0abc", "2.4.0-dev", "2.4.0\\", "v2.4.0", "2.x.0", too_long};
+    for (const std::string& value : rejected_values)
+    {
+      TempTree tree;
+      tree.write("third_party/uthash/uthash.h", "#define UTHASH_VERSION " + value + "\n");
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.complete);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].version.empty());
+      BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/uthash");
+      BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    }
+  }
+
+  // Given a bare dotted value followed by a comment or CRLF, when parsed, then
+  // the version is still read: both are how real headers end the line.
+  {
+    for (const char* line :
+         {"#define UTHASH_VERSION 2.4.0 /* the release */\n", "#define UTHASH_VERSION 2.4.0\r\n",
+          "#define UTHASH_VERSION\t2.4.0\t// release\n"})
+    {
+      TempTree tree;
+      tree.write("third_party/uthash/uthash.h", line);
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].version == "2.4.0");
+    }
+  }
+
+  // Given `UTHASH_VERSION` mentioned earlier in the file (a comment, a longer
+  // macro name) before the real `#define`, when parsed, then the real one is
+  // still found: an unrelated earlier occurrence must never hide it, the same
+  // rule the quoted form already follows.
+  {
+    TempTree tree;
+    tree.write("third_party/uthash/uthash.h",
+               "/* UTHASH_VERSION is defined below */\n"
+               "#define UTHASH_VERSION_STRING \"not this one\"\n"
+               "#define UTHASH_VERSION 2.4.0\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == "2.4.0");
+  }
+
+  // Given a QUOTED value for a bare-form library, when parsed, then it is not
+  // read: each table reads its macro in one form only, so a quoted `"2.4.0"`
+  // cannot slip through the dotted-number rule and vice versa.
+  {
+    TempTree tree;
+    tree.write("third_party/uthash/uthash.h", "#define UTHASH_VERSION \"2.4.0\"\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+  }
+
+  // Given stb's header, `#define STBI_VERSION 1`, when parsed, then it stays
+  // unversioned. stb is not in either table, and this pins that it must not
+  // become one: `1` is an API revision, not a release, and upstream publishes
+  // no tags, so there is no version to find. The answer key says the same.
+  {
+    TempTree tree;
+    tree.write("third_party/stb/stb_image.h", "#define STBI_VERSION 1\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/stb");
+  }
+
+  // Given cJSON's header, three separate numeric macros, when parsed, then it
+  // stays unversioned: the bare form reads ONE dotted value on ONE line, and
+  // deliberately does not assemble a version from `_MAJOR`, `_MINOR` and
+  // `_PATCH`. Pinned so that gap stays a visible, documented limit rather than
+  // being half-fixed by accident.
+  {
+    TempTree tree;
+    tree.write("third_party/cjson-prebuilt/include/cJSON.h",
+               "#define CJSON_VERSION_MAJOR 1\n"
+               "#define CJSON_VERSION_MINOR 7\n"
+               "#define CJSON_VERSION_PATCH 15\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+  }
+
   std::puts("test_vendored_cpp: OK");
   return 0;
 }

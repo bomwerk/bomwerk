@@ -1,13 +1,88 @@
 #include "core/file_io.hpp"
 
+#include <xxhash.h>
+
 #include <fstream>
 #include <ios>
+#include <memory>
+#include <string_view>
 #include <system_error>
 
 #include "core/text.hpp"
 
 namespace bomwerk::core
 {
+namespace
+{
+
+/// Chunk size for the whole-file hashes below. Large enough that the syscall
+/// cost disappears against the hashing, small enough that a scan's peak memory
+/// does not depend on the largest vendored file.
+constexpr std::size_t kHashChunkBytes = 64u * 1024u;
+
+struct StreamOutcome
+{
+  std::uintmax_t bytes_streamed = 0;
+  bool readable = false;
+  bool over_limit = false;
+};
+
+/// Feed `path` to `consume` in `kHashChunkBytes` pieces, in order, refusing a
+/// file larger than `max_bytes`. Shared by both hashes so the two can never
+/// disagree about which files they are willing to look at. Never throws
+/// (rule 1).
+template <typename Consumer>
+StreamOutcome stream_file_bounded(const std::filesystem::path& path, std::uintmax_t max_bytes,
+                                  Consumer consume)
+{
+  StreamOutcome outcome;
+
+  // Size first, so an oversized file is refused without being read at all.
+  // `file_size` failing (a race, a special file, a FIFO) is not fatal: the cap
+  // is enforced again below while streaming, so the refusal does not depend on
+  // this fast path succeeding.
+  std::error_code size_error;
+  const std::uintmax_t declared_size = std::filesystem::file_size(path, size_error);
+  if (!size_error && declared_size > max_bytes)
+  {
+    outcome.readable = true;
+    outcome.over_limit = true;
+    return outcome;
+  }
+
+  std::ifstream stream(path, std::ios::binary);
+  if (!stream)
+  {
+    return outcome;
+  }
+  outcome.readable = true;
+
+  std::string chunk(kHashChunkBytes, '\0');
+  while (stream.read(chunk.data(), static_cast<std::streamsize>(chunk.size())) ||
+         stream.gcount() > 0)
+  {
+    const std::size_t chunk_bytes = static_cast<std::size_t>(stream.gcount());
+    outcome.bytes_streamed += chunk_bytes;
+    if (outcome.bytes_streamed > max_bytes)
+    {
+      outcome.over_limit = true;
+      outcome.bytes_streamed = 0;
+      return outcome;
+    }
+    consume(std::string_view(chunk.data(), chunk_bytes));
+  }
+  // A read error part-way through ends the loop exactly as end-of-file does,
+  // and the digest of whatever arrived before it is a different value that
+  // would silently never match. Report the file as unreadable instead.
+  if (stream.bad())
+  {
+    outcome.readable = false;
+    outcome.bytes_streamed = 0;
+  }
+  return outcome;
+}
+
+}  // namespace
 
 BoundedFileRead read_file_bounded(const std::filesystem::path& path, std::size_t max_bytes)
 {
@@ -54,6 +129,54 @@ std::string read_first_line_bounded(const std::filesystem::path& path, std::size
     first_line = first_line.substr(0, newline);
   }
   return trimmed(first_line);
+}
+
+BoundedFileDigest sha256_file_bounded(const std::filesystem::path& path, std::uintmax_t max_bytes)
+{
+  Sha256 hash;
+  const StreamOutcome outcome =
+      stream_file_bounded(path, max_bytes, [&hash](std::string_view chunk) { hash.update(chunk); });
+
+  BoundedFileDigest result;
+  result.readable = outcome.readable;
+  result.over_limit = outcome.over_limit;
+  result.bytes_hashed = outcome.bytes_streamed;
+  if (result.readable && !result.over_limit)
+  {
+    result.digest = hash.digest();
+  }
+  return result;
+}
+
+BoundedFileFastHash xxh3_file_bounded(const std::filesystem::path& path, std::uintmax_t max_bytes)
+{
+  BoundedFileFastHash result;
+
+  // xxhash keeps its streaming state opaque, so it hands out an allocation
+  // rather than a value type. unique_ptr owns it here; the deleter's return
+  // code is unused, which is why it is wrapped rather than called by hand.
+  const std::unique_ptr<XXH3_state_t, decltype(&XXH3_freeState)> state(XXH3_createState(),
+                                                                       &XXH3_freeState);
+  if (state == nullptr || XXH3_64bits_reset(state.get()) != XXH_OK)
+  {
+    // An allocation failure is reported as "could not read this file" rather
+    // than as a zero hash: a zero would be probed against the corpus like any
+    // other value (rule 1, no throwing, but also no silent wrong answer).
+    return result;
+  }
+
+  const StreamOutcome outcome =
+      stream_file_bounded(path, max_bytes, [&state](std::string_view chunk)
+                          { XXH3_64bits_update(state.get(), chunk.data(), chunk.size()); });
+
+  result.readable = outcome.readable;
+  result.over_limit = outcome.over_limit;
+  result.bytes_hashed = outcome.bytes_streamed;
+  if (result.readable && !result.over_limit)
+  {
+    result.hash = XXH3_64bits_digest(state.get());
+  }
+  return result;
 }
 
 }  // namespace bomwerk::core

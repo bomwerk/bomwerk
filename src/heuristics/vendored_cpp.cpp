@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -20,6 +21,7 @@
 #include "core/purl.hpp"
 #include "core/text.hpp"
 #include "core/warning_code.hpp"
+#include "heuristics/vendor_root.hpp"
 
 namespace fs = std::filesystem;
 
@@ -32,160 +34,6 @@ namespace
 // dumps: cap how much of a LICENSE/README line is echoed back.
 constexpr std::size_t kMaxEvidenceDetailChars = 120u;
 constexpr std::size_t kMaxReadmeLines = 10u;
-
-// the trigger-directory list below.
-constexpr std::string_view kTriggerDirNames[] = {"third_party", "thirdparty", "vendor",
-                                                 "external",    "deps",       "libs"};
-
-// A trigger below one of these directories describes test data rather than a
-// dependency shipped by the product. Keep this deliberately narrow and
-// structural: broad substring matching ("test-*", for example) would turn
-// ordinary project names into exclusions.
-constexpr std::string_view kTestOrFixtureDirNames[] = {
-    "test", "tests", "testdata", "fixture", "fixtures", "__tests__", "__fixtures__"};
-
-bool is_trigger_dir_name(const std::string& name)
-{
-  const std::string_view name_view(name);
-  for (std::string_view trigger : kTriggerDirNames)
-  {
-    if (name_view == trigger)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool is_test_or_fixture_dir_name(const std::string& name)
-{
-  const std::string_view name_view(name);
-  for (std::string_view candidate : kTestOrFixtureDirNames)
-  {
-    if (name_view == candidate)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool is_ascii_alpha(char character)
-{
-  return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
-}
-
-bool is_ascii_alphanumeric(char character)
-{
-  return is_ascii_alpha(character) || (character >= '0' && character <= '9');
-}
-
-/// True for DNS-style namespace containers used by ecosystem-native vendor
-/// layouts (`github.com`, `k8s.io`, `gopkg.in`, ...). Requiring an
-/// alphabetic final label keeps versioned library folders such as
-/// `zlib-1.2.13` out of this category even though they also contain dots.
-bool is_dns_namespace_container_name(const std::string& name)
-{
-  if (name.find('.') == std::string::npos)
-  {
-    return false;
-  }
-
-  std::size_t label_start = 0;
-  while (label_start < name.size())
-  {
-    const std::size_t dot = name.find('.', label_start);
-    const std::size_t label_end = (dot == std::string::npos) ? name.size() : dot;
-    if (label_end == label_start || !is_ascii_alphanumeric(name[label_start]) ||
-        !is_ascii_alphanumeric(name[label_end - 1]))
-    {
-      return false;
-    }
-    for (std::size_t position = label_start; position < label_end; ++position)
-    {
-      const char character = name[position];
-      if (!is_ascii_alphanumeric(character) && character != '-')
-      {
-        return false;
-      }
-    }
-    if (dot == std::string::npos)
-    {
-      const std::size_t final_label_length = label_end - label_start;
-      if (final_label_length < 2u)
-      {
-        return false;
-      }
-      for (std::size_t position = label_start; position < label_end; ++position)
-      {
-        if (!is_ascii_alpha(name[position]))
-        {
-          return false;
-        }
-      }
-      return true;
-    }
-    label_start = dot + 1;
-  }
-  return false;
-}
-
-/// The "vendor root" a file belongs to: the first (outermost) trigger-dir path
-/// component plus its immediate subfolder, e.g.
-/// `third_party/zlib/src/inflate.c` -> `third_party/zlib`. A file sitting
-/// directly in a trigger dir with no subfolder, or a path with no trigger dir
-/// at all, belongs to no root (nullopt). A nested trigger name INSIDE an
-/// already-claimed root (`third_party/boost/libs/algorithm`: `libs` is
-/// itself a trigger word, but `boost` is not) stops at `boost`: the outer
-/// trigger's immediate subfolder already names a specific library, so nothing
-/// after it is re-examined. But when that immediate subfolder is ITSELF a
-/// trigger word (`third_party/libs/zlib` and `third_party/libs/openssl` :
-/// `libs` right after `third_party` is generic, not a library name), the
-/// chain keeps consuming trigger-named components until it reaches one that
-/// isn't, so the two libraries get distinct roots (`third_party/libs/zlib`,
-/// `third_party/libs/openssl`) instead of collapsing into `third_party/libs`.
-std::optional<fs::path> vendor_root_for(const fs::path& relative_path)
-{
-  fs::path accumulated;
-  bool below_test_or_fixture_directory = false;
-  for (auto component = relative_path.begin(); component != relative_path.end(); ++component)
-  {
-    const auto next = std::next(component);
-    if (next == relative_path.end())
-    {
-      break;  // `component` is the filename itself; nothing left to trigger on
-    }
-    if (is_trigger_dir_name(component->string()))
-    {
-      if (below_test_or_fixture_directory)
-      {
-        return std::nullopt;
-      }
-      fs::path trigger_chain = accumulated / *component;
-      auto subfolder = next;
-      while (is_trigger_dir_name(subfolder->string()))
-      {
-        const auto after_subfolder = std::next(subfolder);
-        if (after_subfolder == relative_path.end())
-        {
-          return std::nullopt;  // file sits directly in the trigger chain, no subfolder
-        }
-        trigger_chain /= *subfolder;
-        subfolder = after_subfolder;
-      }
-      const auto after_subfolder = std::next(subfolder);
-      if (after_subfolder == relative_path.end())
-      {
-        return std::nullopt;  // file sits directly in the trigger dir, no subfolder
-      }
-      return trigger_chain / *subfolder;
-    }
-    below_test_or_fixture_directory =
-        below_test_or_fixture_directory || is_test_or_fixture_dir_name(component->string());
-    accumulated /= *component;
-  }
-  return std::nullopt;
-}
 
 /// First non-blank line of `content`, trimmed and truncated for display.
 std::string first_line_truncated(const std::string& content, std::size_t max_chars)
@@ -247,7 +95,17 @@ struct VersionHeaderSignature
 {
   std::string_view canonical_name;
   std::string_view header_filename;
-  std::string_view version_macro;  ///< always a quoted-string `#define`, never numeric
+  std::string_view version_macro;  ///< the macro whose value is the version; HOW that value is
+                                   ///< written depends on which table the row sits in
+};
+
+/// How a signature's version macro writes its value. A property of the TABLE a
+/// row is in rather than a field on the row, so adding a form never touches the
+/// existing rows.
+enum class MacroValueForm
+{
+  QuotedString,  ///< `#define ZLIB_VERSION "1.2.11"`
+  BareDotted     ///< `#define UTHASH_VERSION 2.4.0`
 };
 
 // The goal is roughly the ~30 most common vendored libs; this starter set covers the
@@ -283,25 +141,102 @@ constexpr VersionHeaderSignature kVersionHeaderSignatures[] = {
     {"freertos", "task.h", "tskKERNEL_VERSION_NUMBER"},
 };
 
+// Libraries whose header writes the version as a BARE dotted number, not a
+// quoted string. uthash declares `#define UTHASH_VERSION 2.4.0`, which the
+// quoted-string rows above can never read, so a vendored copy was reported by
+// its folder name with no version at all.
+//
+// Only a dotted value qualifies, and that is the whole safety argument. A bare
+// integer is an API revision, not a release: stb writes `#define STBI_VERSION 1`,
+// and reading that as a version would assert a release that does not exist.
+// Requiring a dot is also what keeps a separate-macros library such as cJSON
+// (`CJSON_VERSION_MAJOR 1`, `_MINOR 7`, `_PATCH 15`) out of here: those are three
+// numbers on three lines, which this form deliberately does not try to assemble.
+constexpr VersionHeaderSignature kBareDottedVersionSignatures[] = {
+    {"uthash", "uthash.h", "UTHASH_VERSION"},
+};
+
+/// Cap on a bare dotted value's length. A version is a handful of characters;
+/// a header cannot make this scan return a megabyte-long "version" that then
+/// reaches a purl.
+constexpr std::size_t kMaxBareVersionChars = 64u;
+
 struct VersionMatch
 {
   std::string canonical_name;
   std::string version;
   fs::path relative_path;  ///< root-relative path of the matched header
   std::string version_macro;
+  MacroValueForm form;  ///< how the header wrote the value, so evidence can quote it faithfully
 };
 
-/// Find `#define <macro_name> "<value>"` in `content` and return `<value>`.
-/// Bounded to the same source line as the macro name (a hostile file cannot
-/// make this scan past its own line, let alone past `content`'s own size
+/// The value of a bare dotted `#define`, read from `value_start` to the end of
+/// its line: `2.4.0` from `#define UTHASH_VERSION 2.4.0`. `nullopt` unless the
+/// value is digits and single dots only, starts and ends on a digit, has at
+/// least one dot, fits `kMaxBareVersionChars`, and is followed by nothing but
+/// whitespace or the start of a comment. Anything else is not a version:
+/// `2.4.0abc` and `2.4.0-dev` are not read as `2.4.0`, a value ending in a line
+/// continuation is not read at all, and a bare `2` (an API revision) never
+/// qualifies.
+std::optional<std::string> read_bare_dotted_value(const std::string& content,
+                                                  std::size_t value_start, std::size_t line_end)
+{
+  std::size_t token_end = value_start;
+  bool saw_dot = false;
+  while (token_end < line_end)
+  {
+    const char character = content[token_end];
+    if (character >= '0' && character <= '9')
+    {
+      ++token_end;
+      continue;
+    }
+    if (character == '.')
+    {
+      const bool leading_dot = token_end == value_start;
+      const bool doubled_dot = token_end > value_start && content[token_end - 1] == '.';
+      if (leading_dot || doubled_dot)
+      {
+        return std::nullopt;
+      }
+      saw_dot = true;
+      ++token_end;
+      continue;
+    }
+    break;
+  }
+
+  const std::size_t token_length = token_end - value_start;
+  if (token_length == 0 || !saw_dot || content[token_end - 1] == '.' ||
+      token_length > kMaxBareVersionChars)
+  {
+    return std::nullopt;
+  }
+  if (token_end < line_end)
+  {
+    const char terminator = content[token_end];
+    const bool ends_cleanly =
+        terminator == ' ' || terminator == '\t' || terminator == '\r' || terminator == '/';
+    if (!ends_cleanly)
+    {
+      return std::nullopt;
+    }
+  }
+  return content.substr(value_start, token_length);
+}
+
+/// Find `#define <macro_name> <value>` in `content` and return `<value>`, read
+/// in the given `form`: a quoted string (`"1.2.11"`) or a bare dotted number
+/// (`2.4.0`). Bounded to the same source line as the macro name (a hostile file
+/// cannot make this scan past its own line, let alone past `content`'s own size
 /// cap). Each candidate occurrence is checked in turn: a macro name that is
 /// only a prefix of a longer identifier (e.g. `ZLIB_VERSION_H` when searching
-/// for `ZLIB_VERSION`), or isn't a quoted-string `#define` on its line, does
-/// not end the search: an unrelated earlier occurrence must never hide a real
-/// one later in the same file. `nullopt` only once every occurrence has been
-/// tried and none matched.
-std::optional<std::string> extract_quoted_macro_value(const std::string& content,
-                                                      std::string_view macro_name)
+/// for `ZLIB_VERSION`), or isn't a `#define` of the requested form on its line,
+/// does not end the search: an unrelated earlier occurrence must never hide a
+/// real one later in the same file. `nullopt` only once every occurrence has
+/// been tried and none matched.
+std::optional<std::string> extract_macro_value(const std::string& content,
+                                               std::string_view macro_name, MacroValueForm form)
 {
   const std::string needle = "#define " + std::string(macro_name);
   std::size_t search_from = 0;
@@ -329,6 +264,15 @@ std::optional<std::string> extract_quoted_macro_value(const std::string& content
     while (cursor < search_end && (content[cursor] == ' ' || content[cursor] == '\t'))
     {
       ++cursor;
+    }
+    if (form == MacroValueForm::BareDotted)
+    {
+      std::optional<std::string> bare_value = read_bare_dotted_value(content, cursor, search_end);
+      if (bare_value.has_value())
+      {
+        return bare_value;
+      }
+      continue;  // not a bare dotted number on this line: try the next occurrence
     }
     if (cursor >= search_end || content[cursor] != '"')
     {
@@ -359,25 +303,45 @@ std::optional<VersionMatch> find_version_header_match(const fs::path& root,
   {
     const std::string basename = relative_file.filename().string();
     const std::string_view basename_view(basename);
-    for (const VersionHeaderSignature& signature : kVersionHeaderSignatures)
+
+    // One pass over a table, reading each row's macro in that table's form. Both
+    // tables go through the same basename filter and the same bounded read, so
+    // a bare-dotted row can never read more of a file than a quoted one would.
+    const auto match_table = [&](std::span<const VersionHeaderSignature> table,
+                                 MacroValueForm form) -> std::optional<VersionMatch>
     {
-      if (basename_view != signature.header_filename)
+      for (const VersionHeaderSignature& signature : table)
       {
-        continue;
+        if (basename_view != signature.header_filename)
+        {
+          continue;
+        }
+        const core::BoundedFileRead file_read =
+            core::read_file_bounded(root / relative_file, limits.max_header_bytes);
+        if (!file_read.readable)
+        {
+          continue;
+        }
+        const std::optional<std::string> version =
+            extract_macro_value(file_read.bytes, signature.version_macro, form);
+        if (version.has_value())
+        {
+          return VersionMatch{std::string(signature.canonical_name), *version, relative_file,
+                              std::string(signature.version_macro), form};
+        }
       }
-      const core::BoundedFileRead file_read =
-          core::read_file_bounded(root / relative_file, limits.max_header_bytes);
-      if (!file_read.readable)
-      {
-        continue;
-      }
-      const std::optional<std::string> version =
-          extract_quoted_macro_value(file_read.bytes, signature.version_macro);
-      if (version.has_value())
-      {
-        return VersionMatch{std::string(signature.canonical_name), *version, relative_file,
-                            std::string(signature.version_macro)};
-      }
+      return std::nullopt;
+    };
+
+    if (std::optional<VersionMatch> match =
+            match_table(kVersionHeaderSignatures, MacroValueForm::QuotedString))
+    {
+      return match;
+    }
+    if (std::optional<VersionMatch> match =
+            match_table(kBareDottedVersionSignatures, MacroValueForm::BareDotted))
+    {
+      return match;
     }
   }
   return std::nullopt;
@@ -594,7 +558,7 @@ core::Component build_component(const fs::path& root, const fs::path& vendor_roo
   else
   {
     component.name = folder_name;
-    component.purl = "pkg:generic/" + core::percent_encode(component.name);
+    component.purl = folder_derived_purl(vendor_root);
   }
 
   if (license_clue.has_value() && !license_clue->spdx_id.empty())
@@ -608,10 +572,14 @@ core::Component build_component(const fs::path& root, const fs::path& vendor_roo
        core::Confidence::Low});
   if (version_match.has_value())
   {
+    // Quoted exactly as the header wrote it: a bare `2.4.0` is not shown as
+    // `"2.4.0"`, since evidence that misquotes the file is worse than none.
+    const std::string quoted_value = version_match->form == MacroValueForm::QuotedString
+                                         ? "\"" + version_match->version + "\""
+                                         : version_match->version;
     component.evidence.push_back({core::Source::Heuristic,
                                   version_match->relative_path.string() + " -> #define " +
-                                      version_match->version_macro + " \"" +
-                                      version_match->version + "\"",
+                                      version_match->version_macro + " " + quoted_value,
                                   core::Confidence::Medium});
   }
   if (license_clue.has_value())
@@ -656,6 +624,11 @@ core::Component build_component(const fs::path& root, const fs::path& vendor_roo
 
 }  // namespace
 
+std::string folder_derived_purl(const fs::path& vendor_root)
+{
+  return "pkg:generic/" + core::percent_encode(vendor_root.filename().string());
+}
+
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, ParseLimits limits)
 {
@@ -664,12 +637,12 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
   std::map<fs::path, std::vector<fs::path>> files_by_vendor_root;
   for (const fs::path& relative_path : file_index.files)
   {
+    // Shared with the fingerprint matcher (heuristics/vendor_root.hpp), which
+    // scores the same roots by content: the two join on this path, so the rule
+    // that produces it lives in one place. The DNS-namespace-container skip
+    // that used to sit here is part of that rule now.
     const std::optional<fs::path> vendor_root = vendor_root_for(relative_path);
     if (!vendor_root.has_value())
-    {
-      continue;
-    }
-    if (is_dns_namespace_container_name(vendor_root->filename().string()))
     {
       continue;
     }

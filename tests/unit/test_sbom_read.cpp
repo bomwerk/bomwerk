@@ -63,6 +63,46 @@ const Component* find_by_purl(const std::vector<Component>& components, const st
 
 int main()
 {
+  // Given a component carrying content-match evidence (scan --fingerprint-index),
+  // when written and read back, then that evidence survives. Without this a
+  // `trim` or `binscan` rewrite keeps the corrected purl and drops the only
+  // record of how it was derived.
+  {
+    const std::string detail = "3 of 4 hashed files match cjson 1.7.15 (corpus 2026-11-03)";
+    Component original;
+    original.name = "cjson";
+    original.version = "1.7.15";
+    original.purl = "pkg:generic/cjson@1.7.15";
+    original.evidence.push_back({core::Source::Fingerprint, detail, core::Confidence::Medium});
+
+    const std::string document = write_cyclonedx({original}, ToolInfo{"bomwerk", "0.1.0"});
+    const Result<SbomDocument> read = read_cyclonedx(document);
+    BOMWERK_TEST_CHECK(read.value.components.size() == 1);
+
+    std::size_t restored = 0;
+    for (const core::Evidence& evidence : read.value.components.front().evidence)
+    {
+      if (evidence.source == core::Source::Fingerprint)
+      {
+        ++restored;
+        BOMWERK_TEST_CHECK(evidence.detail == detail);
+      }
+    }
+    BOMWERK_TEST_CHECK(restored == 1);
+
+    // A component that never had such evidence must not gain any.
+    Component plain;
+    plain.name = "libfoo";
+    plain.purl = "pkg:generic/libfoo";
+    const Result<SbomDocument> plain_read =
+        read_cyclonedx(write_cyclonedx({plain}, ToolInfo{"bomwerk", "0.1.0"}));
+    BOMWERK_TEST_CHECK(plain_read.value.components.size() == 1);
+    for (const core::Evidence& evidence : plain_read.value.components.front().evidence)
+    {
+      BOMWERK_TEST_CHECK(evidence.source != core::Source::Fingerprint);
+    }
+  }
+
   // Given a component with every optional field populated, when written by
   // output::write_cyclonedx and read back, then every field round-trips.
   {

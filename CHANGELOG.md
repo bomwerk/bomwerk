@@ -13,6 +13,22 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- `scan --fingerprint-index <path>` identifies vendored C/C++ libraries by the
+  content of their files instead of by a version header, against a corpus of
+  pinned upstream releases. A match fills in a version no header states (cJSON
+  writes its version only as numeric macros) and reports how many files agree,
+  so a copy that differs from upstream in one file says so instead of passing
+  as pristine. Evidence appears as a `bomwerk:fingerprint` CycloneDX property,
+  and a version another producer already resolved is never overwritten: a
+  conflict is reported as `BW-FINGERPRINT-004`. The corpus is not shipped;
+  build one with `scripts/build_fingerprint_corpus.py`. There is no default
+  path, so a scan without the option behaves exactly as before, and the matcher
+  reads one local file and opens no socket, leaving `--endpoints` and
+  `--offline` untouched (T36).
+- The vendored-source heuristic reads a version written as a bare dotted number,
+  not only a quoted string, so uthash (`#define UTHASH_VERSION 2.4.0`) is reported
+  as `pkg:generic/uthash@2.4.0` instead of by its folder name. A bare integer
+  never qualifies, and neither does a version split across several macros.
 - Initial public release of bomwerk Community, the Apache-2.0 scanner:
   - `scan` reads git submodules, CMake `FetchContent`/CPM, `conanfile.txt`,
     `conan.lock`, `vcpkg.json`, `package-lock.json`, `pnpm-lock.yaml`,

@@ -61,6 +61,7 @@ hard-wired into the harness). The live OSV demo with a real commit is
 | `spdx30-mixed` | the SPDX 3.0.1 (JSON-LD) writer over the `mixed-product` tree: `fmt` vendored as a submodule AND declared via FetchContent at the same commit => one `software_Package`; `--product`/`--product-version` name the `SpdxDocument` | 0 |
 | `nightmare-corpus` | a miniature of every static shape the public `bomwerk/nightmare` results table depends on: three vendored identity tiers (zlib and freertos by version header at Medium, uthash and stb by folder name at Low), a `conanfile.txt` declaring a DIFFERENT zlib (1.3.1) than the vendored copy (1.2.11), stb's dual MIT-or-Unlicense LICENSE flattened to `MIT`, uthash's unrecognized LICENSE left unset, freertos's CPE carrying a `v11.1.0` version NVD will not match (a known gap, pinned so its fix shows up as a diff), two prebuilt-library roots identified from headers alone (sqlite3@3.41.2 at Medium; cjson-prebuilt by folder name with no version, because cJSON.h only has numeric version macros), and a `FetchContent_Declare` of tinyxml2 pinned to a synthetic commit. The openssl submodule is declared but never checked out: exit 1 | 1 |
 | `nightmare-submodule-pinned` | the same tree with the openssl submodule's HEAD checked out => a versioned `pkg:github/openssl/openssl` and a clean run. Read as a pair with the case above: the diff between the two snapshots is the shallow-clone row of the public README | 0 |
+| `nightmare-corpus-fingerprint` | `scan --fingerprint-index`: the one vendored directory whose version no header can state. Three of the four hashed files under `third_party/cjson-prebuilt` are byte-identical to the pinned release in `fingerprint-index.json`, so the folder-derived `pkg:generic/cjson-prebuilt` becomes `pkg:generic/cjson@1.7.15` and gains a `bomwerk:fingerprint` property naming the count; `local_patch.c` is the fourth file and is not upstream, which is what makes the match partial. Read as a pair with `nightmare-corpus`, which pins the same directory with NO index: that snapshot staying byte-identical is the regression test for the option being off by default | 0 |
 
 `gitmodules-pinned`, `nightmare-corpus`, `yarn-berry-lock`, `pnpm-lock-v9`,
 `composer-json-only`, `maven-unresolved-identity`, `cmake-unresolved-variables`,
@@ -149,6 +150,15 @@ key order: `scripts/run_golden_case.py` never re-serializes the scanner's output
 because a JSON round-trip would mask exactly the canonical-form regressions rule 3
 exists to prevent.
 
+## One thing the nightmare miniature does not mirror
+
+`nightmare-corpus/tree/third_party/uthash/uthash.h` is a two-line stub with no
+`#define UTHASH_VERSION`, so this case still shows uthash identified by folder name at
+Low. The real file declares `#define UTHASH_VERSION 2.4.0`, which the heuristic now
+reads, so a scan of the real nightmare corpus reports `pkg:generic/uthash@2.4.0`. The
+stub is left as it is on purpose: it keeps this snapshot as the record of the
+folder-name fallback, and the version read is pinned by `test_vendored_cpp` instead.
+
 ## Adding a case
 
 1. `mkdir fixtures/golden/<case>/tree` and write the repo. Keep it small enough
@@ -170,3 +180,40 @@ it, that line is the bug.
 If `--update` refuses with *"the tool version occurs N times"*, a component in
 your fixture declares the same version as bomwerk itself, which would make the
 token ambiguous. Give the fixture component a different version.
+
+## The one generated file here (`nightmare-corpus-fingerprint`)
+
+`fingerprint-index.json` is the only file under `fixtures/golden/` that is not
+hand-written, and it must never be edited by hand: it holds SHA-256 digests of
+the files beside it, so a hand edit produces an index that matches nothing.
+Regenerate it after any change to that tree, from the repository root:
+
+```bash
+python3 scripts/build_fingerprint_corpus.py \
+  --from-tree fixtures/golden/nightmare-corpus-fingerprint/tree/third_party/cjson-prebuilt \
+  --library cjson --version 1.7.15 --license MIT --corpus-revision 2026-11-03 \
+  --no-prefilter --exclude-glob local_patch.c \
+  --out fixtures/golden/nightmare-corpus-fingerprint/fingerprint-index.json
+```
+
+Swap `--out` for `--verify` to check the committed file still matches a fresh
+build without rewriting it.
+
+Three flags there are load-bearing:
+
+- `--exclude-glob local_patch.c` is what keeps the match PARTIAL. That file is
+  this fixture's own, standing in for a vendor's local change, and an index
+  covering all four files would turn the case into a whole-copy match and lose
+  the shape the ticket is about.
+
+- `--no-prefilter` keeps the committed bytes independent of whether the
+  optional `xxhash` module is installed on the machine that regenerated them.
+  The prefilter is an optimisation the matcher treats as "always maybe" when
+  absent, so leaving it out changes nothing about what this case proves.
+- `--corpus-revision` is pinned rather than taken from the manifest's
+  `pinned_at`, so bumping the real corpus does not rewrite this fixture and the
+  evidence string in the snapshot stays stable.
+
+`.gitattributes` in that directory marks everything `-text`. The digests are of
+exact bytes, and `core.autocrlf` on a Windows checkout would rewrite the line
+endings and silently stop the index from matching.

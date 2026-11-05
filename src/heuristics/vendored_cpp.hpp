@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <filesystem>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -43,6 +44,14 @@ struct ParseLimits
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                                const std::filesystem::path& root,
                                                                ParseLimits limits = {});
+
+/// The purl this heuristic gives a vendor root when the folder name is the only
+/// thing known about it: `pkg:generic/<folder>`, no version, the folder name
+/// percent-encoded. It is the last-resort branch of `parse`, exposed so a later
+/// pass that wants to recognise exactly that shape (the fingerprint reconciler,
+/// which may rename only such a component) compares against the producer's own
+/// rule instead of a copy of it that could silently drift.
+[[nodiscard]] std::string folder_derived_purl(const std::filesystem::path& vendor_root);
 
 /// Every SPDX id the LICENSE-file recognizer can produce. This heuristic
 /// keeps its own small license table separate from `output/spdx_license_ids`

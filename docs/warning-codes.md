@@ -149,6 +149,26 @@ cannot fix.
 | `BW-BINSCAN-003` | A binary artifact has a malformed ELF/ar header |
 | `BW-BINSCAN-004` | Binary-level dependency evidence is partial for this run |
 
+### Fingerprint corpus (`scan --fingerprint-index`)
+
+| Code | Meaning |
+| --- | --- |
+| `BW-FINGERPRINT-001` | The fingerprint corpus index could not be read |
+| `BW-FINGERPRINT-002` | The fingerprint corpus index uses an unsupported schema version |
+| `BW-FINGERPRINT-003` | Fingerprint corpus index entries were skipped |
+| `BW-FINGERPRINT-004` | The fingerprint corpus and a declared version disagree |
+| `BW-FINGERPRINT-005` | A fingerprint match had no component to enrich |
+| `BW-FINGERPRINT-006` | The fingerprint matcher stopped at its file budget |
+
+These only occur when you pass `--fingerprint-index`; without it no corpus is
+read and none of them can fire. `BW-FINGERPRINT-001` and `-002` mean the index
+was rejected whole and the scan continued without it, so the SBOM is complete
+but carries no fingerprint evidence. `BW-FINGERPRINT-004` is the interesting
+one: the corpus says a vendored directory holds one version and a manifest or a
+version header says another. bomwerk keeps what the project declared and
+records both, because a disagreement is a finding, not a defect in either
+source.
+
 ### SBOM readers (`trim`, `binscan` re-reading a CycloneDX/SPDX document)
 
 | Code | Meaning |
