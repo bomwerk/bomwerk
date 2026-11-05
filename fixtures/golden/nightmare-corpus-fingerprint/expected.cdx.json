@@ -1,0 +1,83 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "511068d1-b946-57de-8127-609db1f01802",
+      "cpe": "cpe:2.3:a:*:cjson:1.7.15:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/cjson-prebuilt"
+          }
+        ]
+      },
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "name": "cjson",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        },
+        {
+          "name": "bomwerk:fingerprint",
+          "value": "3 of 4 hashed files match cjson 1.7.15 (corpus 2026-11-03)"
+        }
+      ],
+      "purl": "pkg:generic/cjson@1.7.15",
+      "type": "library",
+      "version": "1.7.15"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "511068d1-b946-57de-8127-609db1f01802"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:a5e32107-bc5d-5d70-a4c8-c8a5ea458037",
+  "specVersion": "1.6",
+  "version": 1
+}

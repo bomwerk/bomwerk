@@ -18,6 +18,7 @@
 
 #include "cli/app.hpp"
 #include "cli/observe_trim.hpp"
+#include "cli/scan_fingerprint.hpp"
 #include "cli/warning_recorder.hpp"
 #include "core/cvss.hpp"
 #include "core/exclusions.hpp"
@@ -31,6 +32,7 @@
 #include "core/submodule_paths.hpp"
 #include "core/warning.hpp"
 #include "core/warning_code.hpp"
+#include "heuristics/fingerprint.hpp"
 #include "heuristics/vendored_cpp.hpp"
 #include "output/coverage.hpp"
 #include "output/cra_sidecar.hpp"
@@ -316,6 +318,13 @@ CLI::App* register_scan_command(CLI::App& application, ScanOptions& options)
       ->add_option("--conan-graph", options.conan_graph_path,
                    "JSON written by `conan graph info . --format=json` (run by you or CI); "
                    "bomwerk reads the file and never runs conan itself")
+      ->check(CLI::ExistingFile);
+  scan_command
+      ->add_option("--fingerprint-index", options.fingerprint_index_path,
+                   "Pinned corpus of upstream file hashes (build one with "
+                   "scripts/build_fingerprint_corpus.py); identifies vendored C/C++ libraries "
+                   "by content instead of by a version header. Local file only, no network, "
+                   "unaffected by --offline")
       ->check(CLI::ExistingFile);
   scan_command
       ->add_option("--product", options.release_meta.product_id,
@@ -905,6 +914,36 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
                     std::make_move_iterator(pnpm_dependencies.value.end()));
   components.insert(components.end(), std::make_move_iterator(pub_dependencies.value.begin()),
                     std::make_move_iterator(pub_dependencies.value.end()));
+  // Content-hash corpus, BEFORE merge_all: this pass can rewrite a
+  // folder-derived purl, and core::component_identity (the canonical purl) is
+  // the merge key, so a rewrite afterwards would leave a stale key and a
+  // bom-ref derived from a purl the component no longer carries (rule 3).
+  // Running here also means a corrected identity merges normally with whatever
+  // a lockfile declared. No network and no new endpoint: the index is a local
+  // file, so --offline is unaffected.
+  cli::FingerprintApplication fingerprint_application;
+  bool fingerprint_index_loaded = false;
+  std::string fingerprint_corpus_revision;
+  if (!options.fingerprint_index_path.empty())
+  {
+    core::Result<heuristics::fingerprint::Index> fingerprint_index =
+        heuristics::fingerprint::load_index(options.fingerprint_index_path);
+    record_warnings(fingerprint_index.warnings);
+    if (!fingerprint_index.value.empty())
+    {
+      fingerprint_index_loaded = true;
+      fingerprint_corpus_revision = fingerprint_index.value.corpus_revision;
+      core::Result<std::vector<heuristics::fingerprint::RootMatch>> fingerprint_matches =
+          heuristics::fingerprint::match_vendored_files(file_index.value, options.root_directory,
+                                                        fingerprint_index.value);
+      record_warnings(fingerprint_matches.warnings);
+      core::Result<cli::FingerprintApplication> applied =
+          cli::apply_fingerprint_matches(fingerprint_matches.value, components);
+      record_warnings(applied.warnings);
+      fingerprint_application = applied.value;
+    }
+  }
+
   components = core::merge_all(std::move(components));
 
   vuln::LicenseEnrichmentSummary license_enrichment_summary;
@@ -1006,6 +1045,20 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   // every new producer (15 and counting): the wrong place for it, since this
   // block reports facts about THIS scan, not what bomwerk is capable of.
   std::printf("%-*s %zu\n", kSummaryLabelWidth, "components:", components.size());
+  if (fingerprint_index_loaded)
+  {
+    // Printed only when a corpus was actually read, so a plain scan's output is
+    // unchanged. The corpus revision is printed but the index PATH is not, here
+    // or in any artifact: it is machine-local, and the SBOM and the --warnings
+    // manifest have to be byte-identical across machines (rule 3).
+    const std::string corpus_note = fingerprint_corpus_revision.empty()
+                                        ? std::string()
+                                        : " (corpus " + fingerprint_corpus_revision + ")";
+    std::printf(
+        "%-*s %zu vendored root(s) matched a corpus release, %zu identity correction(s)%s\n",
+        kSummaryLabelWidth, "fingerprint:", fingerprint_application.roots_matched,
+        fingerprint_application.identities_rewritten, corpus_note.c_str());
+  }
   if (options.license_fallback)
   {
     // rate-limited and timed-out are independent causes and either or

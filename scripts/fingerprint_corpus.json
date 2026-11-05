@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "pinned_at": "2026-11-03",
+  "_comment": [
+    "Pinned INPUT manifest for scripts/build_fingerprint_corpus.py. It says which upstream",
+    "releases to download and which of their files to hash. The built index is a separate",
+    "artifact and is deliberately NOT committed: bomwerk ships the matcher and this manifest,",
+    "not the corpus.",
+    "",
+    "Every `commit` is the DEREFERENCED commit of `ref`, that is refs/tags/<ref>^{} for an",
+    "annotated tag. Pinning an annotated tag's own object id by mistake still fetches the right",
+    "tree, which hides the error, so the builder re-resolves each ref against the remote and",
+    "fails when the two disagree. Never hand-write a commit id: run",
+    "`build_fingerprint_corpus.py --resolve` and paste what it prints.",
+    "",
+    "Releases are chosen, not enumerated. The index exists to identify OLD vendored copies, so",
+    "each library pins the versions people actually vendor plus any version a widely cited CVE",
+    "sits in. Pinning every tag would turn a few megabytes of index into hundreds.",
+    "",
+    "`tier` selects a profile: 0 = smoke (what the nightmare corpus and the tests need),",
+    "1 = demo, 2 = all. See K_PROFILE_MAX_TIER in the builder.",
+    "",
+    "A library is listed here only when upstream publishes a real version for it. stb is",
+    "deliberately absent: upstream has no tags, so the only version a corpus could assert is a",
+    "commit id, and bomwerk already names it `stb` from its folder. Asserting a commit as the",
+    "version would contradict the nightmare answer key and buy nothing."
+  ],
+  "libraries": [
+    {
+      "name": "zlib",
+      "tier": 0,
+      "source": "git",
+      "upstream": "https://github.com/madler/zlib.git",
+      "purl_type": "generic",
+      "purl_namespace": "",
+      "license": "Zlib",
+      "why": "the most-vendored C library; nightmare pins v1.2.11, whose deflate.c and inflate.c carry CVE-2018-25032 and CVE-2022-37434",
+      "include_globs": ["*.c", "*.h"],
+      "exclude_globs": ["test/*", "contrib/*", "examples/*"],
+      "releases": [
+        {
+          "version": "1.2.11",
+          "ref": "v1.2.11",
+          "commit": "cacf7f1d4e3d44d871b605da3b647f07d718623f"
+        },
+        {
+          "version": "1.2.13",
+          "ref": "v1.2.13",
+          "commit": "04f42ceca40f73e2978b50e93806c2a18c1281fc"
+        },
+        {
+          "version": "1.3.1",
+          "ref": "v1.3.1",
+          "commit": "51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"
+        }
+      ]
+    },
+    {
+      "name": "freertos",
+      "tier": 0,
+      "source": "git",
+      "upstream": "https://github.com/FreeRTOS/FreeRTOS-Kernel.git",
+      "purl_type": "generic",
+      "purl_namespace": "",
+      "license": "MIT",
+      "why": "the fork case: nightmare vendors V11.1.0 with one modified list.c while its version header still reads V11.1.0, and no tool in the comparison notices",
+      "include_globs": [
+        "*.c",
+        "*.h",
+        "include/*.h",
+        "portable/**/*.c",
+        "portable/**/*.h",
+        "examples/template_configuration/*.h"
+      ],
+      "exclude_globs": ["test/*", "tests/*"],
+      "releases": [
+        {
+          "version": "V11.1.0",
+          "ref": "V11.1.0",
+          "commit": "dbf70559b27d39c1fdb68dfb9a32140b6a6777a0"
+        },
+        {
+          "version": "V11.0.1",
+          "ref": "V11.0.1",
+          "commit": "0240cd55f20be7100439b606086709b74a105cb1"
+        },
+        {
+          "version": "V10.6.2",
+          "ref": "V10.6.2",
+          "commit": "18ed8886fe3eed9dbe433a82cdc62ce5dc0315eb"
+        }
+      ]
+    },
+    {
+      "name": "uthash",
+      "tier": 0,
+      "source": "git",
+      "upstream": "https://github.com/troydhanson/uthash.git",
+      "purl_type": "generic",
+      "purl_namespace": "",
+      "license": "BSD-1-Clause",
+      "why": "header-only, so a single file decides its identity; nightmare's copy is reported with no version today because the heuristic has no row for it",
+      "include_globs": ["src/*.h"],
+      "exclude_globs": [],
+      "releases": [
+        {
+          "version": "2.4.0",
+          "ref": "v2.4.0",
+          "commit": "a49bed0b4abb7dff16c73906dcdc8a9718d582d2"
+        },
+        {
+          "version": "2.3.0",
+          "ref": "v2.3.0",
+          "commit": "e493aa90a2833b4655927598f169c31cfcdf7861"
+        }
+      ]
+    },
+    {
+      "name": "cjson",
+      "tier": 0,
+      "source": "git",
+      "upstream": "https://github.com/DaveGamble/cJSON.git",
+      "purl_type": "generic",
+      "purl_namespace": "",
+      "license": "MIT",
+      "why": "writes its version only as three numeric macros, so no quoted-string heuristic can ever read it; nightmare reports it as the folder name cjson-prebuilt with no version",
+      "include_globs": ["*.c", "*.h"],
+      "exclude_globs": ["tests/*", "fuzzing/*"],
+      "releases": [
+        {
+          "version": "1.7.15",
+          "ref": "v1.7.15",
+          "commit": "d348621ca93571343a56862df7de4ff3bc9b5667"
+        },
+        {
+          "version": "1.7.18",
+          "ref": "v1.7.18",
+          "commit": "acc76239bee01d8e9c858ae2cab296704e52d916"
+        }
+      ]
+    },
+    {
+      "name": "mbedtls",
+      "tier": 1,
+      "source": "git",
+      "upstream": "https://github.com/Mbed-TLS/mbedtls.git",
+      "purl_type": "generic",
+      "purl_namespace": "",
+      "license": "",
+      "why": "the TLS stack vendored into firmware, and one of the eight libraries T93 names; vendor SDKs ship modified copies of it. License left empty on purpose: upstream is dual-licensed (Apache-2.0 OR GPL-2.0-or-later) and one SPDX id here would flatten it, the gap docs/nightmare-corpus.md already records for stb",
+      "include_globs": ["library/*.c", "library/*.h", "include/mbedtls/*.h", "include/psa/*.h"],
+      "exclude_globs": ["tests/*", "programs/*"],
+      "releases": [
+        {
+          "version": "3.6.2",
+          "ref": "v3.6.2",
+          "commit": "107ea89daaefb9867ea9121002fbbdf926780e98"
+        },
+        {
+          "version": "2.28.9",
+          "ref": "v2.28.9",
+          "commit": "5e146adef63b326b04282252639bebc2730939c6"
+        }
+      ]
+    },
+    {
+      "name": "lwip",
+      "tier": 1,
+      "source": "git",
+      "upstream": "https://github.com/lwip-tcpip/lwip.git",
+      "purl_type": "generic",
+      "purl_namespace": "",
+      "license": "BSD-3-Clause",
+      "why": "the TCP/IP stack vendored into firmware, also named by T93; ESP-IDF and vendor SDKs carry forks of it",
+      "include_globs": ["src/**/*.c", "src/**/*.h"],
+      "exclude_globs": ["test/*", "doc/*"],
+      "releases": [
+        {
+          "version": "2.2.0",
+          "ref": "STABLE-2_2_0_RELEASE",
+          "commit": "0a0452b2c39bdd91e252aef045c115f88f6ca773"
+        },
+        {
+          "version": "2.1.3",
+          "ref": "STABLE-2_1_3_RELEASE",
+          "commit": "6ca936f6b588cee702c638eee75c2436e6cf75de"
+        }
+      ]
+    }
+  ]
+}

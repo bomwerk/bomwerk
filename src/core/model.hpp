@@ -102,6 +102,14 @@ enum class CpeProvenance
 /// agree on the exact string without one depending on the other.
 inline constexpr std::string_view kCpeProvenancePropertyName = "bomwerk:cpe-provenance";
 
+/// CycloneDX property name `output::write_cyclonedx` records content-match
+/// evidence under (`Source::Fingerprint`): one property per evidence item, the
+/// evidence detail as its value. Shared here for the same reason as
+/// `kCpeProvenancePropertyName`. A reader that did not restore it would let
+/// `trim` and `binscan` rewrite a document that keeps a corrected identity and
+/// drops the only record of how it was derived.
+inline constexpr std::string_view kFingerprintPropertyName = "bomwerk:fingerprint";
+
 /// CycloneDX property VALUE for a recognized provenance. `Unspecified` has no
 /// value and is never serialized: a writer must gate on
 /// `cpe_provenance != CpeProvenance::Unspecified` before emitting, the same

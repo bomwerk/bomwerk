@@ -49,6 +49,11 @@ OPTIONS:
           --conan-graph TEXT:FILE 
                               JSON written by `conan graph info . --format=json` (run by you or
                               CI); bomwerk reads the file and never runs conan itself
+          --fingerprint-index TEXT:FILE 
+                              Pinned corpus of upstream file hashes (build one with
+                              scripts/build_fingerprint_corpus.py); identifies vendored C/C++
+                              libraries by content instead of by a version header. Local file
+                              only, no network, unaffected by --offline
           --product TEXT      Product identifier this SBOM describes, recorded in the output's
                               metadata.component
           --product-version TEXT 

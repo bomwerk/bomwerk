@@ -45,6 +45,15 @@ contain each preview row; the 1.0.0 tag moves those rows to shipped.
 | `scan --all-cpes` | preview | 1.0.0 | `all_cpes_cli`, `golden_all-cpes-npm` |
 | `scan --license-fallback` | preview | 1.0.0 | `license_enrichment`, `license_fallback_timeout_cli` |
 | `scan --config` / `scan --no-config` (`bomwerk.toml`) | preview | 1.0.0 | `scan_config`, `golden_repo-config` |
+| `scan --fingerprint-index` (identify vendored C/C++ by file hash against a corpus you supply) | preview | 1.0.0 | `fingerprint`, `scan_fingerprint`, `sha256`, `golden_nightmare-corpus-fingerprint` |
+
+`--fingerprint-index` needs a corpus index, and bomwerk does not ship one: the
+flag is useless on its own. Build one with
+`scripts/build_fingerprint_corpus.py`, which downloads pinned upstream releases
+and hashes them, or obtain one. There is no default path, so a plain `scan`
+behaves exactly as it did before this option existed. The matcher reads that
+one local file and opens no socket, so `--endpoints` is unchanged and
+`--offline` makes no difference to it.
 
 ## Planned
 

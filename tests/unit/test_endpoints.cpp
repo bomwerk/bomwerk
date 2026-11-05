@@ -100,5 +100,24 @@ int main()
     BOMWERK_TEST_CHECK(!vuln::is_allowlisted_feed_url("api.osv.dev/v1/query"));
   }
 
+  // Given the fingerprint corpus matcher, when the allowlist is consulted, then
+  // nothing in it serves a corpus: the index is a local file an operator
+  // supplies, so `scan --fingerprint-index` opens no socket, `--endpoints` is
+  // unchanged by it, and `--offline` makes no difference to it. A future "just
+  // fetch the index for them" shortcut would have to add a row here, which is
+  // the review rule this file exists to enforce, and it would have to delete
+  // this block to do it quietly.
+  {
+    for (const vuln::FeedEndpoint& endpoint : vuln::kFeedEndpoints)
+    {
+      const std::string_view url(endpoint.url);
+      const std::string_view purpose(endpoint.purpose);
+      BOMWERK_TEST_CHECK(url.find("fingerprint") == std::string_view::npos);
+      BOMWERK_TEST_CHECK(url.find("corpus") == std::string_view::npos);
+      BOMWERK_TEST_CHECK(purpose.find("fingerprint") == std::string_view::npos);
+      BOMWERK_TEST_CHECK(purpose.find("corpus") == std::string_view::npos);
+    }
+  }
+
   return 0;
 }

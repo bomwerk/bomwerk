@@ -101,6 +101,10 @@ endif()
 find_package(CURL CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
+# xxhash is the fast half of the two-pass content hash (ADR A8): a cheap,
+# non-cryptographic probe that decides which files are worth a real SHA-256.
+# PRIVATE to bomwerk_core below, because no public header names an xxhash type.
+find_package(xxHash CONFIG REQUIRED)
 
 add_library(bomwerk_core
   src/core/base64.cpp
@@ -122,6 +126,7 @@ add_library(bomwerk_core
   src/core/percent.cpp
   src/core/purl.cpp
   src/core/scan_config.cpp
+  src/core/sha256.cpp
   src/core/submodule_paths.cpp
   src/core/text.cpp
   src/core/timestamp.cpp
@@ -134,7 +139,7 @@ target_include_directories(bomwerk_core PUBLIC src)
 # PRIVATE (only scan_config.cpp parses TOML in core); the exceptions caveat on
 # the bomwerk_parsers target below applies here identically.
 target_link_libraries(bomwerk_core PUBLIC spdlog::spdlog
-                                   PRIVATE tomlplusplus::tomlplusplus)
+                                   PRIVATE tomlplusplus::tomlplusplus xxHash::xxhash)
 
 # Producers (parsers|heuristics|observe|binscan). Linking only bomwerk_core
 # enforces the dependency direction in the build, not just in review: a parser
@@ -179,8 +184,14 @@ target_link_libraries(bomwerk_parsers
 # git-dir/git-config/git-url primitives from core rather than
 # parsers/cpp/submodules.cpp.
 add_library(bomwerk_heuristics
+  src/heuristics/fingerprint.cpp
+  src/heuristics/vendor_root.cpp
   src/heuristics/vendored_cpp.cpp)
-target_link_libraries(bomwerk_heuristics PUBLIC bomwerk_core)
+# nlohmann_json is PRIVATE: the fingerprint corpus index is a JSON document, but
+# no header here names a JSON type, the same arrangement bomwerk_parsers and
+# bomwerk_binscan already have.
+target_link_libraries(bomwerk_heuristics PUBLIC bomwerk_core
+                                         PRIVATE nlohmann_json::nlohmann_json)
 
 # Producers (parsers|heuristics|observe|binscan): the build observer.
 # Deliberately split in two, and the split is the design:
@@ -295,6 +306,7 @@ set(bomwerk_cli_common_sources
   src/cli/observe_command.cpp
   src/cli/observe_trim.cpp
   src/cli/scan_command.cpp
+  src/cli/scan_fingerprint.cpp
   src/cli/trim_command.cpp)
 
 set(bomwerk_cli_libraries
@@ -336,7 +348,7 @@ endif()
 # Core-only tests link just bomwerk_core (the default).
 foreach(bomwerk_test_name IN ITEMS model manifest_names sbom_format exclusions name_list percent
                                   purl match_coverage text file_io file_index manifest_walk timestamp
-                                  uuid base64 build_variables xml_scan
+                                  uuid base64 build_variables xml_scan sha256
                                   cvss git_config git_dir git_url scan_config unparsed_manifests
                                   yaml_subset warning_code warning_console_format)
   bomwerk_add_test(${bomwerk_test_name})
@@ -464,6 +476,11 @@ bomwerk_add_test(purl_emission bomwerk_parsers bomwerk_heuristics)
 # but the test is allowed to see both).
 bomwerk_add_test(vendored_cpp bomwerk_heuristics bomwerk_output)
 
+# The content-hash corpus matcher. Links nlohmann_json because the test builds
+# index documents as JSON rather than as hand-broken strings: a loader guard is
+# only proved by input a real serializer could produce.
+bomwerk_add_test(fingerprint bomwerk_heuristics nlohmann_json::nlohmann_json)
+
 # Output-writer tests additionally link bomwerk_output + nlohmann_json (the
 # test itself re-parses the writer's JSON string to assert on structure).
 bomwerk_add_test(coverage_report bomwerk_output nlohmann_json::nlohmann_json)
@@ -504,6 +521,7 @@ add_executable(test_all_cpes_cli
   src/cli/app.cpp
   src/cli/observe_trim.cpp
   src/cli/scan_command.cpp
+  src/cli/scan_fingerprint.cpp
   src/cli/trim_command.cpp
   src/cli/binscan_command.cpp)
 target_link_libraries(test_all_cpes_cli PRIVATE ${bomwerk_cli_libraries})
@@ -517,10 +535,23 @@ add_executable(test_fail_on_cli
   tests/unit/test_fail_on_cli.cpp
   src/cli/app.cpp
   src/cli/observe_trim.cpp
-  src/cli/scan_command.cpp)
+  src/cli/scan_command.cpp
+  src/cli/scan_fingerprint.cpp)
 target_link_libraries(test_fail_on_cli PRIVATE ${bomwerk_cli_libraries})
 target_include_directories(test_fail_on_cli PRIVATE tests)
 add_test(NAME fail_on_cli COMMAND test_fail_on_cli)
+
+# The fingerprint reconciler's identity rules: which component shape a corpus
+# match may rewrite, and that it never overwrites another producer's version.
+# Needs only its own command source, not scan_command.cpp: it calls
+# apply_fingerprint_matches directly rather than running a scan, and the
+# pre-merge ordering it depends on is asserted through core::merge_all itself.
+add_executable(test_scan_fingerprint
+  tests/unit/test_scan_fingerprint.cpp
+  src/cli/scan_fingerprint.cpp)
+target_link_libraries(test_scan_fingerprint PRIVATE ${bomwerk_cli_libraries})
+target_include_directories(test_scan_fingerprint PRIVATE tests)
+add_test(NAME scan_fingerprint COMMAND test_scan_fingerprint)
 
 # --license-fallback-timeout/--license-cache-max-age CLI wiring, plus the exit-code
 # regression guard for a timed-out (but complete) enrichment pass. Same precedent as
@@ -531,7 +562,8 @@ add_executable(test_license_fallback_timeout_cli
   tests/unit/test_license_fallback_timeout_cli.cpp
   src/cli/app.cpp
   src/cli/observe_trim.cpp
-  src/cli/scan_command.cpp)
+  src/cli/scan_command.cpp
+  src/cli/scan_fingerprint.cpp)
 target_link_libraries(test_license_fallback_timeout_cli PRIVATE ${bomwerk_cli_libraries})
 target_include_directories(test_license_fallback_timeout_cli PRIVATE tests)
 add_test(NAME license_fallback_timeout_cli COMMAND test_license_fallback_timeout_cli)
@@ -586,6 +618,14 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME version_sync
     COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_version_sync.py)
+
+  # The fingerprint corpus manifest's shape, and the builder's agreement with the
+  # matcher about which files count as evidence (two constants duplicated across
+  # C++ and Python). Network-free: re-resolving each pinned ref against its
+  # remote is build_fingerprint_corpus.py --resolve, which runs on a schedule.
+  add_test(NAME fingerprint_corpus_manifest
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/validate_fingerprint_corpus.py)
 
   add_test(NAME cyclonedx_schema_validation
     COMMAND ${Python3_EXECUTABLE}

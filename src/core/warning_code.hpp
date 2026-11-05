@@ -97,6 +97,17 @@ enum class WarningCode
                            ///< partial for this run (static/relocatable artifacts, artifacts
                            ///< outside the scan root, unrecognized formats, ...)
 
+  // --- fingerprint (the content-hash corpus matcher) ------------------------------------
+  kFingerprintIndexUnreadable,         ///< absent, oversized, not JSON, or too deeply nested
+  kFingerprintIndexSchemaUnsupported,  ///< a schema_version this build does not understand
+  kFingerprintIndexEntrySkipped,       ///< malformed library/release/digest entries, with a count
+  kFingerprintVersionDisagreement,     ///< the corpus and a manifest/header name different
+                                       ///< versions for the same vendored directory
+  kFingerprintMatchWithoutComponent,   ///< a matched vendor root no producer emitted a
+                                       ///< component for, so there was nothing to enrich
+  kFingerprintFileBudgetReached,       ///< hashing stopped at the per-scan file budget, so later
+                                       ///< vendor roots were not matched
+
   // --- sbom readers (the inverse of output's writers) ------------------------------------
   kSbomDocumentInvalid,  ///< not JSON, no components array, unreadable, oversized
   kSbomWrongFormat,      ///< SPDX where CycloneDX was expected, or unrecognized entirely

@@ -70,6 +70,16 @@ struct ScanOptions
                                                   ///< scanned per producer (CLI-only, no
                                                   ///< bomwerk.toml counterpart)
   std::filesystem::path conan_graph_path;         ///< empty => no --conan-graph ingestion
+  std::filesystem::path fingerprint_index_path;   ///< --fingerprint-index: a pinned corpus of
+                                                  ///< upstream file hashes. Empty by default, so
+                                                  ///< the feature is off unless an operator names
+                                                  ///< an index: a default path INSIDE the tree
+                                                  ///< would let the repo under audit rewrite its
+                                                  ///< own identities, and one OUTSIDE it would
+                                                  ///< make a plain scan's bytes depend on a
+                                                  ///< machine-local file (rule 3). CLI-only and
+                                                  ///< deliberately not bomwerk.toml-configurable,
+                                                  ///< same reasoning as --vuln/--offline/--fail-on.
   core::ReleaseMeta release_meta;  ///< --product/--product-version; empty product_id => omitted
   bool vuln_enabled = true;        ///< --vuln/--no-vuln: OSV match on/off
   bool offline = false;            ///< --offline: network enrichments use cache only
