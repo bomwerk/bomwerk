@@ -1,0 +1,4 @@
+manifest:
+	projects:
+		- name: tabbed
+		  url: https://github.com/acme/tabbed

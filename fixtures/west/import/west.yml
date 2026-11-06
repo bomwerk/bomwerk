@@ -1,0 +1,21 @@
+# An application manifest importing zephyr: zephyr itself is a component,
+# the projects its own west.yml pulls in are not followed.
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.5.0
+      import:
+        name-allowlist:
+          - cmsis
+          - hal_nordic
+    - name: not-imported
+      remote: zephyrproject-rtos
+      revision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      import: false
+  self:
+    path: app
+    import: submanifests

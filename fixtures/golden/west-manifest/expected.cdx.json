@@ -1,0 +1,128 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "a1bdd640-2ffc-5635-b61f-7f4edeb92ade",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "modules/hal/vendor"
+          }
+        ]
+      },
+      "name": "hal_vendor",
+      "purl": "pkg:generic/hal_vendor@0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c?vcs_url=git%2Bhttps%3A%2F%2Fgit.example.com%2Ffirmware%2Fhal_vendor",
+      "supplier": {
+        "name": "firmware"
+      },
+      "type": "library",
+      "version": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+    },
+    {
+      "bom-ref": "1b49bc08-74a8-5c69-91a0-9805624f2607",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "bootloader/mcuboot"
+          }
+        ]
+      },
+      "name": "mcuboot",
+      "purl": "pkg:github/mcu-tools/mcuboot@2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e",
+      "supplier": {
+        "name": "mcu-tools"
+      },
+      "type": "library",
+      "version": "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e"
+    },
+    {
+      "bom-ref": "47d9d833-10c7-5665-83ef-b5611263df8c",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "modules/hal/cmsis_6"
+          }
+        ]
+      },
+      "name": "cmsis_6",
+      "purl": "pkg:github/zephyrproject-rtos/cmsis_6@1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+      "supplier": {
+        "name": "zephyrproject-rtos"
+      },
+      "type": "library",
+      "version": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
+    },
+    {
+      "bom-ref": "a161118e-6a6a-57e5-a3ee-150f7faf658d",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "zephyr"
+          }
+        ]
+      },
+      "name": "zephyr",
+      "purl": "pkg:github/zephyrproject-rtos/zephyr@v4.5.0",
+      "supplier": {
+        "name": "zephyrproject-rtos"
+      },
+      "type": "library",
+      "version": "v4.5.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "a1bdd640-2ffc-5635-b61f-7f4edeb92ade"
+    },
+    {
+      "ref": "1b49bc08-74a8-5c69-91a0-9805624f2607"
+    },
+    {
+      "ref": "47d9d833-10c7-5665-83ef-b5611263df8c"
+    },
+    {
+      "ref": "a161118e-6a6a-57e5-a3ee-150f7faf658d"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:7aaa5306-0266-54a7-a70c-c3bc18bfc75d",
+  "specVersion": "1.6",
+  "version": 1
+}

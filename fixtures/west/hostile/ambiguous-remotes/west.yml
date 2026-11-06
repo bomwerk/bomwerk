@@ -1,0 +1,12 @@
+manifest:
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+    - name: babblesim
+      url-base: https://github.com/BabbleSim
+  projects:
+    - name: which-one
+      revision: 3333333333333333333333333333333333333333
+    - name: base
+      remote: babblesim
+      revision: 4444444444444444444444444444444444444444

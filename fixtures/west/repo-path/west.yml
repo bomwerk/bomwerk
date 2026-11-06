@@ -1,0 +1,11 @@
+# No defaults.remote: the single remote is used. repo-path renames the
+# repository while the west project name stays the component name.
+manifest:
+  remotes:
+    - name: babblesim
+      url-base: https://github.com/BabbleSim
+  projects:
+    - name: babblesim_base
+      repo-path: base
+      path: tools/bsim/components
+      revision: 68baf150660213d67c29acb14bf9fccecf4612eb

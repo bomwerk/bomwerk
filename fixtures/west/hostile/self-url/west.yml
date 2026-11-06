@@ -1,0 +1,6 @@
+manifest:
+  self:
+    path: app
+    url: https://github.com/acme/app
+    revision: 7777777777777777777777777777777777777777
+  projects: []

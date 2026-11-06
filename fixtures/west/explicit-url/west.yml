@@ -1,0 +1,19 @@
+# An explicit url wins over the project's remote, and a host other than a
+# known forge becomes pkg:generic. The url-base carries a trailing slash.
+manifest:
+  defaults:
+    remote: upstream
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos/
+  projects:
+    - name: mcuboot
+      remote: upstream
+      url: https://github.com/mcu-tools/mcuboot
+      revision: v2.1.0
+      path: bootloader/mcuboot
+    - name: vendor-hal
+      url: https://git.example.com/firmware/vendor-hal.git
+      revision: 2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e
+    - name: zephyr
+      revision: main

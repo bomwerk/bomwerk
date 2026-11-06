@@ -90,6 +90,10 @@ int main()
   assert(default_manifest_names().contains("pnpm-lock.yaml"));
   assert(default_manifest_names().contains("pubspec.lock"));
 
+  // …and Zephyr's west manifest, under both spellings west itself accepts.
+  assert(default_manifest_names().contains("west.yml"));
+  assert(default_manifest_names().contains("west.yaml"));
+
   // A list file: comments and blank lines skipped, whitespace trimmed, duplicates collapsed.
   const fs::path list_path = fs::temp_directory_path() / "bomwerk_test_manifest_names.txt";
   {

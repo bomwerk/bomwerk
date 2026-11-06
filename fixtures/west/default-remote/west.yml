@@ -1,0 +1,22 @@
+# Every project resolves through defaults.remote; one has no revision of its
+# own and falls back to defaults.revision.
+manifest:
+  defaults:
+    remote: upstream
+    revision: 0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c
+
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+
+  group-filter: [-optional]
+
+  projects:
+    - name: cmsis
+      revision: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+      path: modules/hal/cmsis
+      groups:
+        - hal
+    - name: hal_nordic
+      path: modules/hal/nordic
+      groups: [hal]

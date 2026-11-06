@@ -197,7 +197,8 @@ const std::set<std::string>& default_manifest_names()
       "poetry.lock",       "gradle.lockfile", "packages.lock.json",
       "composer.lock",     "composer.json",   "Gemfile.lock",
       "yarn.lock",         "pnpm-lock.yaml",  "pubspec.lock",
-      "packages.config",   ".csproj",         "Directory.Packages.props"};
+      "packages.config",   ".csproj",         "Directory.Packages.props",
+      "west.yml",          "west.yaml"};
   return kDefaultNames;
 }
 

@@ -1,0 +1,10 @@
+manifest:
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    - name: first
+      revision: 8888888888888888888888888888888888888888
+    - {name: flowed, revision: 9999999999999999999999999999999999999999}
+    - name: last
+      revision: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
