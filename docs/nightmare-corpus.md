@@ -18,7 +18,7 @@ matches upstream:
 | Unused library | stb, referenced by no target in either build | `pkg:generic/stb`, Low; `trim`: UNUSED in both configurations |
 | `#ifdef` variants | presets `config-a` / `config-b` | plain `scan` gives the same answer for both, and `observe` + `trim` give different used-sets |
 | Prebuilt static library, quoted version header | SQLite 3.41.2 as `sqlite3.h` + `libsqlite3.a` under `third_party/sqlite-prebuilt`, linked in `config-a` | `pkg:generic/sqlite3@3.41.2`, Medium, no license (public-domain blessing); `trim`: used (1 link input) in `config-a`, UNUSED in `config-b` |
-| Prebuilt static library, numeric version macros | cJSON 1.7.15 as `cJSON.h` + `libcjson.a` under `third_party/cjson-prebuilt`, linked in `config-a` | `pkg:generic/cjson-prebuilt`, Low, **no version, folder-derived name** (a scored miss); with `--fingerprint-index` the bytes of `cJSON.h` identify it as `pkg:generic/cjson@1.7.15`; `trim`: used (1 link input) in `config-a` |
+| Prebuilt static library, numeric version macros | cJSON 1.7.15 as `cJSON.h` + `libcjson.a` under `third_party/cjson-prebuilt`, linked in `config-a` | `pkg:generic/cjson@1.7.15`, Medium, version assembled from `CJSON_VERSION_MAJOR`, `_MINOR` and `_PATCH`; `trim`: used (1 link input) in `config-a` |
 | CMake `FetchContent` | tinyxml2 9.0.0 pinned by commit, fetched only with `-DNIGHTMARE_ENABLE_XML=ON` | `pkg:github/leethomason/tinyxml2@<commit>` |
 
 ## Which bomwerk tests lock which claim
@@ -37,9 +37,10 @@ red here before the public README goes stale:
   (`include/task.h` -> `tskKERNEL_VERSION_NUMBER`) that this corpus added, plus the
   negative case where an unrelated `task.h` must not claim FreeRTOS.
 - `golden_nightmare-corpus-fingerprint` pins what `--fingerprint-index` adds, on a
-  miniature of the one directory whose version no header states. Its corpus index is
-  built from the fixture's own bytes, so the wiring is proved without upstream
-  content entering this repository.
+  miniature of `cjson-prebuilt` whose `cJSON.h` has its version macros removed on
+  purpose, so no header can version it and only the content match can. Its corpus
+  index is built from the fixture's own bytes, so the wiring is proved without
+  upstream content entering this repository.
 
 The real build, the network-backed CVE lookups and the rival-tool numbers cannot be
 hermetic. They run in the public repo's own CI.
@@ -81,17 +82,23 @@ Published on purpose. A torture test whose author scores 5/5 is a brochure.
   show up as an intended diff.
 - **Dual licenses are flattened.** stb is *MIT **or** Unlicense*; the first-match
   license recognizer reports `MIT` only.
-- **A version split across several macros is not read.** cJSON writes its version only as
-  `CJSON_VERSION_MAJOR/MINOR/PATCH`, three numbers on three lines, so identity falls back
-  to the folder name, suffix included (`cjson-prebuilt`). The heuristic reads a version
-  from ONE macro on ONE line, either a quoted string (`ZLIB_VERSION "1.2.11"`) or a bare
-  dotted number (uthash's `UTHASH_VERSION 2.4.0`), and does not assemble one from parts.
-  A bare integer never qualifies: stb's `STBI_VERSION 1` is an API revision, not a
-  release, so stb stays unversioned, which is also what the answer key says.
+- **A version split across several macros is read only for listed libraries.** cJSON
+  writes its version as `CJSON_VERSION_MAJOR/MINOR/PATCH`, three integers on three
+  lines, and bomwerk assembles `1.7.15` from them, all or nothing: a missing,
+  duplicated, quoted or non-integer part gives no version at all, never a partial one.
+  This is a table of named libraries, not a pattern, because a MAJOR/MINOR pair is not
+  always the release: libsodium's `SODIUM_LIBRARY_VERSION_MAJOR` is its ABI version.
+  A library whose header splits its version and is not in the table still falls back
+  to its folder name. A single bare integer never qualifies either: stb's
+  `STBI_VERSION 1` is an API revision, not a release, so stb stays unversioned, which
+  is also what the answer key says.
 
-  cJSON is the case content matching answers rather than fixes: with
-  `--fingerprint-index`, the bytes of `cJSON.h` identify the release outright and the
-  component becomes `pkg:generic/cjson@1.7.15`, no version string parsed at all.
+  A bare or split version macro names the directory only when the folder carries the
+  library's name (`third_party/uthash`, `third_party/cjson-prebuilt`), so a library
+  that bundles someone else's header, such as libktx bundling `uthash.h`, keeps its
+  own name. The quoted-string rows (zlib, lz4, zstd and the rest) do not have this
+  check yet, so a library bundling a copy of `zlib.h` can still be reported as zlib.
+  Only a `#define` that starts its line counts; a commented-out one never does.
 - **License text without a known name is not recognized.** cJSON's MIT text never says
   "MIT License", and SQLite's public-domain blessing is not a license name; both come
   back with no license.
