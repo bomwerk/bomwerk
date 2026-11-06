@@ -763,10 +763,13 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     lockfile_scan_complete = false;
   }
 
-  // Producer: PHP lockfiles (composer.lock), falling back to
-  // composer.json's declared require/require-dev when no sibling lock exists
-  //: same shared file_index, never runs composer (rule 9).
+  // Producer: PHP lockfiles (composer.lock), falling back to the declared
+  // require/require-dev of a composer.json with no lock beside it, same
+  // shared file_index : never runs composer (rule 9).
   // packages-dev/require-dev entries arrive with CycloneDX scope "excluded".
+  // Fallback components are Medium and version-less (a declared range is not
+  // an identity); skipped php/ext-* platform requirements are counted and
+  // warned, so a manifest declaring any of them makes the run exit 1.
   core::Result<std::vector<core::Component>> composer_dependencies =
       parsers::lockfiles::composer::parse(
           file_index.value, options.root_directory,
