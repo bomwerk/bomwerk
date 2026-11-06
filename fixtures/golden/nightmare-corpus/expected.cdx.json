@@ -30,7 +30,8 @@
       "version": "1.3.1"
     },
     {
-      "bom-ref": "50e25f6a-c9b9-5157-a29c-a8b659614845",
+      "bom-ref": "511068d1-b946-57de-8127-609db1f01802",
+      "cpe": "cpe:2.3:a:*:cjson:1.7.15:*:*:*:*:*:*:*",
       "evidence": {
         "occurrences": [
           {
@@ -38,15 +39,16 @@
           }
         ]
       },
-      "name": "cjson-prebuilt",
+      "name": "cjson",
       "properties": [
         {
           "name": "bomwerk:match-coverage",
-          "value": "unversioned-purl"
+          "value": "unmapped-purl-type"
         }
       ],
-      "purl": "pkg:generic/cjson-prebuilt",
-      "type": "library"
+      "purl": "pkg:generic/cjson@1.7.15",
+      "type": "library",
+      "version": "1.7.15"
     },
     {
       "bom-ref": "603ab5ae-2f71-542b-9fb8-8ceefcde27b3",
@@ -279,7 +281,7 @@
       "ref": "9f59bc00-a066-5171-89b2-0b3bb2bdbbb9"
     },
     {
-      "ref": "50e25f6a-c9b9-5157-a29c-a8b659614845"
+      "ref": "511068d1-b946-57de-8127-609db1f01802"
     },
     {
       "ref": "603ab5ae-2f71-542b-9fb8-8ceefcde27b3"
@@ -340,7 +342,7 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "6"
+        "value": "7"
       },
       {
         "name": "bomwerk:coverage:unmatched",
@@ -348,7 +350,7 @@
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",
-        "value": "5"
+        "value": "4"
       }
     ],
     "timestamp": "2025-01-01T00:00:00Z",
@@ -362,7 +364,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:797c1d50-21d4-5221-ac96-36492da883c8",
+  "serialNumber": "urn:uuid:4f20ecbd-5cbc-5077-8d82-1df4e1a36eb3",
   "specVersion": "1.6",
   "version": 1
 }

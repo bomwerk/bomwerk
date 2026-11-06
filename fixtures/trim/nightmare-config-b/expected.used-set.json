@@ -29,7 +29,7 @@
   "used": 1,
   "not_judged": 1,
   "verdicts": {
-    "pkg:generic/cjson-prebuilt": "UNUSED",
+    "pkg:generic/cjson@1.7.15": "UNUSED",
     "pkg:generic/freertos@V11.1.0": "used",
     "pkg:generic/sqlite3@3.41.2": "UNUSED",
     "pkg:generic/stb": "UNUSED",
@@ -47,14 +47,14 @@
   "unused_report": {
     "count": 5,
     "trim_identities": [
-      "pkg:generic/cjson-prebuilt",
+      "pkg:generic/cjson@1.7.15",
       "pkg:generic/sqlite3@3.41.2",
       "pkg:generic/stb",
       "pkg:generic/uthash",
       "pkg:generic/zlib@1.2.11"
     ],
     "scan_identities": [
-      "pkg:generic/cjson-prebuilt",
+      "pkg:generic/cjson@1.7.15",
       "pkg:generic/sqlite3@3.41.2",
       "pkg:generic/stb",
       "pkg:generic/uthash",

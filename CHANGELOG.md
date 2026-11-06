@@ -15,8 +15,8 @@ contained the paid extension's source.
 ### Added
 - `scan --fingerprint-index <path>` identifies vendored C/C++ libraries by the
   content of their files instead of by a version header, against a corpus of
-  pinned upstream releases. A match fills in a version no header states (cJSON
-  writes its version only as numeric macros) and reports how many files agree,
+  pinned upstream releases. A match fills in a version no header states and
+  reports how many files agree,
   so a copy that differs from upstream in one file says so instead of passing
   as pristine. Evidence appears as a `bomwerk:fingerprint` CycloneDX property,
   and a version another producer already resolved is never overwritten: a
@@ -28,7 +28,18 @@ contained the paid extension's source.
 - The vendored-source heuristic reads a version written as a bare dotted number,
   not only a quoted string, so uthash (`#define UTHASH_VERSION 2.4.0`) is reported
   as `pkg:generic/uthash@2.4.0` instead of by its folder name. A bare integer
-  never qualifies, and neither does a version split across several macros.
+  never qualifies.
+- The vendored-source heuristic assembles a version split across MAJOR, MINOR
+  and PATCH macros for the libraries listed for it, starting with cJSON, so
+  nightmare's `third_party/cjson-prebuilt` is reported as
+  `pkg:generic/cjson@1.7.15` at Medium instead of by its folder name. All three
+  parts must be single, bare, non-negative integers or no version is reported
+  at all, never a partial one; the rows are opt-in because a MAJOR/MINOR pair is
+  not always the release (libsodium's is its ABI version). A bare or split
+  version macro now names a vendored directory only when the folder carries the
+  library's name, so a library that bundles `uthash.h` (godot's
+  `thirdparty/libktx`) keeps its own name instead of becoming `uthash@1.9.1`,
+  and a header cut off by the read cap no longer yields a truncated value (T109).
 - Initial public release of bomwerk Community, the Apache-2.0 scanner:
   - `scan` reads git submodules, CMake `FetchContent`/CPM, `conanfile.txt`,
     `conan.lock`, `vcpkg.json`, `package-lock.json`, `pnpm-lock.yaml`,

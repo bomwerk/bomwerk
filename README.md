@@ -97,13 +97,13 @@ scanned:         17 files under /home/you/project
 submodules:      1 subtree(s) skipped, each submodule is one pinned component (--include-submodule-contents to scan their contents)
 components:      17
   - pkg:conan/libcurl@8.5.0  [medium]
-  - pkg:generic/cjson-prebuilt  [low]  third_party/cjson-prebuilt
+  - pkg:generic/cjson@1.7.15  [medium]  third_party/cjson-prebuilt
   - pkg:generic/zlib@1.2.11  [medium]  third_party/zlib
   - pkg:github/actions/checkout@0f1e2d3c4b5a...  [high]
   - pkg:npm/debug@4.3.4  [high]
   - pkg:vcpkg/nlohmann-json@3.11.3  [high]
   ...
-coverage:        17 components, 6 matchable (35.3%), 11 unmatched: 4 unmapped-purl-type, 2 unversioned-purl, 5 no-identifier
+coverage:        17 components, 6 matchable (35.3%), 11 unmatched: 5 unmapped-purl-type, 1 unversioned-purl, 5 no-identifier
 manifests:       5
 output:          sbom.cdx.json (format=cyclonedx)
 ```

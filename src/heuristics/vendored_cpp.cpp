@@ -151,9 +151,32 @@ constexpr VersionHeaderSignature kVersionHeaderSignatures[] = {
 // and reading that as a version would assert a release that does not exist.
 // Requiring a dot is also what keeps a separate-macros library such as cJSON
 // (`CJSON_VERSION_MAJOR 1`, `_MINOR 7`, `_PATCH 15`) out of here: those are three
-// numbers on three lines, which this form deliberately does not try to assemble.
+// numbers on three lines, read only through the split table below.
 constexpr VersionHeaderSignature kBareDottedVersionSignatures[] = {
     {"uthash", "uthash.h", "UTHASH_VERSION"},
+};
+
+/// A library whose header writes its release as three separate integer macros.
+struct SplitVersionSignature
+{
+  std::string_view canonical_name;
+  std::string_view header_filename;
+  std::string_view major_macro;
+  std::string_view minor_macro;
+  std::string_view patch_macro;
+};
+
+// Libraries whose header splits the release across MAJOR, MINOR and PATCH
+// macros, one bare integer per line. Every row is opt-in and checked against
+// upstream before it is added, because a MAJOR/MINOR pair is not always the
+// release: libsodium's `SODIUM_LIBRARY_VERSION_MAJOR` is the ABI version, and
+// assembling it would assert a release that does not exist. That is why this
+// is a table of named libraries and not a pattern over any `*_VERSION_MAJOR`.
+//
+// cJSON: upstream's cJSON.h sets the three macros to the release tag's numbers
+// (tag v1.7.15 ships MAJOR 1, MINOR 7, PATCH 15).
+constexpr SplitVersionSignature kSplitVersionSignatures[] = {
+    {"cjson", "cJSON.h", "CJSON_VERSION_MAJOR", "CJSON_VERSION_MINOR", "CJSON_VERSION_PATCH"},
 };
 
 /// Cap on a bare dotted value's length. A version is a handful of characters;
@@ -161,14 +184,44 @@ constexpr VersionHeaderSignature kBareDottedVersionSignatures[] = {
 /// reaches a purl.
 constexpr std::size_t kMaxBareVersionChars = 64u;
 
+/// Cap on one integer part of a split version. Nine digits fit any real
+/// release number and can never overflow anything downstream.
+constexpr std::size_t kMaxVersionPartDigits = 9u;
+
 struct VersionMatch
 {
   std::string canonical_name;
   std::string version;
   fs::path relative_path;  ///< root-relative path of the matched header
-  std::string version_macro;
-  MacroValueForm form;  ///< how the header wrote the value, so evidence can quote it faithfully
+  /// The macro line(s) as the header wrote them, for the evidence entry. A bare
+  /// `2.4.0` is not shown as `"2.4.0"`: evidence that misquotes the file is
+  /// worse than none.
+  std::string quoted_lines;
 };
+
+/// True when the character right after a bare value ends it cleanly:
+/// whitespace, a CR (CRLF line endings), or the start of a `//` or `/*`
+/// comment. Anything else (`15u`, `2.4.0abc`, `15/2`, a `\` continuation)
+/// means the token is not the plain number it looked like.
+bool bare_value_ends_cleanly(const std::string& content, std::size_t token_end,
+                             std::size_t line_end)
+{
+  if (token_end >= line_end)
+  {
+    return true;
+  }
+  const char terminator = content[token_end];
+  if (terminator == ' ' || terminator == '\t' || terminator == '\r')
+  {
+    return true;
+  }
+  if (terminator == '/' && token_end + 1 < line_end)
+  {
+    const char next = content[token_end + 1];
+    return next == '/' || next == '*';
+  }
+  return false;
+}
 
 /// The value of a bare dotted `#define`, read from `value_start` to the end of
 /// its line: `2.4.0` from `#define UTHASH_VERSION 2.4.0`. `nullopt` unless the
@@ -212,31 +265,82 @@ std::optional<std::string> read_bare_dotted_value(const std::string& content,
   {
     return std::nullopt;
   }
-  if (token_end < line_end)
+  if (!bare_value_ends_cleanly(content, token_end, line_end))
   {
-    const char terminator = content[token_end];
-    const bool ends_cleanly =
-        terminator == ' ' || terminator == '\t' || terminator == '\r' || terminator == '/';
-    if (!ends_cleanly)
-    {
-      return std::nullopt;
-    }
+    return std::nullopt;
   }
   return content.substr(value_start, token_length);
 }
 
-/// Find `#define <macro_name> <value>` in `content` and return `<value>`, read
-/// in the given `form`: a quoted string (`"1.2.11"`) or a bare dotted number
-/// (`2.4.0`). Bounded to the same source line as the macro name (a hostile file
-/// cannot make this scan past its own line, let alone past `content`'s own size
-/// cap). Each candidate occurrence is checked in turn: a macro name that is
-/// only a prefix of a longer identifier (e.g. `ZLIB_VERSION_H` when searching
-/// for `ZLIB_VERSION`), or isn't a `#define` of the requested form on its line,
-/// does not end the search: an unrelated earlier occurrence must never hide a
-/// real one later in the same file. `nullopt` only once every occurrence has
-/// been tried and none matched.
-std::optional<std::string> extract_macro_value(const std::string& content,
-                                               std::string_view macro_name, MacroValueForm form)
+/// The value of a bare integer `#define`, one part of a split version: `15`
+/// from `#define CJSON_VERSION_PATCH 15`. `nullopt` unless the value is digits
+/// only, at most `kMaxVersionPartDigits` of them, without a leading zero (`07`
+/// is octal in C, and no release writes its parts that way), and ends cleanly
+/// (see `bare_value_ends_cleanly`). `-1`, `7.0`, `15u` and `"7"` are all
+/// rejected, never trimmed down to a number.
+std::optional<std::string> read_bare_integer_value(const std::string& content,
+                                                   std::size_t value_start, std::size_t line_end)
+{
+  std::size_t token_end = value_start;
+  while (token_end < line_end && content[token_end] >= '0' && content[token_end] <= '9')
+  {
+    ++token_end;
+  }
+  const std::size_t token_length = token_end - value_start;
+  if (token_length == 0 || token_length > kMaxVersionPartDigits)
+  {
+    return std::nullopt;
+  }
+  if (token_length > 1 && content[value_start] == '0')
+  {
+    return std::nullopt;
+  }
+  if (!bare_value_ends_cleanly(content, token_end, line_end))
+  {
+    return std::nullopt;
+  }
+  return content.substr(value_start, token_length);
+}
+
+/// The value of a quoted-string `#define`: `1.2.11` from `"1.2.11"`. `nullopt`
+/// unless the value opens with a quote that closes on the same line.
+std::optional<std::string> read_quoted_value(const std::string& content, std::size_t value_start,
+                                             std::size_t line_end)
+{
+  if (value_start >= line_end || content[value_start] != '"')
+  {
+    return std::nullopt;
+  }
+  const std::size_t closing_quote = content.find('"', value_start + 1);
+  if (closing_quote == std::string::npos || closing_quote >= line_end)
+  {
+    return std::nullopt;  // unterminated within the line
+  }
+  return content.substr(value_start + 1, closing_quote - value_start - 1);
+}
+
+std::optional<std::string> read_macro_value(const std::string& content, std::size_t value_start,
+                                            std::size_t line_end, MacroValueForm form)
+{
+  switch (form)
+  {
+    case MacroValueForm::QuotedString:
+      return read_quoted_value(content, value_start, line_end);
+    case MacroValueForm::BareDotted:
+      return read_bare_dotted_value(content, value_start, line_end);
+  }
+  return std::nullopt;
+}
+
+/// Visit every `#define <macro_name>` in `content` whose name is the whole
+/// identifier: a macro name that is only a prefix of a longer one (e.g.
+/// `ZLIB_VERSION_H` when searching for `ZLIB_VERSION`) is skipped. A mention in
+/// a comment without `#define` in front never matches at all. `visit` gets the
+/// offset of the value (past the whitespace after the name) and the end of
+/// that source line, so no reader can scan past its own line, and returns
+/// true to stop the walk.
+template <typename Visitor>
+void for_each_define(const std::string& content, std::string_view macro_name, Visitor&& visit)
 {
   const std::string needle = "#define " + std::string(macro_name);
   std::size_t search_from = 0;
@@ -245,11 +349,24 @@ std::optional<std::string> extract_macro_value(const std::string& content,
     const std::size_t position = content.find(needle, search_from);
     if (position == std::string::npos)
     {
-      return std::nullopt;
+      return;
     }
     // However this occurrence turns out, the next search starts right after
     // it: never past a later, possibly-real occurrence of the same needle.
     search_from = position + 1;
+
+    // Only a real directive: nothing but blanks may precede `#define` on its
+    // line. A commented-out `// #define X 1` or `/* #define X 1 */` is not a
+    // definition and must never supply (or duplicate) a version part.
+    std::size_t line_start = position;
+    while (line_start > 0 && (content[line_start - 1] == ' ' || content[line_start - 1] == '\t'))
+    {
+      --line_start;
+    }
+    if (line_start > 0 && content[line_start - 1] != '\n')
+    {
+      continue;
+    }
 
     std::size_t cursor = position + needle.size();
     if (cursor < content.size() &&
@@ -265,28 +382,126 @@ std::optional<std::string> extract_macro_value(const std::string& content,
     {
       ++cursor;
     }
-    if (form == MacroValueForm::BareDotted)
+    if (visit(cursor, search_end))
     {
-      std::optional<std::string> bare_value = read_bare_dotted_value(content, cursor, search_end);
-      if (bare_value.has_value())
-      {
-        return bare_value;
-      }
-      continue;  // not a bare dotted number on this line: try the next occurrence
+      return;
     }
-    if (cursor >= search_end || content[cursor] != '"')
-    {
-      continue;  // not a quoted-string macro (or the read was truncated mid-line)
-    }
-    const std::size_t value_start = cursor + 1;
-    const std::size_t closing_quote = content.find('"', value_start);
-    if (closing_quote == std::string::npos || closing_quote >= search_end)
-    {
-      continue;  // unterminated within the line
-    }
-    return content.substr(value_start, closing_quote - value_start);
   }
-  return std::nullopt;
+}
+
+/// Find `#define <macro_name> <value>` in `content` and return `<value>`, read
+/// in the given `form`. Each candidate occurrence is checked in turn: one that
+/// isn't a `#define` of the requested form on its line does not end the
+/// search, since an unrelated earlier occurrence must never hide a real one
+/// later in the same file. `nullopt` only once every occurrence has been tried
+/// and none matched.
+std::optional<std::string> extract_macro_value(const std::string& content,
+                                               std::string_view macro_name, MacroValueForm form)
+{
+  std::optional<std::string> value;
+  for_each_define(content, macro_name,
+                  [&](std::size_t value_start, std::size_t line_end)
+                  {
+                    value = read_macro_value(content, value_start, line_end, form);
+                    return value.has_value();
+                  });
+  return value;
+}
+
+/// The value of `macro_name` as a bare integer, but only when `content` holds
+/// exactly ONE `#define` of it and that one is a bare integer. A second
+/// definition (an `#if` branch, a stray copy) makes the part ambiguous, and
+/// picking either would be a guess, so it yields nothing. This is stricter
+/// than `extract_macro_value` on purpose: a split version is assembled from
+/// three of these, and one wrong part is a wrong version.
+std::optional<std::string> extract_sole_integer(const std::string& content,
+                                                std::string_view macro_name)
+{
+  std::optional<std::string> value;
+  std::size_t definitions = 0;
+  for_each_define(content, macro_name,
+                  [&](std::size_t value_start, std::size_t line_end)
+                  {
+                    ++definitions;
+                    value = read_bare_integer_value(content, value_start, line_end);
+                    return definitions > 1;  // a second definition already decides it
+                  });
+  if (definitions != 1)
+  {
+    return std::nullopt;
+  }
+  return value;
+}
+
+/// `MAJOR.MINOR.PATCH` from a split-version signature's three macros, all or
+/// nothing: any part missing, duplicated, quoted or not a plain integer gives
+/// `nullopt`, never a partial version such as `1.7`. Each macro is searched
+/// over the whole read, so the order the header writes them in does not matter.
+std::optional<VersionMatch> read_split_version(const std::string& content,
+                                               const SplitVersionSignature& signature,
+                                               const fs::path& relative_file)
+{
+  const std::string_view part_macros[] = {signature.major_macro, signature.minor_macro,
+                                          signature.patch_macro};
+  std::string version;
+  std::string quoted_lines;
+  for (std::string_view macro : part_macros)
+  {
+    const std::optional<std::string> part = extract_sole_integer(content, macro);
+    if (!part.has_value())
+    {
+      return std::nullopt;
+    }
+    if (!version.empty())
+    {
+      version += '.';
+      quoted_lines += "; ";
+    }
+    version += *part;
+    quoted_lines += "#define " + std::string(macro) + " " + *part;
+  }
+  return VersionMatch{std::string(signature.canonical_name), version, relative_file, quoted_lines};
+}
+
+/// Lowercase letters and digits only, so names compare across spelling:
+/// `cjson-prebuilt` -> `cjsonprebuilt`, `cJSON` -> `cjson`.
+std::string identity_key(std::string_view text)
+{
+  std::string key;
+  key.reserve(text.size());
+  for (const char character : text)
+  {
+    const auto byte = static_cast<unsigned char>(character);
+    if (std::isalnum(byte) != 0)
+    {
+      key += static_cast<char>(std::tolower(byte));
+    }
+  }
+  return key;
+}
+
+/// True when the vendored folder's own name carries the library's name:
+/// `third_party/uthash` for uthash, `third_party/cjson-prebuilt` for cJSON.
+///
+/// The bare-dotted and split tables require this; the quoted table does not.
+/// A bare `#define UTHASH_VERSION 1.9.1` says which library a HEADER is, not
+/// which library the whole DIRECTORY is: godot's `thirdparty/libktx` bundles
+/// `lib/uthash.h`, and without this check the whole libktx directory was
+/// reported as `uthash@1.9.1` and libktx vanished from the SBOM. The quoted
+/// rows keep their old behaviour because their canonical name often does not
+/// appear in the folder name at all (sqlite3's header usually sits in a folder
+/// called `sqlite` or `sqlite-prebuilt`), and requiring it there would drop
+/// versions the scanner reads correctly today.
+///
+/// `folder_key` is `identity_key` of the folder name, computed once per vendor
+/// root by the caller. Canonical names in the tables are already lowercase
+/// alphanumerics, so they compare as written. Accepted spellings are those that
+/// contain the name once case and punctuation are ignored (`uthash`,
+/// `UTHash-2.4`, `ut_hash`, `cjson-prebuilt`); a folder named for something else
+/// (`libktx`, `hash`, `utils`) does not.
+bool folder_names_library(std::string_view folder_key, std::string_view canonical_name)
+{
+  return folder_key.find(canonical_name) != std::string_view::npos;
 }
 
 /// Try every signature against every candidate file (filtered by basename
@@ -296,19 +511,47 @@ std::optional<std::string> extract_macro_value(const std::string& content,
 /// signature and the next candidate is tried, rather than the first filename
 /// match winning regardless of content.
 std::optional<VersionMatch> find_version_header_match(const fs::path& root,
+                                                      const fs::path& vendor_root,
                                                       const std::vector<fs::path>& files,
                                                       const ParseLimits& limits)
 {
+  const std::string folder_key = identity_key(vendor_root.filename().string());
   for (const fs::path& relative_file : files)
   {
     const std::string basename = relative_file.filename().string();
     const std::string_view basename_view(basename);
 
-    // One pass over a table, reading each row's macro in that table's form. Both
-    // tables go through the same basename filter and the same bounded read, so
-    // a bare-dotted row can never read more of a file than a quoted one would.
-    const auto match_table = [&](std::span<const VersionHeaderSignature> table,
-                                 MacroValueForm form) -> std::optional<VersionMatch>
+    // Read lazily, once per file, and only when some row names this basename.
+    // Every table goes through this same bounded read, so no row can read more
+    // of a file than another. When the cap cut the file, the last line is
+    // dropped: a value cut mid-line (`15` read as `1`, `2.4.0` as `2.4`) would
+    // otherwise look complete and reach a purl.
+    std::optional<std::string> header_text;
+    bool header_read = false;
+    const auto read_header = [&]() -> const std::optional<std::string>&
+    {
+      if (!header_read)
+      {
+        header_read = true;
+        core::BoundedFileRead file_read =
+            core::read_file_bounded(root / relative_file, limits.max_header_bytes);
+        if (file_read.readable)
+        {
+          if (file_read.truncated)
+          {
+            const std::size_t last_newline = file_read.bytes.rfind('\n');
+            file_read.bytes.resize(last_newline == std::string::npos ? 0 : last_newline + 1);
+          }
+          header_text = std::move(file_read.bytes);
+        }
+      }
+      return header_text;
+    };
+
+    // One pass over a single-macro table, reading each row's macro in that
+    // table's form.
+    const auto match_table = [&](std::span<const VersionHeaderSignature> table, MacroValueForm form,
+                                 bool folder_must_name_library) -> std::optional<VersionMatch>
     {
       for (const VersionHeaderSignature& signature : table)
       {
@@ -316,32 +559,55 @@ std::optional<VersionMatch> find_version_header_match(const fs::path& root,
         {
           continue;
         }
-        const core::BoundedFileRead file_read =
-            core::read_file_bounded(root / relative_file, limits.max_header_bytes);
-        if (!file_read.readable)
+        if (folder_must_name_library && !folder_names_library(folder_key, signature.canonical_name))
+        {
+          continue;
+        }
+        const std::optional<std::string>& text = read_header();
+        if (!text.has_value())
         {
           continue;
         }
         const std::optional<std::string> version =
-            extract_macro_value(file_read.bytes, signature.version_macro, form);
+            extract_macro_value(*text, signature.version_macro, form);
         if (version.has_value())
         {
-          return VersionMatch{std::string(signature.canonical_name), *version, relative_file,
-                              std::string(signature.version_macro), form};
+          const std::string shown_value =
+              form == MacroValueForm::QuotedString ? "\"" + *version + "\"" : *version;
+          return VersionMatch{
+              std::string(signature.canonical_name), *version, relative_file,
+              "#define " + std::string(signature.version_macro) + " " + shown_value};
         }
       }
       return std::nullopt;
     };
 
     if (std::optional<VersionMatch> match =
-            match_table(kVersionHeaderSignatures, MacroValueForm::QuotedString))
+            match_table(kVersionHeaderSignatures, MacroValueForm::QuotedString, false))
     {
       return match;
     }
     if (std::optional<VersionMatch> match =
-            match_table(kBareDottedVersionSignatures, MacroValueForm::BareDotted))
+            match_table(kBareDottedVersionSignatures, MacroValueForm::BareDotted, true))
     {
       return match;
+    }
+    for (const SplitVersionSignature& signature : kSplitVersionSignatures)
+    {
+      if (basename_view != signature.header_filename ||
+          !folder_names_library(folder_key, signature.canonical_name))
+      {
+        continue;
+      }
+      const std::optional<std::string>& text = read_header();
+      if (!text.has_value())
+      {
+        continue;
+      }
+      if (std::optional<VersionMatch> match = read_split_version(*text, signature, relative_file))
+      {
+        return match;
+      }
     }
   }
   return std::nullopt;
@@ -527,7 +793,8 @@ core::Component build_component(const fs::path& root, const fs::path& vendor_roo
   component.root = vendor_root;
   const std::string folder_name = vendor_root.filename().string();
 
-  const std::optional<VersionMatch> version_match = find_version_header_match(root, files, limits);
+  const std::optional<VersionMatch> version_match =
+      find_version_header_match(root, vendor_root, files, limits);
   const std::optional<LicenseClue> license_clue = find_license_clue(root, files, limits);
   const std::optional<ReadmeClue> readme_clue = find_readme_clue(root, files, limits);
   const GitClue git_clue =
@@ -572,15 +839,10 @@ core::Component build_component(const fs::path& root, const fs::path& vendor_roo
        core::Confidence::Low});
   if (version_match.has_value())
   {
-    // Quoted exactly as the header wrote it: a bare `2.4.0` is not shown as
-    // `"2.4.0"`, since evidence that misquotes the file is worse than none.
-    const std::string quoted_value = version_match->form == MacroValueForm::QuotedString
-                                         ? "\"" + version_match->version + "\""
-                                         : version_match->version;
-    component.evidence.push_back({core::Source::Heuristic,
-                                  version_match->relative_path.string() + " -> #define " +
-                                      version_match->version_macro + " " + quoted_value,
-                                  core::Confidence::Medium});
+    component.evidence.push_back(
+        {core::Source::Heuristic,
+         version_match->relative_path.string() + " -> " + version_match->quoted_lines,
+         core::Confidence::Medium});
   }
   if (license_clue.has_value())
   {

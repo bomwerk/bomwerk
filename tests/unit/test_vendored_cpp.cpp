@@ -526,20 +526,212 @@ int main()
     BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/stb");
   }
 
-  // Given cJSON's header, three separate numeric macros, when parsed, then it
-  // stays unversioned: the bare form reads ONE dotted value on ONE line, and
-  // deliberately does not assemble a version from `_MAJOR`, `_MINOR` and
-  // `_PATCH`. Pinned so that gap stays a visible, documented limit rather than
-  // being half-fixed by accident.
+  // Given cJSON's header, which splits its release across three integer macros,
+  // when parsed, then the version is assembled as MAJOR.MINOR.PATCH, the name is
+  // the canonical `cjson` rather than the folder's `cjson-prebuilt`, and the
+  // evidence quotes all three lines as written. This is nightmare's
+  // `third_party/cjson-prebuilt`, whose answer key says `pkg:generic/cjson@1.7.15`.
+  // Line order is irrelevant: each macro is found over the whole read.
+  {
+    const std::vector<std::string> headers = {
+        "#ifndef cJSON__h\n"
+        "#define cJSON__h\n"
+        "/* project version */\n"
+        "#define CJSON_VERSION_MAJOR 1\n"
+        "#define CJSON_VERSION_MINOR 7\n"
+        "#define CJSON_VERSION_PATCH 15\n"
+        "#endif\n",
+        "#define CJSON_VERSION_PATCH 15\r\n"
+        "#define CJSON_VERSION_MAJOR\t1 /* major */\r\n"
+        "#define CJSON_VERSION_MINOR 7 // minor\r\n"};
+    for (const std::string& header : headers)
+    {
+      TempTree tree;
+      tree.write("third_party/cjson-prebuilt/include/cJSON.h", header);
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.complete);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].name == "cjson");
+      BOMWERK_TEST_CHECK(result.value[0].version == "1.7.15");
+      BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/cjson@1.7.15");
+      BOMWERK_TEST_CHECK(result.value[0].root == fs::path("third_party/cjson-prebuilt"));
+      BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
+      bool saw_all_three_lines = false;
+      for (const auto& evidence : result.value[0].evidence)
+      {
+        if (evidence.detail.find("#define CJSON_VERSION_MAJOR 1; #define CJSON_VERSION_MINOR 7; "
+                                 "#define CJSON_VERSION_PATCH 15") != std::string::npos)
+        {
+          saw_all_three_lines = true;
+        }
+      }
+      BOMWERK_TEST_CHECK(saw_all_three_lines);
+    }
+  }
+
+  // Given a cJSON header whose split version is malformed in any one part, when
+  // parsed, then NO version is asserted (never a partial `1.7`) and identity
+  // falls back to the folder name at Low. Each shape is a way a wrong version
+  // could reach a purl: a missing part, a quoted part, a non-integer part, a
+  // negative or suffixed or octal-looking part, a part only mentioned in a
+  // comment, a longer macro whose name merely starts with the part's name, a
+  // duplicated part (two definitions, so either would be a guess), a value
+  // ending in a line continuation, and a part too long to be a release number.
+  {
+    const std::string major = "#define CJSON_VERSION_MAJOR 1\n";
+    const std::string minor = "#define CJSON_VERSION_MINOR 7\n";
+    const std::string patch = "#define CJSON_VERSION_PATCH 15\n";
+    const std::vector<std::string> rejected_headers = {
+        major + minor, major + minor + "#define CJSON_VERSION_PATCH \"15\"\n",
+        major + "#define CJSON_VERSION_MINOR 7a\n" + patch,
+        major + "#define CJSON_VERSION_MINOR 7.0\n" + patch,
+        major + minor + "#define CJSON_VERSION_PATCH -1\n",
+        major + minor + "#define CJSON_VERSION_PATCH 15u\n",
+        major + minor + "#define CJSON_VERSION_PATCH 015\n",
+        major + minor + "#define CJSON_VERSION_PATCH\n",
+        major + minor + "/* CJSON_VERSION_PATCH 15 */\n",
+        major + minor + "#define CJSON_VERSION_PATCHLEVEL 15\n",
+        major + minor + patch + "#define CJSON_VERSION_PATCH 16\n", major + minor + patch + patch,
+        major + minor + "#define CJSON_VERSION_PATCH 15\\\n",
+        major + minor + "#define CJSON_VERSION_PATCH 1234567890\n",
+        // A commented-out definition is not a definition: alone it supplies
+        // nothing, and beside a real one it does not make the part ambiguous.
+        major + minor + "// #define CJSON_VERSION_PATCH 15\n",
+        major + minor + "/* #define CJSON_VERSION_PATCH 15 */\n",
+        // Two definitions in an #if/#else pair: either would be a guess.
+        major + minor +
+            "#if defined(OLD)\n#define CJSON_VERSION_PATCH 15\n"
+            "#else\n#define CJSON_VERSION_PATCH 16\n#endif\n"};
+    for (const std::string& header : rejected_headers)
+    {
+      TempTree tree;
+      tree.write("third_party/cjson-prebuilt/include/cJSON.h", header);
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.complete);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].version.empty());
+      BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/cjson-prebuilt");
+      BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    }
+  }
+
+  // Given the header-size cap cuts cJSON.h in the middle of its PATCH line, when
+  // parsed, then no version is asserted: the cut line's `1` must not be read as
+  // the whole `15`. The bounded read drops a truncated file's last line.
+  {
+    const std::string header =
+        "#define CJSON_VERSION_MAJOR 1\n"
+        "#define CJSON_VERSION_MINOR 7\n"
+        "#define CJSON_VERSION_PATCH 15\n";
+    vendored_cpp::ParseLimits limits;
+    limits.max_header_bytes = header.size() - 2;  // ends right after "PATCH 1"
+    TempTree tree;
+    tree.write("third_party/cjson-prebuilt/include/cJSON.h", header);
+    const auto result = parse_tree(tree, limits);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+  }
+
+  // Given a commented-out duplicate beside the real PATCH definition, when
+  // parsed, then the real one is still read: only a `#define` that starts its
+  // line counts, so a stale commented copy cannot hide the version.
   {
     TempTree tree;
     tree.write("third_party/cjson-prebuilt/include/cJSON.h",
                "#define CJSON_VERSION_MAJOR 1\n"
                "#define CJSON_VERSION_MINOR 7\n"
-               "#define CJSON_VERSION_PATCH 15\n");
+               "/* #define CJSON_VERSION_PATCH 14 */\n"
+               "  #define CJSON_VERSION_PATCH 15\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == "1.7.15");
+  }
+
+  // Given the folder-name guard, when the header sits in differently spelled
+  // folders, then folders that carry the library name once case and punctuation
+  // are ignored keep the version, and a folder named for something else does
+  // not. The header filename match is exact, so a lowercase `cjson.h` is not
+  // read: pinned so a loosening is a decision, not an accident.
+  {
+    for (const char* folder : {"third_party/cJSON", "third_party/cjson-1.7.15", "vendor/c_json"})
+    {
+      TempTree tree;
+      tree.write(std::string(folder) + "/cJSON.h",
+                 "#define CJSON_VERSION_MAJOR 1\n#define CJSON_VERSION_MINOR 7\n"
+                 "#define CJSON_VERSION_PATCH 15\n");
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].version == "1.7.15");
+    }
+    TempTree lowercase;
+    lowercase.write("third_party/cjson/cjson.h",
+                    "#define CJSON_VERSION_MAJOR 1\n#define CJSON_VERSION_MINOR 7\n"
+                    "#define CJSON_VERSION_PATCH 15\n");
+    const auto lowercase_result = parse_tree(lowercase);
+    BOMWERK_TEST_CHECK(lowercase_result.value.size() == 1);
+    BOMWERK_TEST_CHECK(lowercase_result.value[0].version.empty());
+  }
+
+  // Given the read cap cutting a zlib.h and a uthash.h mid-version, when parsed,
+  // then no half-read version is asserted for either: the truncation rule covers
+  // every row, not just the split one.
+  {
+    const std::string zlib_header = "/* pad */\n#define ZLIB_VERSION \"1.2.11\"\n";
+    const std::string uthash_header = "/* pad */\n#define UTHASH_VERSION 2.4.0\n";
+    vendored_cpp::ParseLimits zlib_limits;
+    zlib_limits.max_header_bytes = zlib_header.size() - 4;  // inside the quoted value
+    vendored_cpp::ParseLimits uthash_limits;
+    uthash_limits.max_header_bytes = uthash_header.size() - 2;  // after "2.4." and one digit short
+    TempTree zlib_tree;
+    zlib_tree.write("third_party/zlib/zlib.h", zlib_header);
+    const auto zlib_result = parse_tree(zlib_tree, zlib_limits);
+    BOMWERK_TEST_CHECK(zlib_result.value.size() == 1);
+    BOMWERK_TEST_CHECK(zlib_result.value[0].version.empty());
+    TempTree uthash_tree;
+    uthash_tree.write("third_party/uthash/uthash.h", uthash_header);
+    const auto uthash_result = parse_tree(uthash_tree, uthash_limits);
+    BOMWERK_TEST_CHECK(uthash_result.value.size() == 1);
+    BOMWERK_TEST_CHECK(uthash_result.value[0].version.empty());
+  }
+
+  // Given libsodium's header, `SODIUM_LIBRARY_VERSION_MAJOR 10` and `_MINOR 3`,
+  // when parsed, then it stays unversioned. Those macros are the ABI version,
+  // not the release (1.0.18 ships ABI 10.3), so libsodium must never become a
+  // split-version row. Pinned so a "generic MAJOR/MINOR reader" cannot creep in.
+  {
+    TempTree tree;
+    tree.write("third_party/libsodium/src/libsodium/include/sodium/version.h",
+               "#define SODIUM_LIBRARY_VERSION_MAJOR 10\n"
+               "#define SODIUM_LIBRARY_VERSION_MINOR 3\n");
     const auto result = parse_tree(tree);
     BOMWERK_TEST_CHECK(result.value.size() == 1);
     BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/libsodium");
+  }
+
+  // Given another library that bundles a uthash.h or a cJSON.h of its own (godot's
+  // `thirdparty/libktx/lib/uthash.h` is the real case), when parsed, then the
+  // directory keeps its own name: a bare or split version macro identifies the
+  // header, and only names the whole directory when the folder is that library.
+  // Before this check libktx was reported as `uthash@1.9.1` and disappeared.
+  {
+    TempTree tree;
+    tree.write("thirdparty/libktx/lib/uthash.h", "#define UTHASH_VERSION 1.9.1\n");
+    tree.write("thirdparty/libktx/lib/texture.c", "int ktx;\n");
+    tree.write("third_party/jsonkit/cJSON.h",
+               "#define CJSON_VERSION_MAJOR 1\n"
+               "#define CJSON_VERSION_MINOR 7\n"
+               "#define CJSON_VERSION_PATCH 15\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    for (const Component& component : result.value)
+    {
+      BOMWERK_TEST_CHECK(component.version.empty());
+      BOMWERK_TEST_CHECK(component.purl == "pkg:generic/jsonkit" ||
+                         component.purl == "pkg:generic/libktx");
+      BOMWERK_TEST_CHECK(highest_confidence(component) == Confidence::Low);
+    }
   }
 
   std::puts("test_vendored_cpp: OK");

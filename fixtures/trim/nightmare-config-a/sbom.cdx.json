@@ -85,9 +85,10 @@
           }
         ]
       },
-      "name": "cjson-prebuilt",
-      "purl": "pkg:generic/cjson-prebuilt",
-      "type": "library"
+      "name": "cjson",
+      "purl": "pkg:generic/cjson@1.7.15",
+      "type": "library",
+      "version": "1.7.15"
     }
   ],
   "metadata": {
