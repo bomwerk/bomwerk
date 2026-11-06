@@ -2,6 +2,52 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
+      "bom-ref": "3f3f3e04-676a-5e6f-b6ec-3ede12ea4569",
+      "name": "guzzlehttp/guzzle",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:composer/guzzlehttp/guzzle",
+      "supplier": {
+        "name": "guzzlehttp"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "cc56c62c-50de-5b63-a23e-24421089e5e1",
+      "name": "monolog/monolog",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:composer/monolog/monolog",
+      "supplier": {
+        "name": "monolog"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "e1620f7d-5025-5d7b-8654-52e23061ae7e",
+      "name": "phpunit/phpunit",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:composer/phpunit/phpunit",
+      "scope": "excluded",
+      "supplier": {
+        "name": "phpunit"
+      },
+      "type": "library"
+    },
+    {
       "bom-ref": "2f0cc9d7-a1e2-5a0d-a5fb-9cd83c249d62",
       "evidence": {
         "occurrences": [
@@ -23,6 +69,15 @@
   ],
   "dependencies": [
     {
+      "ref": "3f3f3e04-676a-5e6f-b6ec-3ede12ea4569"
+    },
+    {
+      "ref": "cc56c62c-50de-5b63-a23e-24421089e5e1"
+    },
+    {
+      "ref": "e1620f7d-5025-5d7b-8654-52e23061ae7e"
+    },
+    {
       "ref": "2f0cc9d7-a1e2-5a0d-a5fb-9cd83c249d62"
     }
   ],
@@ -30,7 +85,7 @@
     "properties": [
       {
         "name": "bomwerk:coverage:components",
-        "value": "1"
+        "value": "4"
       },
       {
         "name": "bomwerk:coverage:matchable",
@@ -46,11 +101,11 @@
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "1"
+        "value": "4"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",
-        "value": "1"
+        "value": "4"
       }
     ],
     "timestamp": "2025-01-01T00:00:00Z",
@@ -64,7 +119,7 @@
       ]
     }
   },
-  "serialNumber": "urn:uuid:500f98f3-8f4b-5a15-afbb-8f966e0c2a47",
+  "serialNumber": "urn:uuid:1afa36a7-46b4-54a1-9271-49f0f0f97182",
   "specVersion": "1.6",
   "version": 1
 }

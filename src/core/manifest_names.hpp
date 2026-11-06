@@ -20,6 +20,16 @@ namespace bomwerk::core
 [[nodiscard]] bool matches_manifest_name(std::string_view actual_filename,
                                          std::string_view manifest_name);
 
+/// True when any component of `relative_path` (a root-relative path) names a
+/// directory holding INSTALLED third-party trees: `node_modules`, `vendor`,
+/// `venv`, `.venv`, `bower_components`. A manifest inside one belongs to a
+/// dependency, not to the scanned project, so a producer that reads loose
+/// manifests must skip it: an installed `vendor/acme/lib/composer.json` is
+/// acme's own declaration, and reporting it would blame the operator for
+/// someone else's file. The scan walk itself does not skip these names (see
+/// `default_excluded_dir_names`), so each caller filters for itself.
+[[nodiscard]] bool is_inside_installed_dependencies(const std::filesystem::path& relative_path);
+
 /// Manifest filenames bomwerk recognizes out of the box (the M1 parser
 /// targets). Sorted container so iteration is deterministic (rule 3).
 const std::set<std::string>& default_manifest_names();

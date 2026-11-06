@@ -13,6 +13,21 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- `scan` falls back to a `composer.json` where no `composer.lock` sits beside
+  it, so a PHP project that never committed a lock produces a dependency list
+  instead of nothing (laravel/framework went from zero components to its full
+  declared set). `require` and `require-dev` are declared ranges, not resolved
+  versions, so each component is Medium confidence with a **version-less**
+  purl and the range recorded as evidence: a `pkg:composer/...@^7.8` could
+  never match an OSV or CPE record, so the version is dropped rather than
+  guessed. `require-dev` becomes CycloneDX `scope: "excluded"`, platform
+  pseudo-requirements (`php`, `hhvm`, `ext-*`, `lib-*`, `composer-*`) are
+  skipped with one counted warning per file, and a `composer.json` inside an
+  installed tree such as `vendor/` is ignored as the dependency's own
+  declaration. A `composer.lock` is still authoritative wherever one exists,
+  per directory, and a version-less fallback component is dropped when a lock
+  elsewhere in the scan already resolved the same package, so a monorepo does
+  not list it twice (T66).
 - `scan --fingerprint-index <path>` identifies vendored C/C++ libraries by the
   content of their files instead of by a version header, against a corpus of
   pinned upstream releases. A match fills in a version no header states (cJSON

@@ -142,23 +142,22 @@ int main()
     BOMWERK_TEST_CHECK(reports.empty());
   }
 
-  // Given a composer.json alone, when scanned, then ONE finding names it: a
-  // declared `require` range is not a resolved version, so composer.json is a
-  // loose manifest, not a supported lock: the same tier go.mod sits in. This
-  // is laravel/laravel-framework's shape: composer.json with no
-  // composer.lock, since a library package does not ship one.
+  // Given a composer.json alone, when scanned, then NOTHING is reported:
+  // `parsers::lockfiles::composer` reads it as a fallback now, so it is one
+  // of composer's supported names rather than a loose manifest, and telling
+  // the operator a file went unread would be false. This is
+  // laravel/framework's shape: composer.json with no composer.lock, since a
+  // library package does not ship one. What the fallback cannot do is
+  // resolve the declared range, which it records by emitting a version-less
+  // purl at Medium rather than by warning here.
   {
     const std::vector<UnparsedManifestReport> reports =
         find_unparsed_manifests(file_index({"composer.json", "artisan"}));
-    BOMWERK_TEST_CHECK(reports.size() == 1);
-    BOMWERK_TEST_CHECK(reports[0].ecosystem == "composer");
-    BOMWERK_TEST_CHECK(reports[0].filename == "composer.json");
-    BOMWERK_TEST_CHECK(!reports[0].is_lockfile);
-    BOMWERK_TEST_CHECK(reports[0].paths.size() == 1);
-    BOMWERK_TEST_CHECK(reports[0].paths[0] == fs::path("composer.json"));
+    BOMWERK_TEST_CHECK(reports.empty());
   }
 
-  // Given composer.json WITH its lock, when scanned, then nothing is reported.
+  // Given composer.json WITH its lock, when scanned, then nothing is reported
+  // either: both names are parsed, and the lock is the one that wins.
   {
     const std::vector<UnparsedManifestReport> reports =
         find_unparsed_manifests(file_index({"composer.json", "composer.lock"}));

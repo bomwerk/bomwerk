@@ -9,6 +9,7 @@
 namespace fs = std::filesystem;
 
 using bomwerk::core::default_manifest_names;
+using bomwerk::core::is_inside_installed_dependencies;
 using bomwerk::core::load_manifest_names;
 using bomwerk::core::matches_manifest_name;
 
@@ -66,6 +67,22 @@ int main()
   assert(default_manifest_names().contains("gradle.lockfile"));
   assert(default_manifest_names().contains("packages.lock.json"));
   assert(default_manifest_names().contains("composer.lock"));
+  // The composer.json fallback only ever sees a file the walk collected, and
+  // `core::build_file_index` collects by this set: without the name here the
+  // parser is dead code.
+  assert(default_manifest_names().contains("composer.json"));
+
+  // Installed-dependency trees match on a whole path component, never a
+  // prefix or substring, so a project directory that merely resembles one is
+  // still the project's own.
+  assert(is_inside_installed_dependencies("vendor/acme/lib/composer.json"));
+  assert(is_inside_installed_dependencies("app/node_modules/x/package.json"));
+  assert(is_inside_installed_dependencies(".venv/lib/requirements.txt"));
+  assert(is_inside_installed_dependencies("bower_components/y/bower.json"));
+  assert(!is_inside_installed_dependencies("composer.json"));
+  assert(!is_inside_installed_dependencies("src/Illuminate/Auth/composer.json"));
+  assert(!is_inside_installed_dependencies("vendors/acme/composer.json"));
+  assert(!is_inside_installed_dependencies("my-vendor/composer.json"));
   assert(default_manifest_names().contains("Gemfile.lock"));
 
   // …and the Yarn and pnpm lockfile targets (Yarn both generations, pnpm v6/v9).

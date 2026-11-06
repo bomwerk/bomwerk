@@ -63,27 +63,11 @@ bool has_covered_ancestor(const fs::path& directory, const std::set<fs::path>& c
 /// blame the operator for someone else's file: and an installed tree carries
 /// thousands of them. The scan walk itself does not skip these names (see
 /// `default_excluded_dir_names`, which deliberately avoids collision-prone
-/// directory names), so this reporting path filters them for itself.
+/// directory names), so the reporting path and the producers that care (the
+/// composer.json fallback in `parsers::lockfiles::composer`) filter for
+/// themselves via `is_inside_installed_dependencies`.
 constexpr std::string_view kInstalledDependencyDirNames[] = {"node_modules", "vendor", "venv",
                                                              ".venv", "bower_components"};
-
-/// True when any component of `relative_path` names an installed dependency
-/// tree.
-bool is_inside_installed_dependencies(const fs::path& relative_path)
-{
-  for (const fs::path& path_component : relative_path)
-  {
-    const std::string component_name = path_component.string();
-    const bool is_dependency_directory = std::any_of(
-        std::begin(kInstalledDependencyDirNames), std::end(kInstalledDependencyDirNames),
-        [&component_name](std::string_view name) { return name == component_name; });
-    if (is_dependency_directory)
-    {
-      return true;
-    }
-  }
-  return false;
-}
 
 /// Every path in `files` whose filename is one of `names`, skipping installed
 /// dependency trees. `files` is already sorted, so filtering it preserves that
@@ -151,6 +135,22 @@ std::optional<UnparsedManifestReport> report_for_tier(
 
 }  // namespace
 
+bool is_inside_installed_dependencies(const fs::path& relative_path)
+{
+  for (const fs::path& path_component : relative_path)
+  {
+    const std::string component_name = path_component.string();
+    const bool is_dependency_directory = std::any_of(
+        std::begin(kInstalledDependencyDirNames), std::end(kInstalledDependencyDirNames),
+        [&component_name](std::string_view name) { return name == component_name; });
+    if (is_dependency_directory)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool matches_manifest_name(std::string_view actual_filename, std::string_view manifest_name)
 {
   if (actual_filename == manifest_name)
@@ -189,29 +189,15 @@ bool matches_manifest_name(std::string_view actual_filename, std::string_view ma
 
 const std::set<std::string>& default_manifest_names()
 {
-  static const std::set<std::string> kDefaultNames = {".gitmodules",
-                                                      "CMakeLists.txt",
-                                                      "conanfile.txt",
-                                                      "conanfile.py",
-                                                      "conan.lock",
-                                                      "vcpkg.json",
-                                                      "package-lock.json",
-                                                      "go.sum",
-                                                      "Cargo.lock",
-                                                      "requirements.txt",
-                                                      "pom.xml",
-                                                      "uv.lock",
-                                                      "poetry.lock",
-                                                      "gradle.lockfile",
-                                                      "packages.lock.json",
-                                                      "composer.lock",
-                                                      "Gemfile.lock",
-                                                      "yarn.lock",
-                                                      "pnpm-lock.yaml",
-                                                      "pubspec.lock",
-                                                      "packages.config",
-                                                      ".csproj",
-                                                      "Directory.Packages.props"};
+  static const std::set<std::string> kDefaultNames = {
+      ".gitmodules",       "CMakeLists.txt",  "conanfile.txt",
+      "conanfile.py",      "conan.lock",      "vcpkg.json",
+      "package-lock.json", "go.sum",          "Cargo.lock",
+      "requirements.txt",  "pom.xml",         "uv.lock",
+      "poetry.lock",       "gradle.lockfile", "packages.lock.json",
+      "composer.lock",     "composer.json",   "Gemfile.lock",
+      "yarn.lock",         "pnpm-lock.yaml",  "pubspec.lock",
+      "packages.config",   ".csproj",         "Directory.Packages.props"};
   return kDefaultNames;
 }
 
@@ -226,7 +212,7 @@ const std::vector<EcosystemManifests>& ecosystem_manifests()
   // order without depending on this table's layout.
   static const std::vector<EcosystemManifests> kEcosystemManifests = {
       {"cargo", {"Cargo.lock"}, {}, {"Cargo.toml"}},
-      {"composer", {"composer.lock"}, {}, {"composer.json"}},
+      {"composer", {"composer.lock", "composer.json"}, {}, {}},
       {"go", {"go.sum"}, {}, {"go.mod"}},
       {"maven", {"pom.xml", "gradle.lockfile"}, {}, {"build.gradle", "build.gradle.kts"}},
       {"npm",

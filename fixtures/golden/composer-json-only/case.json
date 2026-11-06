@@ -1,5 +1,5 @@
 {
-  "description": "composer.json alone (no composer.lock): a declared require/require-dev range is never parsed into a component (composer.json is a loose manifest now, the same tier go.mod sits in -- see composer.hpp) -- this case's only component is the unrelated generic vendor/acme find; exit 1 comes from the \"found composer.json ... with no lockfile alongside\" warning, not from a php/ext-json skip count",
+  "description": "composer.json fallback when no composer.lock exists: require/require-dev parsed at Medium confidence (declared ranges, never resolved, so every purl is version-less -- a pkg:composer/...@^7.8 could never match an OSV/CPE record), require-dev => scope: \"excluded\"; php/ext-* platform entries are skipped and counted, which is this case's exit 1 (NOT the \"found composer.json ... with no lockfile alongside\" warning, which no longer fires now that composer.json is one of composer's supported names); a composer.json under vendor/ (an installed package's own) leaks nothing, so psr/log must be absent -- the only non-composer component is the unrelated generic vendor/acme find",
   "args": [],
   "expect_exit": 1
 }
