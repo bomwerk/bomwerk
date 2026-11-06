@@ -1,0 +1,11 @@
+manifest:
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    -
+      path: modules/anonymous
+      revision: cccccccccccccccccccccccccccccccccccccccc
+    - just-a-scalar
+    - name: named
+      revision: dddddddddddddddddddddddddddddddddddddddd

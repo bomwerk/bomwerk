@@ -1,0 +1,5 @@
+# An Ansible-style file that happens to be called west.yml.
+- hosts: all
+  tasks:
+    - name: install
+      url: https://github.com/acme/never

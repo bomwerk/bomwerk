@@ -114,11 +114,17 @@ std::string_view unquoted(std::string_view text)
   return text.substr(1, text.size() - kDelimiterPairLength);
 }
 
+/// True when `content` starts with a block sequence marker: `-` alone or `- `.
+bool is_sequence_marker(std::string_view content)
+{
+  return content == "-" || content.starts_with("- ");
+}
+
 /// True when `content` starts a construct the subset does not read: a sequence
 /// item, a document marker, a flow sequence, or an anchor/alias/tag.
 bool is_unsupported_start(std::string_view content)
 {
-  if (content == "-" || content.starts_with("- "))
+  if (is_sequence_marker(content))
   {
     return true;
   }
@@ -141,9 +147,15 @@ bool opens_block_scalar(std::string_view value)
   return !value.empty() && kBlockScalarIndicators.find(value.front()) != std::string_view::npos;
 }
 
+/// True when `value` is a one-line flow sequence `[ … ]`.
+bool is_flow_sequence(std::string_view value)
+{
+  return value.size() >= kDelimiterPairLength && value.front() == '[' && value.back() == ']';
+}
+
 /// True when `value` is a single-line construct outside the subset: an anchor,
-/// alias, tag or flow sequence.
-bool is_unsupported_value(std::string_view value)
+/// alias, tag or flow sequence (the last only when sequences are not read).
+bool is_unsupported_value(std::string_view value, bool sequence_items)
 {
   if (value.empty())
   {
@@ -151,7 +163,7 @@ bool is_unsupported_value(std::string_view value)
   }
   if (value.front() == '[')
   {
-    return true;
+    return !(sequence_items && is_flow_sequence(value));
   }
   return kAnchorAliasTagIndicators.find(value.front()) != std::string_view::npos;
 }
@@ -204,50 +216,105 @@ bool Reader::read_line(std::string_view raw_line, Node& node)
     return false;
   }
 
-  const std::string_view content =
-      core::trimmed_view(without_comment(raw_line.substr(indentation)));
+  std::string_view content = core::trimmed_view(without_comment(raw_line.substr(indentation)));
   if (content.empty())
   {
     return false;  // the line held only a comment
   }
-  if (is_unsupported_start(content))
+
+  // Opt-in sequence item: strip the `- ` marker and measure the key at the
+  // column after it, so the item's first key and its following keys line up.
+  bool starts_sequence_item = false;
+  std::size_t key_indentation = indentation;
+
+  // Count a line outside the subset. A sequence item's line still marks where
+  // a new item begins, as an empty item node, so the fields below it are never
+  // attributed to the previous item.
+  const auto skip_line = [&]() -> bool
   {
     ++stats_.unsupported_line_count;
-    return false;
+    if (!starts_sequence_item)
+    {
+      return false;
+    }
+    node = Node{};
+    node.indentation = key_indentation;
+    node.starts_sequence_item = true;
+    return true;
+  };
+
+  if (options_.sequence_items && is_sequence_marker(content))
+  {
+    starts_sequence_item = true;
+    const std::string_view after_marker = content.substr(1);
+    key_indentation = indentation + 1 + core::leading_space_count(after_marker);
+    content = core::trimmed_view(after_marker);
+    if (content.empty())
+    {
+      node = Node{};
+      node.indentation = key_indentation;
+      node.opens_block = true;  // a lone `-`: the item's mapping follows below
+      node.starts_sequence_item = true;
+      return true;
+    }
+    if (content.front() == '{')
+    {
+      return skip_line();  // a flow-mapping item `- {a: 1}` is outside the subset
+    }
+    if (key_separator_offset(content) == std::string_view::npos)
+    {
+      if (opens_block_scalar(content))
+      {
+        block_scalar_indentation_ = indentation;  // `- |`: skip the body as a unit
+        return skip_line();
+      }
+      if (is_unsupported_start(content))
+      {
+        return skip_line();
+      }
+      node = Node{};
+      node.indentation = key_indentation;
+      node.value = unquoted(content);  // a bare `- scalar` item
+      node.starts_sequence_item = true;
+      return true;
+    }
+  }
+  if (is_unsupported_start(content))
+  {
+    return skip_line();
   }
 
   const std::size_t separator = key_separator_offset(content);
   if (separator == std::string_view::npos)
   {
-    ++stats_.unsupported_line_count;
-    return false;
+    return skip_line();
   }
   const std::string_view key = unquoted(core::trimmed_view(content.substr(0, separator)));
   if (key.empty())
   {
-    ++stats_.unsupported_line_count;
-    return false;
+    return skip_line();
   }
   std::string_view value = core::trimmed_view(content.substr(separator + 1));
 
   if (opens_block_scalar(value))
   {
-    block_scalar_indentation_ = indentation;
-    ++stats_.unsupported_line_count;
-    return false;
+    block_scalar_indentation_ = key_indentation;
+    return skip_line();
   }
-  if (is_unsupported_value(value))
+  if (is_unsupported_value(value, options_.sequence_items))
   {
-    ++stats_.unsupported_line_count;
-    return false;
+    return skip_line();
   }
 
-  node.indentation = indentation;
+  node = Node{};
+  node.indentation = key_indentation;
   node.key = key;
+  node.starts_sequence_item = starts_sequence_item;
   node.opens_block = value.empty();
   node.is_flow_mapping =
       value.size() >= kDelimiterPairLength && value.front() == '{' && value.back() == '}';
-  if (node.is_flow_mapping)
+  node.is_flow_sequence = options_.sequence_items && is_flow_sequence(value);
+  if (node.is_flow_mapping || node.is_flow_sequence)
   {
     node.value = core::trimmed_view(value.substr(1, value.size() - 2));
   }

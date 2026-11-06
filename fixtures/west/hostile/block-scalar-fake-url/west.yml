@@ -1,0 +1,13 @@
+manifest:
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+  projects:
+    - name: real
+      revision: 5555555555555555555555555555555555555555
+      userdata: |
+        url: https://evil.example.com/evil
+        - name: injected
+          revision: deadbeef
+    - name: after
+      revision: 6666666666666666666666666666666666666666

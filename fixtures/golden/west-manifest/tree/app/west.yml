@@ -1,0 +1,32 @@
+manifest:
+  defaults:
+    remote: upstream
+    revision: 0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c
+
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+    - name: vendor
+      url-base: https://git.example.com/firmware/
+
+  projects:
+    - name: zephyr
+      revision: v4.5.0
+      path: zephyr
+    - name: cmsis_6
+      repo-path: CMSIS_6
+      revision: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d
+      path: modules/hal/cmsis_6
+      groups: [hal]
+    - name: hal_vendor
+      remote: vendor
+      path: modules/hal/vendor
+    - name: mcuboot
+      url: https://github.com/mcu-tools/mcuboot
+      revision: 2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e
+      path: bootloader/mcuboot
+      groups:
+        - bootloader
+
+  self:
+    path: app

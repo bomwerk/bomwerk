@@ -1,0 +1,5 @@
+{
+  "description": "west: an application manifest resolving projects through defaults.remote, a second remote, repo-path and an explicit url, with SHA, tag and defaults.revision pins (clean parse path)",
+  "args": [],
+  "expect_exit": 0
+}

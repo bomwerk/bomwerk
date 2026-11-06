@@ -14,6 +14,25 @@ struct Node
   std::string_view value;        ///< unquoted scalar, or a flow mapping's inner text
   bool opens_block = false;      ///< the line carried no inline value
   bool is_flow_mapping = false;  ///< the value was `{ … }`; `value` is its raw inner text
+  /// The line began with a `- ` sequence marker (only with
+  /// `ReaderOptions::sequence_items`). `indentation` is then the column of the
+  /// key after the marker, so `- name: x` and the `  path: y` below it share
+  /// one level. A bare `- scalar` item has an empty `key` and the scalar in
+  /// `value`; a lone `-` has both empty and `opens_block` set.
+  bool starts_sequence_item = false;
+  /// The value was a one-line flow sequence `[ … ]`; `value` is its raw inner
+  /// text (only with `ReaderOptions::sequence_items`).
+  bool is_flow_sequence = false;
+};
+
+/// Opt-in extensions to the subset. Every default keeps the reader exactly as
+/// the lockfile producers rely on it, so their warnings and goldens cannot move.
+struct ReaderOptions
+{
+  /// Read block sequence items (`- key: value`, `- scalar`, `-`) and one-line
+  /// flow sequences (`key: [a, b]`) instead of counting them as unsupported.
+  /// Manifests such as Zephyr's `west.yml` are built from lists.
+  bool sequence_items = false;
 };
 
 /// What a scan deliberately did not read. Everything outside the subset is
@@ -32,9 +51,9 @@ struct ScanStats
 /// and `#` comments.
 ///
 /// **Outside it**, counted in `ScanStats::unsupported_line_count` and skipped:
-/// sequences (`- item`), anchors (`&a`), aliases (`*a`), tags (`!!str`), block
-/// scalars (`|`, `>`, whose indented body is skipped as a unit), document
-/// markers (`---`, `...`), flow sequences (`[a, b]`) and tab indentation. A tab
+/// sequences (`- item`, unless `ReaderOptions::sequence_items`), anchors (`&a`), aliases (`*a`),
+/// tags (`!!str`), block scalars (`|`, `>`, whose indented body is skipped as a unit), document
+/// markers (`---`, `...`), flow sequences (`[a, b]`, same opt-in) and tab indentation. A tab
 /// reads as no indentation rather than as a nesting level, so a tab-indented
 /// file degrades to "nothing recognized" instead of silently mis-nesting.
 ///
@@ -64,6 +83,7 @@ class Reader
 {
  public:
   explicit Reader(std::string_view bytes) : bytes_(bytes) {}
+  Reader(std::string_view bytes, const ReaderOptions& options) : bytes_(bytes), options_(options) {}
 
   /// Advance to the next mapping entry, writing it into `node`. Returns false
   /// once the input is exhausted; `node` is then unchanged.
@@ -82,6 +102,7 @@ class Reader
   [[nodiscard]] bool read_line(std::string_view raw_line, Node& node);
 
   std::string_view bytes_;
+  ReaderOptions options_;
   std::size_t position_ = 0;
   ScanStats stats_;
 

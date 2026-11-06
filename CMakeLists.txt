@@ -152,6 +152,7 @@ add_library(bomwerk_parsers
   src/parsers/cpp/conan_ref.cpp
   src/parsers/cpp/submodules.cpp
   src/parsers/cpp/vcpkg.cpp
+  src/parsers/embedded/west.cpp
   src/parsers/lockfiles/cargo.cpp
   src/parsers/lockfiles/composer.cpp
   src/parsers/lockfiles/go.cpp
@@ -421,6 +422,7 @@ bomwerk_add_test(rubygems bomwerk_parsers)
 bomwerk_add_test(yarn bomwerk_parsers)
 bomwerk_add_test(pnpm bomwerk_parsers)
 bomwerk_add_test(pub bomwerk_parsers)
+bomwerk_add_test(west bomwerk_parsers)
 
 # Observer tests. shim_names/trace_line/trace_writer exercise the shim
 # half, so they link only bomwerk_observe_trace: the same nothing-extra the

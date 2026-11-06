@@ -12,6 +12,7 @@
 
 using bomwerk::core::yaml_subset::Node;
 using bomwerk::core::yaml_subset::Reader;
+using bomwerk::core::yaml_subset::ReaderOptions;
 
 namespace
 {
@@ -42,6 +43,39 @@ Scan scan_all(std::string_view bytes)
   {
     scan.nodes.push_back({node.indentation, std::string(node.key), std::string(node.value),
                           node.opens_block, node.is_flow_mapping});
+  }
+  scan.unsupported_line_count = reader.stats().unsupported_line_count;
+  return scan;
+}
+
+/// One node read in sequence mode, with the flags only that mode sets.
+struct SequenceNode
+{
+  std::size_t indentation = 0;
+  std::string key;
+  std::string value;
+  bool opens_block = false;
+  bool starts_sequence_item = false;
+  bool is_flow_sequence = false;
+};
+
+struct SequenceScan
+{
+  std::vector<SequenceNode> nodes;
+  std::size_t unsupported_line_count = 0;
+};
+
+SequenceScan scan_sequences(std::string_view bytes)
+{
+  ReaderOptions options;
+  options.sequence_items = true;
+  SequenceScan scan;
+  Reader reader(bytes, options);
+  Node node;
+  while (reader.next(node))
+  {
+    scan.nodes.push_back({node.indentation, std::string(node.key), std::string(node.value),
+                          node.opens_block, node.starts_sequence_item, node.is_flow_sequence});
   }
   scan.unsupported_line_count = reader.stats().unsupported_line_count;
   return scan;
@@ -207,6 +241,91 @@ after: ok
     const Scan long_line = scan_all("key: " + std::string(10000, 'x') + "\n");
     BOMWERK_TEST_CHECK(long_line.nodes.size() == 1);
     BOMWERK_TEST_CHECK(long_line.nodes[0].value.size() == 10000);
+  }
+
+  // Given a west-style list of mappings in sequence mode, when scanned, then
+  // each `- ` line starts an item whose first key shares the column of the
+  // keys below it, so one indentation level holds one item's fields.
+  {
+    const SequenceScan scan = scan_sequences(R"(projects:
+  - name: cmsis
+    revision: abc
+  -   name: padded
+  - name: second
+    path: modules/hal
+)");
+    BOMWERK_TEST_CHECK(scan.unsupported_line_count == 0);
+    BOMWERK_TEST_CHECK(scan.nodes.size() == 6);
+    BOMWERK_TEST_CHECK(scan.nodes[1].starts_sequence_item);
+    BOMWERK_TEST_CHECK(scan.nodes[1].key == "name");
+    BOMWERK_TEST_CHECK(scan.nodes[1].value == "cmsis");
+    BOMWERK_TEST_CHECK(scan.nodes[1].indentation == 4);
+    BOMWERK_TEST_CHECK(!scan.nodes[2].starts_sequence_item);
+    BOMWERK_TEST_CHECK(scan.nodes[2].indentation == 4);
+    BOMWERK_TEST_CHECK(scan.nodes[3].indentation == 6);  // padding after the dash counts
+    BOMWERK_TEST_CHECK(scan.nodes[4].starts_sequence_item);
+  }
+
+  // Given scalar items, a lone dash and a flow sequence in sequence mode, when
+  // scanned, then a bare item carries its value with no key, a lone dash opens
+  // the item's block, and `[a, b]` is a value rather than a gap.
+  {
+    const SequenceScan scan = scan_sequences(R"(groups:
+  - hal
+  - "quoted"
+filter: [-optional, -testing]
+items:
+  -
+    name: x
+)");
+    BOMWERK_TEST_CHECK(scan.unsupported_line_count == 0);
+    BOMWERK_TEST_CHECK(scan.nodes.size() == 7);
+    BOMWERK_TEST_CHECK(scan.nodes[1].key.empty());
+    BOMWERK_TEST_CHECK(scan.nodes[1].value == "hal");
+    BOMWERK_TEST_CHECK(scan.nodes[2].value == "quoted");
+    BOMWERK_TEST_CHECK(scan.nodes[3].is_flow_sequence);
+    BOMWERK_TEST_CHECK(scan.nodes[3].value == "-optional, -testing");
+    BOMWERK_TEST_CHECK(scan.nodes[5].starts_sequence_item);
+    BOMWERK_TEST_CHECK(scan.nodes[5].opens_block);
+    BOMWERK_TEST_CHECK(scan.nodes[5].key.empty());
+  }
+
+  // Given an item line outside the subset in sequence mode, when scanned, then
+  // it is counted AND still yields an empty item node, so the next fields can
+  // never be attributed to the previous item.
+  {
+    const SequenceScan scan = scan_sequences(R"(- name: first
+- {name: flowed}
+- name: &anchor x
+- notes: |
+    - name: hidden
+)");
+    BOMWERK_TEST_CHECK(scan.unsupported_line_count == 4);
+    BOMWERK_TEST_CHECK(scan.nodes.size() == 4);
+    for (std::size_t index = 1; index < scan.nodes.size(); ++index)
+    {
+      BOMWERK_TEST_CHECK(scan.nodes[index].starts_sequence_item);
+      BOMWERK_TEST_CHECK(scan.nodes[index].key.empty());
+      BOMWERK_TEST_CHECK(scan.nodes[index].value.empty());
+    }
+  }
+
+  // Given a bare block-scalar item `- |` in sequence mode, when scanned, then
+  // its indented body is skipped as a unit and never read as mappings.
+  {
+    const SequenceScan scan = scan_sequences("- |\n    url: hidden\nafter: ok\n");
+    BOMWERK_TEST_CHECK(scan.unsupported_line_count == 2);
+    BOMWERK_TEST_CHECK(scan.nodes.size() == 2);
+    BOMWERK_TEST_CHECK(scan.nodes[1].key == "after");
+  }
+
+  // Given the same list without the opt-in, when scanned, then the reader is
+  // unchanged: every `- ` line and flow sequence is still a counted gap, the
+  // contract the lockfile producers' warnings depend on.
+  {
+    const Scan scan = scan_all("projects:\n  - name: cmsis\n    revision: abc\nfilter: [a]\n");
+    BOMWERK_TEST_CHECK(scan.unsupported_line_count == 2);
+    BOMWERK_TEST_CHECK(scan.nodes.size() == 2);
   }
 
   std::puts("test_yaml_subset: OK");

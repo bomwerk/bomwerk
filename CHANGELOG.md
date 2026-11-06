@@ -13,6 +13,17 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- `scan` reads Zephyr west manifests (`west.yml`, `west.yaml`) and reports one
+  component per `manifest.projects[]` entry, resolved by west's own rules: an
+  explicit `url` wins, otherwise the project's remote (or `defaults.remote`,
+  or the only remote) supplies its `url-base` joined with `repo-path` or the
+  name, and the revision falls back to `defaults.revision`, kept verbatim.
+  github.com projects become `pkg:github/<owner>/<repo>@<revision>`, other
+  hosts `pkg:generic`; a full SHA is High confidence, a tag or branch Medium.
+  `manifest.self` is never a component, and projects pulled in by `import:`
+  are named in a warning instead of being guessed. Upstream Zephyr v4.5.0's
+  manifest yields all 81 of its projects. See `docs/west-manifests.md`
+  (T87).
 - `scan` falls back to a `composer.json` where no `composer.lock` sits beside
   it, so a PHP project that never committed a lock produces a dependency list
   instead of nothing (laravel/framework went from zero components to its full

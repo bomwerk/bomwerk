@@ -45,6 +45,7 @@
 #include "parsers/cpp/conan.hpp"
 #include "parsers/cpp/submodules.hpp"
 #include "parsers/cpp/vcpkg.hpp"
+#include "parsers/embedded/west.hpp"
 #include "parsers/lockfiles/cargo.hpp"
 #include "parsers/lockfiles/composer.hpp"
 #include "parsers/lockfiles/go.hpp"
@@ -668,6 +669,22 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     return core::kExitIncomplete;
   }
 
+  // Zephyr west manifests (west.yml / west.yaml), filtered from the same
+  // shared file_index: bomwerk reads the manifest and never runs west
+  // (rule 9). One component per manifest.projects[] entry, resolved by
+  // west's url/remote/revision rules; projects pulled in by `import:` are
+  // reported as a warning, never guessed. Sits beside the submodule producer:
+  // a project that is also a submodule merges on its purl.
+  core::Result<std::vector<core::Component>> west_dependencies = parsers::embedded::west::parse(
+      file_index.value, options.root_directory,
+      parse_options_with_max_scanned_files<parsers::embedded::west::ParseOptions>(
+          options.max_files));
+  record_warnings(west_dependencies.warnings);
+  if (!west_dependencies.complete)
+  {
+    return core::kExitIncomplete;
+  }
+
   // Heuristic: vendored C/C++ source with no manifest at all (third_party/
   // thirdparty/vendor/external/deps/libs), filtered from the same shared
   // file_index. Never a manifest, so every component from here is Low/Medium
@@ -892,6 +909,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   components.insert(components.end(),
                     std::make_move_iterator(github_actions_dependencies.value.begin()),
                     std::make_move_iterator(github_actions_dependencies.value.end()));
+  components.insert(components.end(), std::make_move_iterator(west_dependencies.value.begin()),
+                    std::make_move_iterator(west_dependencies.value.end()));
   components.insert(components.end(),
                     std::make_move_iterator(vendored_cpp_dependencies.value.begin()),
                     std::make_move_iterator(vendored_cpp_dependencies.value.end()));
