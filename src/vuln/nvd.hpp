@@ -102,4 +102,19 @@ struct NvdOptions
     const HttpGetFunction& http_get, const std::function<std::int64_t()>& now_epoch_seconds,
     const std::function<void(std::chrono::milliseconds)>& sleep_for);
 
+/// What one CPE's cached or fetched payload (a whole CVE API 2.0 response
+/// object) contains.
+struct NvdCvePayload
+{
+  std::vector<core::ScoredAdvisory> advisories;
+  bool truncated = false;  ///< totalResults exceeded what one page returned
+  bool malformed = false;  ///< payload was not the expected JSON shape
+};
+
+/// Read one CVE API 2.0 payload exactly as the CPE fallback does, cached or
+/// fresh. NVD is a network peer, so its bytes are untrusted: malformed or
+/// hostile JSON degrades to `malformed`, never a throw. Entry point of the
+/// `fuzz_nvd` harness.
+[[nodiscard]] NvdCvePayload parse_nvd_cve_payload(const std::string& payload);
+
 }  // namespace bomwerk::vuln

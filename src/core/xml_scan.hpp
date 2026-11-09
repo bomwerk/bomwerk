@@ -78,4 +78,24 @@ struct TagMatch
 /// 1-based line of byte `position` in `text`: one plus the newlines before it.
 [[nodiscard]] std::size_t line_number_at(std::string_view text, std::size_t position);
 
+/// `line_number_at` for a caller that asks about ascending offsets of one
+/// text, such as a scanner reporting the line of each element it meets in
+/// document order: each call counts only the newlines since the previous one,
+/// so a whole pass is linear instead of quadratic. An offset below the last
+/// one is still answered correctly, by recounting from the start. The counter
+/// keeps a view of `text`, which must outlive it.
+/// Example: on `"a\nb\nc"`, `line_number_at(2)` is 2, then `line_number_at(4)` 3.
+class LineCounter
+{
+ public:
+  explicit LineCounter(std::string_view text);
+
+  [[nodiscard]] std::size_t line_number_at(std::size_t position);
+
+ private:
+  std::string_view text_;
+  std::size_t counted_up_to_ = 0;
+  std::size_t newlines_before_ = 0;
+};
+
 }  // namespace bomwerk::core::xml_scan

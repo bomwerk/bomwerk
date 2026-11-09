@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "binscan/bounds.hpp"
@@ -101,5 +102,11 @@ struct ElfImage
 ///      `symbols_unavailable` and warns rather than silently reporting a
 ///      library with no exports.
 [[nodiscard]] core::Result<ElfImage> read_elf(const std::filesystem::path& path);
+
+/// `read_elf` for an image already in memory: the same reader and the same
+/// answer a file holding `bytes` would get, with `label` naming it in
+/// warnings where `read_elf` names the path. Never touches the filesystem:
+/// this is the entry point of the `fuzz_elf` harness.
+[[nodiscard]] core::Result<ElfImage> read_elf_bytes(std::string_view label, std::string_view bytes);
 
 }  // namespace bomwerk::binscan

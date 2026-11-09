@@ -3,7 +3,8 @@
 Hand-written adversarial inputs. A scanner is a security product: on **any**
 of these the producer must warn (or silently skip, where noted) and continue:
 never crash, hang, read out of bounds, or exit with code 2 for a
-merely-malformed file (rule 1). These double as a future libFuzzer seed corpus.
+merely-malformed file (rule 1). These double as the seed corpus of the
+`fuzz_github_actions` harness (see `docs/fuzzing.md`).
 
 | File | What it probes |
 |---|---|

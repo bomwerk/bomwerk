@@ -1,5 +1,4 @@
 // ctest unit test for the shared name-list loader
-#include <cassert>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -7,6 +6,7 @@
 #include <string>
 
 #include "core/name_list.hpp"
+#include "support/check.hpp"
 
 namespace fs = std::filesystem;
 
@@ -27,17 +27,17 @@ int main()
                 << "first.txt\n";
   }
   auto loaded = load_name_list(list_path, "test list", fallback);
-  assert(loaded.warnings.empty());
-  assert(loaded.value.size() == 2);
-  assert(loaded.value.contains("first.txt"));
-  assert(loaded.value.contains("second.txt"));
+  BOMWERK_TEST_CHECK(loaded.warnings.empty());
+  BOMWERK_TEST_CHECK(loaded.value.size() == 2);
+  BOMWERK_TEST_CHECK(loaded.value.contains("first.txt"));
+  BOMWERK_TEST_CHECK(loaded.value.contains("second.txt"));
   fs::remove(list_path);
 
   // Unreadable file degrades to the fallback with a warning: never throws (rule 1).
   auto missing =
       load_name_list(fs::temp_directory_path() / "bomwerk_no_such_list.txt", "test list", fallback);
-  assert(missing.warnings.size() == 1);
-  assert(missing.value == fallback);
+  BOMWERK_TEST_CHECK(missing.warnings.size() == 1);
+  BOMWERK_TEST_CHECK(missing.value == fallback);
 
   // A file with only comments also degrades to the fallback.
   const fs::path empty_list_path = fs::temp_directory_path() / "bomwerk_test_empty_list.txt";
@@ -46,8 +46,8 @@ int main()
     list_stream << "# nothing here\n\n";
   }
   auto empty_list = load_name_list(empty_list_path, "test list", fallback);
-  assert(empty_list.warnings.size() == 1);
-  assert(empty_list.value == fallback);
+  BOMWERK_TEST_CHECK(empty_list.warnings.size() == 1);
+  BOMWERK_TEST_CHECK(empty_list.value == fallback);
   fs::remove(empty_list_path);
 
   std::puts("test_name_list: OK");

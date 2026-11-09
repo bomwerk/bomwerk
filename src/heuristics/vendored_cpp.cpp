@@ -316,6 +316,13 @@ std::optional<std::string> read_quoted_value(const std::string& content, std::si
   {
     return std::nullopt;  // unterminated within the line
   }
+  if (closing_quote == value_start + 1)
+  {
+    // `#define X ""` states no version. Returning it would report a match with
+    // an empty version (found by fuzzing, T40); declining lets a later real
+    // definition of the same macro still win.
+    return std::nullopt;
+  }
   return content.substr(value_start + 1, closing_quote - value_start - 1);
 }
 
@@ -504,6 +511,94 @@ bool folder_names_library(std::string_view folder_key, std::string_view canonica
   return folder_key.find(canonical_name) != std::string_view::npos;
 }
 
+/// A header's text as every version table reads it: when the cap cut the
+/// file, the last line is dropped, since a value cut mid-line (`15` read as
+/// `1`, `2.4.0` as `2.4`) would otherwise look complete and reach a purl.
+std::string header_text_from(core::BoundedFileRead file_read)
+{
+  if (file_read.truncated)
+  {
+    const std::size_t last_newline = file_read.bytes.rfind('\n');
+    file_read.bytes.resize(last_newline == std::string::npos ? 0 : last_newline + 1);
+  }
+  return std::move(file_read.bytes);
+}
+
+/// One candidate file against every signature table, for a vendored folder
+/// whose `identity_key` is `folder_key`. `read_header()` returns the file's
+/// text (see `header_text_from`), or nullopt when it cannot be read; it is
+/// called only when some row names this basename, so a scan reads lazily.
+template <typename ReadHeader>
+std::optional<VersionMatch> match_header_file(std::string_view folder_key,
+                                              const fs::path& relative_file,
+                                              ReadHeader&& read_header)
+{
+  const std::string basename = relative_file.filename().string();
+  const std::string_view basename_view(basename);
+
+  // One pass over a single-macro table, reading each row's macro in that
+  // table's form.
+  const auto match_table = [&](std::span<const VersionHeaderSignature> table, MacroValueForm form,
+                               bool folder_must_name_library) -> std::optional<VersionMatch>
+  {
+    for (const VersionHeaderSignature& signature : table)
+    {
+      if (basename_view != signature.header_filename)
+      {
+        continue;
+      }
+      if (folder_must_name_library && !folder_names_library(folder_key, signature.canonical_name))
+      {
+        continue;
+      }
+      const std::optional<std::string>& text = read_header();
+      if (!text.has_value())
+      {
+        continue;
+      }
+      const std::optional<std::string> version =
+          extract_macro_value(*text, signature.version_macro, form);
+      if (version.has_value())
+      {
+        const std::string shown_value =
+            form == MacroValueForm::QuotedString ? "\"" + *version + "\"" : *version;
+        return VersionMatch{std::string(signature.canonical_name), *version, relative_file,
+                            "#define " + std::string(signature.version_macro) + " " + shown_value};
+      }
+    }
+    return std::nullopt;
+  };
+
+  if (std::optional<VersionMatch> match =
+          match_table(kVersionHeaderSignatures, MacroValueForm::QuotedString, false))
+  {
+    return match;
+  }
+  if (std::optional<VersionMatch> match =
+          match_table(kBareDottedVersionSignatures, MacroValueForm::BareDotted, true))
+  {
+    return match;
+  }
+  for (const SplitVersionSignature& signature : kSplitVersionSignatures)
+  {
+    if (basename_view != signature.header_filename ||
+        !folder_names_library(folder_key, signature.canonical_name))
+    {
+      continue;
+    }
+    const std::optional<std::string>& text = read_header();
+    if (!text.has_value())
+    {
+      continue;
+    }
+    if (std::optional<VersionMatch> match = read_split_version(*text, signature, relative_file))
+    {
+      return match;
+    }
+  }
+  return std::nullopt;
+}
+
 /// Try every signature against every candidate file (filtered by basename
 /// first, which is cheap) so a filename collision between two signatures
 /// (`mbedtls` and `xz-liblzma` both use `version.h`) resolves correctly: a
@@ -518,14 +613,9 @@ std::optional<VersionMatch> find_version_header_match(const fs::path& root,
   const std::string folder_key = identity_key(vendor_root.filename().string());
   for (const fs::path& relative_file : files)
   {
-    const std::string basename = relative_file.filename().string();
-    const std::string_view basename_view(basename);
-
     // Read lazily, once per file, and only when some row names this basename.
-    // Every table goes through this same bounded read, so no row can read more
-    // of a file than another. When the cap cut the file, the last line is
-    // dropped: a value cut mid-line (`15` read as `1`, `2.4.0` as `2.4`) would
-    // otherwise look complete and reach a purl.
+    // Every table goes through this same bounded read, so no row can read
+    // more of a file than another.
     std::optional<std::string> header_text;
     bool header_read = false;
     const auto read_header = [&]() -> const std::optional<std::string>&
@@ -537,77 +627,15 @@ std::optional<VersionMatch> find_version_header_match(const fs::path& root,
             core::read_file_bounded(root / relative_file, limits.max_header_bytes);
         if (file_read.readable)
         {
-          if (file_read.truncated)
-          {
-            const std::size_t last_newline = file_read.bytes.rfind('\n');
-            file_read.bytes.resize(last_newline == std::string::npos ? 0 : last_newline + 1);
-          }
-          header_text = std::move(file_read.bytes);
+          header_text = header_text_from(std::move(file_read));
         }
       }
       return header_text;
     };
-
-    // One pass over a single-macro table, reading each row's macro in that
-    // table's form.
-    const auto match_table = [&](std::span<const VersionHeaderSignature> table, MacroValueForm form,
-                                 bool folder_must_name_library) -> std::optional<VersionMatch>
-    {
-      for (const VersionHeaderSignature& signature : table)
-      {
-        if (basename_view != signature.header_filename)
-        {
-          continue;
-        }
-        if (folder_must_name_library && !folder_names_library(folder_key, signature.canonical_name))
-        {
-          continue;
-        }
-        const std::optional<std::string>& text = read_header();
-        if (!text.has_value())
-        {
-          continue;
-        }
-        const std::optional<std::string> version =
-            extract_macro_value(*text, signature.version_macro, form);
-        if (version.has_value())
-        {
-          const std::string shown_value =
-              form == MacroValueForm::QuotedString ? "\"" + *version + "\"" : *version;
-          return VersionMatch{
-              std::string(signature.canonical_name), *version, relative_file,
-              "#define " + std::string(signature.version_macro) + " " + shown_value};
-        }
-      }
-      return std::nullopt;
-    };
-
     if (std::optional<VersionMatch> match =
-            match_table(kVersionHeaderSignatures, MacroValueForm::QuotedString, false))
+            match_header_file(folder_key, relative_file, read_header))
     {
       return match;
-    }
-    if (std::optional<VersionMatch> match =
-            match_table(kBareDottedVersionSignatures, MacroValueForm::BareDotted, true))
-    {
-      return match;
-    }
-    for (const SplitVersionSignature& signature : kSplitVersionSignatures)
-    {
-      if (basename_view != signature.header_filename ||
-          !folder_names_library(folder_key, signature.canonical_name))
-      {
-        continue;
-      }
-      const std::optional<std::string>& text = read_header();
-      if (!text.has_value())
-      {
-        continue;
-      }
-      if (std::optional<VersionMatch> match = read_split_version(*text, signature, relative_file))
-      {
-        return match;
-      }
     }
   }
   return std::nullopt;
@@ -941,6 +969,42 @@ std::vector<std::string_view> recognized_license_spdx_ids()
     ids.push_back(candidate.spdx_id);
   }
   return ids;
+}
+
+std::optional<VersionHeaderMatch> match_version_header(std::string_view vendor_folder_name,
+                                                       const std::filesystem::path& header_path,
+                                                       std::string_view header_bytes,
+                                                       const ParseLimits& limits)
+{
+  const std::optional<std::string> header_text =
+      header_text_from(core::bound_in_memory_bytes(header_bytes, limits.max_header_bytes));
+  const std::optional<VersionMatch> match =
+      match_header_file(identity_key(vendor_folder_name), header_path,
+                        [&]() -> const std::optional<std::string>& { return header_text; });
+  if (!match.has_value())
+  {
+    return std::nullopt;
+  }
+  return VersionHeaderMatch{match->canonical_name, match->version, match->relative_path,
+                            match->quoted_lines};
+}
+
+std::vector<VersionHeaderRow> version_header_signatures()
+{
+  std::vector<VersionHeaderRow> rows;
+  for (const VersionHeaderSignature& signature : kVersionHeaderSignatures)
+  {
+    rows.push_back({signature.header_filename, signature.canonical_name});
+  }
+  for (const VersionHeaderSignature& signature : kBareDottedVersionSignatures)
+  {
+    rows.push_back({signature.header_filename, signature.canonical_name});
+  }
+  for (const SplitVersionSignature& signature : kSplitVersionSignatures)
+  {
+    rows.push_back({signature.header_filename, signature.canonical_name});
+  }
+  return rows;
 }
 
 }  // namespace bomwerk::heuristics::vendored_cpp

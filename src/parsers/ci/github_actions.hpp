@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "core/file_index.hpp"
@@ -13,6 +14,11 @@
 namespace bomwerk::parsers::ci::github_actions
 {
 
+/// `uses:` references read across all workflow files of one scan. Twice the
+/// per-ecosystem package default: one action is commonly referenced from many
+/// jobs, and every reference line counts, not only distinct actions.
+inline constexpr std::size_t kDefaultMaxUsesReferences = 2 * core::kDefaultMaxPackagesPerEcosystem;
+
 /// Runtime-tunable safety limits for `parse`. Numeric defaults suit real
 /// projects; exceeding a limit appends a warning and stops early: never a
 /// crash, never `complete = false` (Hard Rule 1).
@@ -21,7 +27,8 @@ struct ParseOptions
   std::size_t max_file_bytes = core::json_utils::kMaxFileBytes;  ///< per-file read cap (1 MiB)
   std::size_t max_scanned_files =
       core::kDefaultMaxScannedFilesPerEcosystem;  ///< workflow files parsed per scan
-  std::size_t max_total_uses_references = 20000;  ///< 'uses:' lines across all files
+  std::size_t max_total_uses_references =
+      kDefaultMaxUsesReferences;  ///< 'uses:' lines across all files
 
   /// Subtree roots to skip entirely, given as `root`-relative, already
   /// lexically-normal paths (e.g. `parsers::cpp::submodules::parse`'s
@@ -72,5 +79,15 @@ struct ParseOptions
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                                const std::filesystem::path& root,
                                                                const ParseOptions& options);
+
+/// Parse one workflow held in memory exactly as `parse` parses the file
+/// `file_name` (root-relative): it must be `.github/workflows/<name>.yml` or
+/// `.yaml`, or the result is empty with no warning. `file_name` is the label
+/// in warnings and evidence, and `options.max_file_bytes` bounds `bytes` the
+/// way it bounds a file read. Never touches the filesystem: this is the entry
+/// point of the `fuzz_github_actions` harness.
+[[nodiscard]] core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                                     std::string_view bytes,
+                                                                     const ParseOptions& options);
 
 }  // namespace bomwerk::parsers::ci::github_actions

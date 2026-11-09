@@ -440,16 +440,23 @@ void apply_top_level_entry(std::string_view key, const toml::node& node,
 
 Result<ScanConfig> load_scan_config(const fs::path& config_path)
 {
-  Result<ScanConfig> result;
-
-  const BoundedFileRead read = read_file_bounded(config_path, kMaxScanConfigBytes);
+  // One byte past the cap is enough to tell an oversized file from one that
+  // fits exactly; parse_scan_config makes that call for both entry points.
+  const BoundedFileRead read = read_file_bounded(config_path, kMaxScanConfigBytes + 1);
   if (!read.readable)
   {
+    Result<ScanConfig> result;
     result.warn(WarningCode::kConfigFileUnreadable,
                 warning_prefix(config_path) + "cannot read file, config ignored");
     return result;
   }
-  if (read.truncated)
+  return parse_scan_config(read.bytes, config_path);
+}
+
+Result<ScanConfig> parse_scan_config(std::string_view bytes, const fs::path& config_path)
+{
+  Result<ScanConfig> result;
+  if (bytes.size() > kMaxScanConfigBytes)
   {
     // A truncated TOML document could half-parse into something the author
     // never wrote; refusing it entirely is the honest degradation.
@@ -458,7 +465,7 @@ Result<ScanConfig> load_scan_config(const fs::path& config_path)
     return result;
   }
 
-  const std::optional<toml::table> document = parse_toml_or_warn(read.bytes, config_path, result);
+  const std::optional<toml::table> document = parse_toml_or_warn(bytes, config_path, result);
   if (!document)
   {
     return result;

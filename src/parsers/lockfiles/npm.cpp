@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,6 +12,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -26,8 +28,8 @@ namespace
 
 using core::json_utils::exceeds_json_nesting_depth;
 using core::json_utils::kMaxJsonNestingDepth;
-using core::json_utils::without_utf8_bom;
 
+constexpr std::string_view kProducerName = "npm";
 constexpr std::string_view kPackageLockName = "package-lock.json";
 
 /// The key prefix separating a package's install path from its name; the NAME
@@ -92,7 +94,8 @@ void parse_package_lock(const std::string& bytes, const std::string& label,
                         std::vector<core::Component>& components,
                         core::Result<std::vector<core::Component>>& result)
 {
-  const std::string_view json_bytes = without_utf8_bom(bytes);
+  // The manifest walk already stripped any UTF-8 byte-order mark.
+  const std::string_view json_bytes = bytes;
   if (exceeds_json_nesting_depth(json_bytes, kMaxJsonNestingDepth))
   {
     result.warn(core::WarningCode::kJsonNestingDepthExceeded,
@@ -196,16 +199,7 @@ void parse_package_lock(const std::string& bytes, const std::string& label,
     }
     component.evidence.push_back({core::Source::Manifest, detail, core::Confidence::High});
 
-    const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-    if (!parsed_purl.complete)
-    {
-      result.warn(core::WarningCode::kPurlValidationFailed,
-                  "npm: produced purl failed validation: " + component.purl, "npm");
-    }
-    else
-    {
-      component.purl = parsed_purl.value.canonical();
-    }
+    core::canonicalize_purl(component.purl, kProducerName, result.warnings);
     components.push_back(std::move(component));
   }
 
@@ -218,58 +212,87 @@ void parse_package_lock(const std::string& bytes, const std::string& label,
   }
 }
 
+/// The one format this producer reads.
+enum class ManifestKind
+{
+  kPackageLock,
+};
+
+/// Selects `package-lock.json` files. A truncated JSON lockfile cannot
+/// parse, so an oversized one is skipped rather than guessed at.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (core::file_name_of(relative_path) != kPackageLockName)
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kPackageLock,
+                                           core::OversizedFilePolicy::kSkip};
+}
+
+/// State shared by every package-lock.json of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, kPackageLockName);
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  parse_package_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                     state.components, result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (relative_path.filename().string() != kPackageLockName)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "npm: file limit reached; remaining package-lock.json files skipped", "npm");
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "npm: unreadable file: " + label, "npm");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      // A truncated JSON lockfile cannot parse; skipping beats guessing.
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "npm: file exceeds size limit, skipped: " + label, "npm");
-      continue;
-    }
-    parse_package_lock(file_read.bytes, label, options.max_total_packages, package_budget,
-                       components, result);
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

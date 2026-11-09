@@ -125,16 +125,18 @@ std::string resolve_relative_url(const std::string& base, const std::string& rel
     resolved_base.pop_back();
   }
 
-  std::string remainder = relative;
+  // A view, advanced in place: copying the rest of the string for every
+  // `./` stripped was quadratic on a hostile `././././...` url.
+  std::string_view remainder = relative;
   while (true)
   {
-    if (remainder.rfind("./", 0) == 0)
+    if (remainder.starts_with("./"))
     {
-      remainder = remainder.substr(2);
+      remainder.remove_prefix(2);
     }
-    else if (remainder.rfind("../", 0) == 0)
+    else if (remainder.starts_with("../"))
     {
-      remainder = remainder.substr(3);
+      remainder.remove_prefix(3);
       const std::size_t last_slash = resolved_base.find_last_of('/');
       if (last_slash == std::string::npos)
       {
@@ -150,9 +152,11 @@ std::string resolve_relative_url(const std::string& base, const std::string& rel
 
   if (resolved_base.empty())
   {
-    return remainder;
+    return std::string(remainder);
   }
-  return resolved_base + "/" + remainder;
+  resolved_base += '/';
+  resolved_base += remainder;
+  return resolved_base;
 }
 
 std::string build_git_purl(const std::string& url, const std::string& commit,

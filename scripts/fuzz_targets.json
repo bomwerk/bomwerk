@@ -1,0 +1,762 @@
+{
+  "schema": 1,
+  "defaults": {
+    "max_len": 65536,
+    "timeout_seconds": 10,
+    "rss_limit_mb": 2048
+  },
+  "targets": [
+    {
+      "name": "fuzz_github_actions",
+      "source": "fuzz_github_actions.cpp",
+      "variant": ".github/workflows/fuzz.yml",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/github-actions",
+        "fixtures/golden",
+        ".github/workflows"
+      ],
+      "seed_suffixes": [
+        ".yml",
+        ".yaml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_cmake_deps",
+      "source": "fuzz_cmake_deps.cpp",
+      "variant": "CMakeLists.txt",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/cmake",
+        "fixtures/golden",
+        "fixtures/vuln"
+      ],
+      "seed_suffixes": [
+        "CMakeLists.txt",
+        ".cmake"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/cmake.dict"
+    },
+    {
+      "name": "fuzz_conan_txt",
+      "source": "fuzz_conan.cpp",
+      "variant": "conanfile.txt",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/conan",
+        "fixtures/golden",
+        "fixtures/vuln"
+      ],
+      "seed_suffixes": [
+        "conanfile.txt"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/ini.dict"
+    },
+    {
+      "name": "fuzz_conan_py",
+      "source": "fuzz_conan.cpp",
+      "variant": "conanfile.py",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/conan",
+        "fixtures/fuzz/seeds/conan_py"
+      ],
+      "seed_suffixes": [
+        "conanfile.py"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_conan_lock",
+      "source": "fuzz_conan.cpp",
+      "variant": "conan.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/conan",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "conan.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_conan_graph",
+      "source": "fuzz_conan.cpp",
+      "variant": "graph.json",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/conan_graph"
+      ],
+      "seed_suffixes": [
+        ".json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_submodules",
+      "source": "fuzz_submodules.cpp",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/gitmodules",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        ".gitmodules"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/ini.dict"
+    },
+    {
+      "name": "fuzz_vcpkg_manifest",
+      "source": "fuzz_vcpkg.cpp",
+      "variant": "vcpkg.json",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/vcpkg",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "vcpkg.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_vcpkg_port",
+      "source": "fuzz_vcpkg.cpp",
+      "variant": "ports/fuzz/vcpkg.json",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/vcpkg",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "vcpkg.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_west_yml",
+      "source": "fuzz_west.cpp",
+      "variant": "west.yml",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/west",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "west.yml",
+        "west.yaml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_west_yaml",
+      "source": "fuzz_west.cpp",
+      "variant": "west.yaml",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/west",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "west.yml",
+        "west.yaml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_cargo",
+      "source": "fuzz_cargo.cpp",
+      "variant": "Cargo.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden",
+        "fixtures/vuln"
+      ],
+      "seed_suffixes": [
+        "Cargo.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/toml.dict"
+    },
+    {
+      "name": "fuzz_composer_lock",
+      "source": "fuzz_composer.cpp",
+      "variant": "composer.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "composer.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_composer_json",
+      "source": "fuzz_composer.cpp",
+      "variant": "composer.json",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "composer.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_go",
+      "source": "fuzz_go.cpp",
+      "variant": "go.sum",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "go.sum"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_maven_pom",
+      "source": "fuzz_maven.cpp",
+      "variant": "pom.xml",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "pom.xml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/xml.dict"
+    },
+    {
+      "name": "fuzz_maven_gradle",
+      "source": "fuzz_maven.cpp",
+      "variant": "gradle.lockfile",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "gradle.lockfile"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_npm",
+      "source": "fuzz_npm.cpp",
+      "variant": "package-lock.json",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "package-lock.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_nuget_lock",
+      "source": "fuzz_nuget.cpp",
+      "variant": "packages.lock.json",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "packages.lock.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_nuget_csproj",
+      "source": "fuzz_nuget.cpp",
+      "variant": "fuzz.csproj",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        ".csproj"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/xml.dict"
+    },
+    {
+      "name": "fuzz_nuget_config",
+      "source": "fuzz_nuget.cpp",
+      "variant": "packages.config",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "packages.config"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/xml.dict"
+    },
+    {
+      "name": "fuzz_nuget_props",
+      "source": "fuzz_nuget.cpp",
+      "variant": "Directory.Packages.props",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "Directory.Packages.props"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/xml.dict"
+    },
+    {
+      "name": "fuzz_pnpm",
+      "source": "fuzz_pnpm.cpp",
+      "variant": "pnpm-lock.yaml",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "pnpm-lock.yaml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_pub",
+      "source": "fuzz_pub.cpp",
+      "variant": "pubspec.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "pubspec.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_python_uv",
+      "source": "fuzz_python.cpp",
+      "variant": "uv.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden",
+        "fixtures/python"
+      ],
+      "seed_suffixes": [
+        "uv.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/toml.dict"
+    },
+    {
+      "name": "fuzz_python_poetry",
+      "source": "fuzz_python.cpp",
+      "variant": "poetry.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden",
+        "fixtures/python"
+      ],
+      "seed_suffixes": [
+        "poetry.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/toml.dict"
+    },
+    {
+      "name": "fuzz_python_requirements",
+      "source": "fuzz_python.cpp",
+      "variant": "requirements.txt",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden/python-requirements",
+        "fixtures/python"
+      ],
+      "seed_suffixes": [
+        ".txt"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_rubygems",
+      "source": "fuzz_rubygems.cpp",
+      "variant": "Gemfile.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "Gemfile.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_yarn",
+      "source": "fuzz_yarn.cpp",
+      "variant": "yarn.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "yarn.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_purl",
+      "source": "fuzz_purl.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/purl"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_conan_ref",
+      "source": "fuzz_conan_ref.cpp",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/conan_ref"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_cvss",
+      "source": "fuzz_cvss.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/cvss"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_git_url",
+      "source": "fuzz_git_url.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/git_url"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_build_variables",
+      "source": "fuzz_build_variables.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/build_variables"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/cmake.dict"
+    },
+    {
+      "name": "fuzz_yaml_subset",
+      "source": "fuzz_yaml_subset.cpp",
+      "variant": "default",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/golden",
+        "fixtures/github-actions"
+      ],
+      "seed_suffixes": [
+        ".yaml",
+        ".yml",
+        "pubspec.lock"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_yaml_subset_sequence",
+      "source": "fuzz_yaml_subset.cpp",
+      "variant": "sequence_items",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/west",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "west.yml",
+        "west.yaml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_xml_scan",
+      "source": "fuzz_xml_scan.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "pom.xml",
+        ".csproj",
+        ".props",
+        "packages.config"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/xml.dict"
+    },
+    {
+      "name": "fuzz_git_config",
+      "source": "fuzz_git_config.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/gitmodules",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        ".gitmodules"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/ini.dict"
+    },
+    {
+      "name": "fuzz_scan_config",
+      "source": "fuzz_scan_config.cpp",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "bomwerk.toml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/toml.dict"
+    },
+    {
+      "name": "fuzz_elf",
+      "source": "fuzz_elf.cpp",
+      "libraries": [
+        "bomwerk_binscan"
+      ],
+      "seed_paths": [],
+      "seed_suffixes": [
+        ".elf"
+      ],
+      "generated_seeds": "elf",
+      "dictionary": "fixtures/fuzz/dicts/binary.dict"
+    },
+    {
+      "name": "fuzz_archive",
+      "source": "fuzz_archive.cpp",
+      "libraries": [
+        "bomwerk_binscan"
+      ],
+      "seed_paths": [],
+      "seed_suffixes": [
+        ".a"
+      ],
+      "generated_seeds": "archive",
+      "dictionary": "fixtures/fuzz/dicts/binary.dict"
+    },
+    {
+      "name": "fuzz_vendored_version_header",
+      "source": "fuzz_vendored_version_header.cpp",
+      "libraries": [
+        "bomwerk_heuristics"
+      ],
+      "seed_paths": [
+        "fixtures/vendored_cpp",
+        "fixtures/golden",
+        "fixtures/fuzz/seeds/vendored_version_header"
+      ],
+      "seed_suffixes": [
+        ".h"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_fingerprint_index",
+      "source": "fuzz_fingerprint_index.cpp",
+      "libraries": [
+        "bomwerk_heuristics"
+      ],
+      "seed_paths": [
+        "fixtures/golden/nightmare-corpus-fingerprint"
+      ],
+      "seed_suffixes": [
+        "fingerprint-index.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_cyclonedx",
+      "source": "fuzz_cyclonedx.cpp",
+      "libraries": [
+        "bomwerk_sbom"
+      ],
+      "seed_paths": [
+        "fixtures"
+      ],
+      "seed_suffixes": [
+        ".cdx.json"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_trace_record",
+      "source": "fuzz_trace_record.cpp",
+      "libraries": [
+        "bomwerk_observe"
+      ],
+      "seed_paths": [
+        "fixtures/trim"
+      ],
+      "seed_suffixes": [
+        ".jsonl"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_osv_detection",
+      "source": "fuzz_osv_payload.cpp",
+      "variant": "detection",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/osv_detection"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_osv_full",
+      "source": "fuzz_osv_payload.cpp",
+      "variant": "full",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/osv_full"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_nvd",
+      "source": "fuzz_nvd.cpp",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/nvd"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_license_crates_io",
+      "source": "fuzz_license_payload.cpp",
+      "variant": "crates_io",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/license_crates_io"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_license_pypi",
+      "source": "fuzz_license_payload.cpp",
+      "variant": "pypi",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/license_pypi"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_license_rubygems",
+      "source": "fuzz_license_payload.cpp",
+      "variant": "rubygems",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/license_rubygems"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    },
+    {
+      "name": "fuzz_license_cached",
+      "source": "fuzz_license_payload.cpp",
+      "variant": "cached",
+      "libraries": [
+        "bomwerk_vuln"
+      ],
+      "seed_paths": [
+        "fixtures/fuzz/seeds/license_cached"
+      ],
+      "seed_suffixes": [],
+      "dictionary": "fixtures/fuzz/dicts/json.dict"
+    }
+  ]
+}

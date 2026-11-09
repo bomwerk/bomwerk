@@ -3,6 +3,9 @@
 #include <array>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -81,6 +84,9 @@ struct Manifest
   std::string_view default_remote;
   std::string_view default_revision;
   std::vector<Remote> remotes;
+  /// First remote of each name, built once `remotes` is complete (see
+  /// `index_remotes`): a per-project linear search was O(projects x remotes).
+  std::map<std::string_view, const Remote*, std::less<>> remote_by_name;
   std::vector<Project> projects;
   bool self_imports = false;
   std::size_t malformed = 0;
@@ -260,16 +266,20 @@ Manifest read_manifest(std::string_view bytes, std::size_t& unsupported_line_cou
   return manifest;
 }
 
-const Remote* find_remote(const Manifest& manifest, std::string_view name)
+/// Fill `remote_by_name` once `remotes` will no longer grow. `emplace` keeps
+/// the first remote of a repeated name, as the earlier linear search did.
+void index_remotes(Manifest& manifest)
 {
   for (const Remote& remote : manifest.remotes)
   {
-    if (remote.name == name)
-    {
-      return &remote;
-    }
+    manifest.remote_by_name.emplace(remote.name, &remote);
   }
-  return nullptr;
+}
+
+const Remote* find_remote(const Manifest& manifest, std::string_view name)
+{
+  const auto found = manifest.remote_by_name.find(name);
+  return found == manifest.remote_by_name.end() ? nullptr : found->second;
 }
 
 /// The project's clone url by west's rules, or empty when nothing resolves.
@@ -415,6 +425,7 @@ void parse_west_manifest(const core::WalkedManifestFile& file, std::size_t proje
   {
     return;  // a file named west.yml that is not a west manifest
   }
+  index_remotes(manifest);
 
   ResolveCounts counts;
   for (const Project& project : manifest.projects)
@@ -457,40 +468,82 @@ void parse_west_manifest(const core::WalkedManifestFile& file, std::size_t proje
   warn_resolve_counts(counts, manifest, file.label, unsupported_line_count, result);
 }
 
+/// The one format this producer reads, under either of its names.
+enum class ManifestKind
+{
+  kWestManifest,
+};
+
+/// Selects `west.yml` and `west.yaml`. A truncated prefix could drop the
+/// `remotes:` or `defaults:` that later projects resolve against, so an
+/// oversized manifest is skipped rather than half-read.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  const std::string_view file_name = core::file_name_of(relative_path);
+  for (const std::string_view manifest_name : kWestManifestNames)
+  {
+    if (file_name == manifest_name)
+    {
+      return core::ManifestMatch<ManifestKind>{ManifestKind::kWestManifest,
+                                               core::OversizedFilePolicy::kSkip};
+    }
+  }
+  return std::nullopt;
+}
+
+/// State shared by every west manifest of one scan: one project budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t project_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "west manifest");
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  parse_west_manifest(file, options.max_total_projects, state.project_budget, state.components,
+                      result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t project_budget = options.max_total_projects;
+  ParseState state;
+  state.project_budget = options.max_total_projects;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return !result.complete; }, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const std::string_view manifest_name : kWestManifestNames)
-  {
-    core::ManifestWalkOptions walk_options;
-    walk_options.max_scanned_files = options.max_scanned_files;
-    walk_options.max_file_bytes = options.max_file_bytes;
-    walk_options.producer_name = std::string(kProducerName);
-    walk_options.file_label = std::string(manifest_name);
-    walk_options.truncate_at_last_newline = false;
-    const core::Result<std::vector<core::WalkedManifestFile>> walked =
-        core::walk_bounded_manifest_files(file_index, root, manifest_name, walk_options);
-    for (const core::Warning& warning : walked.warnings)
-    {
-      result.warn(warning);
-    }
-    for (const core::WalkedManifestFile& file : walked.value)
-    {
-      if (!result.complete)
-      {
-        break;
-      }
-      parse_west_manifest(file, options.max_total_projects, project_budget, components, result);
-    }
-  }
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.project_budget = options.max_total_projects;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

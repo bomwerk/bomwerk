@@ -1,12 +1,107 @@
 // ctest unit test for the minimal XML scanner shared by the pom.xml and
 // MSBuild readers (framework-free).
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "core/xml_scan.hpp"
 #include "support/check.hpp"
 
 namespace xml_scan = bomwerk::core::xml_scan;
+
+namespace
+{
+
+/// The child_elements scan as it was before T40 made it linear, kept here as
+/// the reference: the new one must return exactly what this one returns.
+std::vector<xml_scan::ChildElement> reference_child_elements(std::string_view body)
+{
+  std::vector<xml_scan::ChildElement> children;
+  std::size_t position = 0;
+  while (position < body.size())
+  {
+    const std::size_t open = body.find('<', position);
+    if (open == std::string_view::npos)
+    {
+      break;
+    }
+    if (open + 1 >= body.size() || body[open + 1] == '/')
+    {
+      position = open + 1;
+      continue;
+    }
+    std::size_t name_end = open + 1;
+    while (name_end < body.size() && body[name_end] != '>' && body[name_end] != '/' &&
+           !xml_scan::is_xml_whitespace(body[name_end]))
+    {
+      ++name_end;
+    }
+    const std::string child_name(body.substr(open + 1, name_end - open - 1));
+    if (child_name.empty())
+    {
+      position = open + 1;
+      continue;
+    }
+    const std::optional<xml_scan::ElementMatch> child =
+        xml_scan::find_element(body, child_name, open);
+    if (!child.has_value())
+    {
+      position = open + 1;
+      continue;
+    }
+    std::string_view text = child->inner_text;
+    while (!text.empty() && xml_scan::is_xml_whitespace(text.front()))
+    {
+      text.remove_prefix(1);
+    }
+    while (!text.empty() && xml_scan::is_xml_whitespace(text.back()))
+    {
+      text.remove_suffix(1);
+    }
+    children.push_back({child_name, std::string(text)});
+    position = child->resume_position;
+  }
+  return children;
+}
+
+bool same_children(const std::vector<xml_scan::ChildElement>& left,
+                   const std::vector<xml_scan::ChildElement>& right)
+{
+  if (left.size() != right.size())
+  {
+    return false;
+  }
+  for (std::size_t index = 0; index < left.size(); ++index)
+  {
+    if (left[index].name != right[index].name || left[index].text != right[index].text)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Deterministic pseudo-random XML-ish text over the characters the scanner
+/// cares about, so the differential check covers shapes nobody wrote by hand.
+std::string generated_body(std::uint32_t seed, std::size_t length)
+{
+  static constexpr std::string_view kAlphabet = "<<<>>//ab b \n";
+  std::string body;
+  body.reserve(length);
+  std::uint32_t state = seed;
+  for (std::size_t index = 0; index < length; ++index)
+  {
+    state = state * 1664525u + 1013904223u;  // Numerical Recipes LCG
+    body.push_back(kAlphabet[(state >> 16) % kAlphabet.size()]);
+  }
+  return body;
+}
+
+}  // namespace
 
 int main()
 {
@@ -87,6 +182,61 @@ int main()
     BOMWERK_TEST_CHECK(xml_scan::line_number_at("a\nb\nc", 2) == 2);
     BOMWERK_TEST_CHECK(xml_scan::line_number_at("a\nb\nc", 4) == 3);
     BOMWERK_TEST_CHECK(xml_scan::line_number_at("a\nb\nc", 999) == 3);
+  }
+
+  // Given hand-written and generated bodies, when the children are read,
+  // then the linear scan returns exactly what the earlier quadratic one did.
+  {
+    const std::vector<std::string> bodies = {
+        "<a>1</a><b/>", "<a>1</a><a>2</a>", "<a><b>x</b></a>",     "<a>unclosed<b>2</b>",
+        "<a<b>1</a<b>", "<a <a <a >x</a>",  "<a/><b / ><c>3</c >", "  <x>\n  spaced \n</x>",
+        "<>empty</>",   "</a><a>1</a>",     "<a>1</b></a>",
+    };
+    for (const std::string& body : bodies)
+    {
+      BOMWERK_TEST_CHECK(
+          same_children(xml_scan::child_elements(body), reference_child_elements(body)));
+    }
+    for (std::uint32_t seed = 1; seed <= 400; ++seed)
+    {
+      const std::string body = generated_body(seed, 16 + seed % 240);
+      BOMWERK_TEST_CHECK(
+          same_children(xml_scan::child_elements(body), reference_child_elements(body)));
+    }
+  }
+
+  // Given the three shapes that made the earlier scan quadratic, 256 KiB each,
+  // when the children are read, then the scan finishes promptly (a 10 s fuzz
+  // timeout would otherwise report it) and finds nothing.
+  {
+    const std::size_t repeat = 64 * 1024;
+    std::string no_delimiter;
+    std::string no_close_bracket;
+    std::string unclosed_children;
+    for (std::size_t index = 0; index < repeat; ++index)
+    {
+      no_delimiter += "<a<a";
+      no_close_bracket += "<a  ";
+      unclosed_children += "<a" + std::to_string(index % 1000) + ">";
+    }
+    const auto started = std::chrono::steady_clock::now();
+    BOMWERK_TEST_CHECK(xml_scan::child_elements(no_delimiter).empty());
+    BOMWERK_TEST_CHECK(xml_scan::child_elements(no_close_bracket).empty());
+    BOMWERK_TEST_CHECK(xml_scan::child_elements(unclosed_children).empty());
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    BOMWERK_TEST_CHECK(elapsed < std::chrono::seconds(5));
+  }
+
+  // Given offsets asked in ascending order, and then one going back, when the
+  // line counter answers, then every answer equals line_number_at's.
+  {
+    const std::string text = "a\nbb\n\nccc\nd";
+    xml_scan::LineCounter counter(text);
+    for (const std::size_t position : {0u, 1u, 2u, 5u, 6u, 9u, 11u, 999u, 3u, 0u})
+    {
+      BOMWERK_TEST_CHECK(counter.line_number_at(position) ==
+                         xml_scan::line_number_at(text, position));
+    }
   }
 
   std::puts("test_xml_scan: OK");

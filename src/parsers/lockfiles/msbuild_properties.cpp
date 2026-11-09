@@ -45,11 +45,8 @@ constexpr std::string_view kEngineeringDirectory = "eng";
 
 constexpr std::string_view kUnresolvableImportMarkers[] = {"$(", "@(", "%(", "*"};
 
-}  // namespace
-
-core::VariableTable parse_property_groups(std::string_view xml)
+core::VariableTable property_groups_of_cleaned(std::string_view cleaned)
 {
-  const std::string cleaned = core::xml_scan::strip_comments_and_unwrap_cdata(xml);
   core::VariableTable table;
   std::size_t position = 0;
   while (true)
@@ -76,9 +73,8 @@ core::VariableTable parse_property_groups(std::string_view xml)
   return table;
 }
 
-std::vector<std::string> parse_import_projects(std::string_view xml)
+std::vector<std::string> import_projects_of_cleaned(std::string_view cleaned)
 {
-  const std::string cleaned = core::xml_scan::strip_comments_and_unwrap_cdata(xml);
   std::vector<std::string> projects;
   std::size_t position = 0;
   while (true)
@@ -102,6 +98,18 @@ std::vector<std::string> parse_import_projects(std::string_view xml)
     }
   }
   return projects;
+}
+
+}  // namespace
+
+core::VariableTable parse_property_groups(std::string_view xml)
+{
+  return property_groups_of_cleaned(core::xml_scan::strip_comments_and_unwrap_cdata(xml));
+}
+
+std::vector<std::string> parse_import_projects(std::string_view xml)
+{
+  return import_projects_of_cleaned(core::xml_scan::strip_comments_and_unwrap_cdata(xml));
 }
 
 std::optional<fs::path> resolve_import_path(const fs::path& importing_directory,
@@ -198,8 +206,10 @@ const PropertyScopes::LoadedFile* PropertyScopes::load(const fs::path& relative_
   }
 
   LoadedFile loaded;
-  loaded.properties = parse_property_groups(file_read.bytes);
-  loaded.imports = parse_import_projects(file_read.bytes);
+  // Stripped once for both readers (it was stripped twice per file).
+  const std::string cleaned = core::xml_scan::strip_comments_and_unwrap_cdata(file_read.bytes);
+  loaded.properties = property_groups_of_cleaned(cleaned);
+  loaded.imports = import_projects_of_cleaned(cleaned);
   const auto inserted = loaded_files_.emplace(relative_path, std::move(loaded));
   return &*inserted.first->second;
 }
@@ -281,10 +291,12 @@ core::VariableTable PropertyScopes::table_for_project(const fs::path& directory,
                                                       std::string_view project_xml)
 {
   core::VariableTable table = table_for_directory(directory);
+  // Stripped once for both readers (it was stripped twice per project).
+  const std::string cleaned = core::xml_scan::strip_comments_and_unwrap_cdata(project_xml);
   core::merge_variable_tables(table, core::kMsbuildVariableDialect,
-                              parse_property_groups(project_xml));
+                              property_groups_of_cleaned(cleaned));
   std::set<fs::path> visited;
-  merge_imports(table, directory, parse_import_projects(project_xml), visited, 0);
+  merge_imports(table, directory, import_projects_of_cleaned(cleaned), visited, 0);
   return table;
 }
 

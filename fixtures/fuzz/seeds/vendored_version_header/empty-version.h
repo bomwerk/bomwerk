@@ -1,0 +1,3 @@
+#define ZLIB_VERSION ""
+#define MBEDTLS_VERSION_STRING ""
+#define ZLIB_VERSION "1.3.1"

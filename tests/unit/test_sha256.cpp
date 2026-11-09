@@ -1,6 +1,7 @@
 // ctest unit test for the SHA-256 content-identity digest
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <string>
 #include <string_view>
 
@@ -185,5 +186,6 @@ int main()
   hex_round_trips_and_rejects_anything_else();
   embedded_nul_bytes_are_hashed();
   line_endings_are_not_normalized();
+  std::puts("test_sha256: OK");
   return 0;
 }

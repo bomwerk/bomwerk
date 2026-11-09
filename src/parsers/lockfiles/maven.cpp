@@ -13,6 +13,7 @@
 #include "core/build_variables.hpp"
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -27,6 +28,7 @@ namespace bomwerk::parsers::lockfiles::maven
 namespace
 {
 
+constexpr std::string_view kProducerName = "maven";
 constexpr std::string_view kPomName = "pom.xml";
 constexpr std::string_view kGradleLockfileName = "gradle.lockfile";
 
@@ -43,7 +45,6 @@ constexpr std::string_view kGradleEmptyCoordinate = "empty";
 
 using core::xml_scan::ElementMatch;
 using core::xml_scan::find_element;
-using core::xml_scan::line_number_at;
 using core::xml_scan::strip_comments_and_unwrap_cdata;
 
 /// Trimmed inner text of the first `<tag>` within `xml`; nullopt when absent.
@@ -174,23 +175,6 @@ PropertyResolution resolve_property_reference(const std::string& raw_text,
   return resolution;
 }
 
-/// Canonicalize `component.purl` in place, warning when the produced purl is
-/// somehow invalid (defensive: percent-encoding should make that impossible).
-void canonicalize_purl(core::Component& component,
-                       core::Result<std::vector<core::Component>>& result)
-{
-  const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-  if (!parsed_purl.complete)
-  {
-    result.warn(core::WarningCode::kPurlValidationFailed,
-                "maven: produced purl failed validation: " + component.purl, "maven");
-  }
-  else
-  {
-    component.purl = parsed_purl.value.canonical();
-  }
-}
-
 /// Append one `pkg:maven` component. The groupId is the purl namespace :
 /// dotted, single-segment, so plain `percent_encode` (never the `/`-preserving
 /// namespace variant) keeps any stray structural byte escaped.
@@ -214,7 +198,7 @@ void emit_maven_component(std::string_view group_id, std::string_view artifact_i
   component.supplier = std::string(group_id);
   component.scope = scope;
   component.evidence.push_back({core::Source::Manifest, std::move(detail), confidence});
-  canonicalize_purl(component, result);
+  core::canonicalize_purl(component.purl, kProducerName, result.warnings);
   components.push_back(std::move(component));
 }
 
@@ -349,6 +333,9 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
 
   std::size_t malformed_dependency_count = 0;
   std::size_t missing_version_count = 0;
+  // Dependencies are met in document order, so line numbers are counted
+  // incrementally: recounting from the start for each one was quadratic.
+  core::xml_scan::LineCounter line_counter(working);
   std::size_t position = 0;
   while (true)
   {
@@ -377,7 +364,7 @@ void parse_pom(std::string_view bytes, const std::string& label, std::size_t pac
     const PropertyResolution artifact_id_resolution =
         resolve_property_reference(*artifact_id, properties);
     const std::string location =
-        label + ":" + std::to_string(line_number_at(working, dependency->span_start));
+        label + ":" + std::to_string(line_counter.line_number_at(dependency->span_start));
     if (!is_usable_literal(group_id_resolution) || !is_usable_literal(artifact_id_resolution))
     {
       result.warn(core::WarningCode::kUnresolvedVariableOrInterpolation,
@@ -593,84 +580,103 @@ void parse_gradle_lockfile(std::string_view bytes, const std::string& label,
   }
 }
 
+/// The formats this producer reads.
+enum class ManifestKind
+{
+  kPom,
+  kGradleLockfile,
+};
+
+/// Selects `pom.xml` (a truncated XML document cannot be paired reliably, so
+/// an oversized one is skipped) and `gradle.lockfile` (line-based: an
+/// oversized one keeps its complete-line prefix).
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  const std::string_view file_name = core::file_name_of(relative_path);
+  if (file_name == kPomName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kPom, core::OversizedFilePolicy::kSkip};
+  }
+  if (file_name == kGradleLockfileName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kGradleLockfile,
+                                             core::OversizedFilePolicy::kTrimToLastNewline};
+  }
+  return std::nullopt;
+}
+
+/// State shared by every maven manifest of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "maven");
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind kind, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  switch (kind)
+  {
+    case ManifestKind::kPom:
+      parse_pom(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                state.components, result);
+      return;
+    case ManifestKind::kGradleLockfile:
+      parse_gradle_lockfile(file.bytes, file.label, options.max_total_packages,
+                            state.package_budget, state.components, result);
+      return;
+  }
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    const std::string filename = relative_path.filename().string();
-    const bool is_pom = filename == kPomName;
-    const bool is_gradle_lockfile = filename == kGradleLockfileName;
-    if (!is_pom && !is_gradle_lockfile)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "maven: file limit reached; remaining maven files skipped", "maven");
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "maven: unreadable file: " + label, "maven");
-      continue;
-    }
-    std::string_view bytes = file_read.bytes;
-    if (file_read.truncated)
-    {
-      if (is_gradle_lockfile)
-      {
-        // Line-based: the readable prefix still parses; drop the cut-off tail
-        // line so it cannot count as malformed.
-        result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                    "maven: file exceeds size limit, parsing first part only: " + label, "maven");
-        const std::size_t last_newline = bytes.rfind('\n');
-        bytes = (last_newline == std::string_view::npos) ? std::string_view{}
-                                                         : bytes.substr(0, last_newline + 1);
-      }
-      else
-      {
-        // A truncated XML document cannot be paired reliably; skipping beats
-        // guessing.
-        result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                    "maven: file exceeds size limit, skipped: " + label, "maven");
-        continue;
-      }
-    }
-
-    if (is_pom)
-    {
-      parse_pom(bytes, label, options.max_total_packages, package_budget, components, result);
-    }
-    else
-    {
-      parse_gradle_lockfile(bytes, label, options.max_total_packages, package_budget, components,
-                            result);
-    }
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

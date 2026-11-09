@@ -13,6 +13,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/manifest_names.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -26,6 +27,7 @@ namespace bomwerk::parsers::lockfiles::python
 namespace
 {
 
+constexpr std::string_view kProducerName = "python";
 constexpr std::string_view kUvLockName = "uv.lock";
 constexpr std::string_view kPoetryLockName = "poetry.lock";
 constexpr std::string_view kRequirementsName = "requirements.txt";
@@ -71,23 +73,6 @@ std::string build_pypi_purl(const std::string& normalized_name, const std::strin
   return purl;
 }
 
-/// Canonicalize `component.purl` in place, warning when the produced purl is
-/// somehow invalid (defensive: normalize+encode should make that impossible).
-void canonicalize_purl(core::Component& component,
-                       core::Result<std::vector<core::Component>>& result)
-{
-  const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-  if (!parsed_purl.complete)
-  {
-    result.warn(core::WarningCode::kPurlValidationFailed,
-                "python: produced purl failed validation: " + component.purl, "python");
-  }
-  else
-  {
-    component.purl = parsed_purl.value.canonical();
-  }
-}
-
 /// Append one lock entry as a High-confidence component. `declared_name` keeps
 /// its original spelling in the evidence detail when normalization changed it.
 void emit_lock_component(std::string_view declared_name, std::string_view version,
@@ -109,7 +94,7 @@ void emit_lock_component(std::string_view declared_name, std::string_view versio
   // Lock entries are the resolver's own output -> High.
   component.evidence.push_back({core::Source::Manifest, detail, core::Confidence::High});
 
-  canonicalize_purl(component, result);
+  core::canonicalize_purl(component.purl, kProducerName, result.warnings);
   components.push_back(std::move(component));
 }
 
@@ -172,7 +157,10 @@ void parse_uv_lock(std::string_view bytes, const std::string& label, std::size_t
     }
     const std::optional<std::string> name = (*package_table)["name"].value<std::string>();
     const std::optional<std::string> version = (*package_table)["version"].value<std::string>();
-    if (!name.has_value() || name->empty() || !version.has_value() || version->empty())
+    // A name made only of separators (`_`, `..-`) normalizes to nothing, and no
+    // purl has an empty name: that entry is unusable, like a missing one.
+    if (!name.has_value() || normalize_pypi_name(*name).empty() || !version.has_value() ||
+        version->empty())
     {
       ++skipped_entry_count;
       continue;
@@ -228,7 +216,10 @@ void parse_poetry_lock(std::string_view bytes, const std::string& label, std::si
     }
     const std::optional<std::string> name = (*package_table)["name"].value<std::string>();
     const std::optional<std::string> version = (*package_table)["version"].value<std::string>();
-    if (!name.has_value() || name->empty() || !version.has_value() || version->empty())
+    // A name made only of separators (`_`, `..-`) normalizes to nothing, and no
+    // purl has an empty name: that entry is unusable, like a missing one.
+    if (!name.has_value() || normalize_pypi_name(*name).empty() || !version.has_value() ||
+        version->empty())
     {
       ++skipped_entry_count;
       continue;
@@ -358,7 +349,10 @@ void parse_requirements(std::string_view bytes, const std::string& label, std::s
       ++name_length;
     }
     const std::string_view declared_name = line.substr(0, name_length);
-    if (declared_name.empty())
+    // A name made only of separators (`_`, `._.`) normalizes to nothing, and no
+    // purl has an empty name: such a line is not a requirement (found by
+    // fuzzing, T40).
+    if (normalize_pypi_name(declared_name).empty())
     {
       ++unsupported_line_count;
       continue;
@@ -430,7 +424,7 @@ void parse_requirements(std::string_view bytes, const std::string& label, std::s
         pinned_version.empty() ? core::Confidence::Low : core::Confidence::High;
     component.evidence.push_back({core::Source::Manifest, detail, confidence});
 
-    canonicalize_purl(component, result);
+    core::canonicalize_purl(component.purl, kProducerName, result.warnings);
     components.push_back(std::move(component));
   }
 
@@ -443,90 +437,114 @@ void parse_requirements(std::string_view bytes, const std::string& label, std::s
   }
 }
 
+/// The formats this producer reads.
+enum class ManifestKind
+{
+  kUvLock,
+  kPoetryLock,
+  kRequirements,
+};
+
+/// Selects uv and poetry lockfiles (TOML: a truncated document cannot parse,
+/// so an oversized one is skipped) and requirements files (line-based: an
+/// oversized one keeps its complete-line prefix).
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  const std::string_view file_name = core::file_name_of(relative_path);
+  if (file_name == kUvLockName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kUvLock,
+                                             core::OversizedFilePolicy::kSkip};
+  }
+  if (file_name == kPoetryLockName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kPoetryLock,
+                                             core::OversizedFilePolicy::kSkip};
+  }
+  if (core::matches_manifest_name(file_name, kRequirementsName))
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kRequirements,
+                                             core::OversizedFilePolicy::kTrimToLastNewline};
+  }
+  return std::nullopt;
+}
+
+/// State shared by every python manifest of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "python");
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind kind, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  switch (kind)
+  {
+    case ManifestKind::kUvLock:
+      parse_uv_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                    state.components, result);
+      return;
+    case ManifestKind::kPoetryLock:
+      parse_poetry_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                        state.components, result);
+      return;
+    case ManifestKind::kRequirements:
+      parse_requirements(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                         state.components, result);
+      return;
+  }
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    const std::string filename = relative_path.filename().string();
-    const bool is_uv_lock = filename == kUvLockName;
-    const bool is_poetry_lock = filename == kPoetryLockName;
-    const bool is_requirements = core::matches_manifest_name(filename, kRequirementsName);
-    if (!is_uv_lock && !is_poetry_lock && !is_requirements)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "python: file limit reached; remaining python files skipped", "python");
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "python: unreadable file: " + label,
-                  "python");
-      continue;
-    }
-    std::string_view bytes = file_read.bytes;
-    if (file_read.truncated)
-    {
-      if (is_requirements)
-      {
-        // Line-based: the readable prefix still parses; drop the cut-off tail
-        // line so it cannot count as unsupported.
-        result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                    "python: file exceeds size limit, parsing first part only: " + label, "python");
-        const std::size_t last_newline = bytes.rfind('\n');
-        bytes = (last_newline == std::string_view::npos) ? std::string_view{}
-                                                         : bytes.substr(0, last_newline + 1);
-      }
-      else
-      {
-        // A truncated TOML document cannot parse; skipping beats guessing.
-        result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                    "python: file exceeds size limit, skipped: " + label, "python");
-        continue;
-      }
-    }
-
-    if (is_uv_lock)
-    {
-      parse_uv_lock(bytes, label, options.max_total_packages, package_budget, components, result);
-    }
-    else if (is_poetry_lock)
-    {
-      parse_poetry_lock(bytes, label, options.max_total_packages, package_budget, components,
-                        result);
-    }
-    else
-    {
-      parse_requirements(bytes, label, options.max_total_packages, package_budget, components,
-                         result);
-    }
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

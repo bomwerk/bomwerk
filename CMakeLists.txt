@@ -53,6 +53,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BOMWERK_WERROR   "Treat warnings as errors" ON)
 option(BOMWERK_SANITIZE "Enable ASan+UBSan"        OFF)
+option(BOMWERK_FUZZ     "Build the libFuzzer harnesses in tests/fuzz (LLVM Clang only)" OFF)
 option(BOMWERK_PRO "Build proprietary registry, monitor, triage, report, and licensing features" OFF)
 set(BOMWERK_PRO_SOURCE_DIR "" CACHE PATH
     "Private extension source root; required only when BOMWERK_PRO=ON")
@@ -81,7 +82,24 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 if(BOMWERK_WERROR)
   add_compile_options(-Werror)
 endif()
-if(BOMWERK_SANITIZE)
+if(BOMWERK_FUZZ)
+  # libFuzzer ships only with LLVM Clang: AppleClang and GCC have no
+  # -fsanitize=fuzzer. Every library is instrumented for coverage
+  # (fuzzer-no-link); only the harness executables link the fuzzer runtime,
+  # see bomwerk_add_fuzzer. Sanitizer reports are fatal, so libFuzzer records
+  # them as crashes. Build only `--target fuzzers` in such a tree.
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(FATAL_ERROR
+            "BOMWERK_FUZZ=ON needs LLVM Clang, which ships libFuzzer (AppleClang and GCC do not): "
+            "configure with -DCMAKE_CXX_COMPILER=clang++")
+  endif()
+  if(BOMWERK_SANITIZE)
+    message(WARNING "BOMWERK_FUZZ=ON already builds with ASan+UBSan: BOMWERK_SANITIZE is redundant")
+  endif()
+  add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=all
+                      -fno-omit-frame-pointer -g)
+  add_link_options(-fsanitize=address,undefined)
+elseif(BOMWERK_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
 endif()
@@ -423,6 +441,12 @@ bomwerk_add_test(yarn bomwerk_parsers)
 bomwerk_add_test(pnpm bomwerk_parsers)
 bomwerk_add_test(pub bomwerk_parsers)
 bomwerk_add_test(west bomwerk_parsers)
+# Every producer's parse_bytes against its own parse: the in-memory entry point
+# the fuzz harnesses call must answer exactly what a scanned file gets.
+bomwerk_add_test(parse_bytes bomwerk_parsers)
+# The contract every manifest producer keeps (hostile fixtures, BOM, CRLF, NUL,
+# oversize, unreadable, file cap), applied to all of them by one table.
+bomwerk_add_test(producer_contract bomwerk_parsers)
 
 # Observer tests. shim_names/trace_line/trace_writer exercise the shim
 # half, so they link only bomwerk_observe_trace: the same nothing-extra the
@@ -510,6 +534,112 @@ bomwerk_add_test(html_report bomwerk_output)
 # -> the same components), the same "test is allowed to see both sides"
 # precedent as vendored_cpp/output::canonical_spdx_license_id above.
 bomwerk_add_test(sbom_read bomwerk_sbom bomwerk_output)
+# The in-memory entry points of the non-manifest readers (binscan, fingerprint
+# index, bomwerk.toml, version headers, vuln payloads) against their path versions.
+bomwerk_add_test(in_memory_readers bomwerk_binscan bomwerk_heuristics bomwerk_vuln)
+
+# ---- Fuzz harnesses (T40, docs/fuzzing.md) ----------------------------------
+# One executable per target in scripts/fuzz_targets.json, built from
+# tests/fuzz/<source> with BOMWERK_FUZZ_VARIANT naming the file it parses.
+# With BOMWERK_FUZZ=ON each is a libFuzzer binary (scripts/run_fuzz.py runs
+# them); otherwise each links tests/fuzz/replay_main.cpp and is registered as
+# the ctest `<target>_seeds`, replaying its seeds, hostile fixtures and any
+# recorded crash once under the build's own sanitizers. So every harness
+# compiles in every build, and an input that once crashed a parser stays fixed.
+add_custom_target(fuzzers)
+# OBJECT, not STATIC: the support file defines LLVMFuzzerInitialize, which
+# libFuzzer only looks up weakly; an archive member nobody references by name
+# would never be linked in.
+add_library(bomwerk_fuzz_support OBJECT tests/fuzz/fuzz_support.cpp)
+target_link_libraries(bomwerk_fuzz_support PUBLIC bomwerk_core)
+target_include_directories(bomwerk_fuzz_support PUBLIC tests)
+
+function(bomwerk_add_fuzzer fuzzer_name source_file variant)
+  add_executable(${fuzzer_name} tests/fuzz/${source_file})
+  target_link_libraries(${fuzzer_name} PRIVATE bomwerk_fuzz_support ${ARGN})
+  if(NOT variant STREQUAL "")
+    target_compile_definitions(${fuzzer_name} PRIVATE BOMWERK_FUZZ_VARIANT="${variant}")
+  endif()
+  if(BOMWERK_FUZZ)
+    target_link_options(${fuzzer_name} PRIVATE -fsanitize=fuzzer)
+  else()
+    target_sources(${fuzzer_name} PRIVATE tests/fuzz/replay_main.cpp)
+  endif()
+  add_dependencies(fuzzers ${fuzzer_name})
+endfunction()
+
+# ELF and `ar` seeds are generated, never committed (fixtures/binscan/SOURCES.md).
+add_executable(fuzz_binary_seed_writer tests/fuzz/write_binary_seeds.cpp)
+target_include_directories(fuzz_binary_seed_writer PRIVATE tests)
+add_dependencies(fuzzers fuzz_binary_seed_writer)
+set(BOMWERK_FUZZ_SEED_DIR "${CMAKE_CURRENT_BINARY_DIR}/fuzz-seeds")
+if(NOT BOMWERK_FUZZ)
+  add_test(NAME fuzz_binary_seeds
+    COMMAND fuzz_binary_seed_writer ${BOMWERK_FUZZ_SEED_DIR})
+  set_tests_properties(fuzz_binary_seeds PROPERTIES FIXTURES_SETUP fuzz_binary_seeds)
+endif()
+
+set(bomwerk_fuzz_manifest "${CMAKE_CURRENT_SOURCE_DIR}/scripts/fuzz_targets.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${bomwerk_fuzz_manifest}")
+file(READ "${bomwerk_fuzz_manifest}" bomwerk_fuzz_json)
+string(JSON bomwerk_fuzz_count LENGTH "${bomwerk_fuzz_json}" targets)
+math(EXPR bomwerk_fuzz_last "${bomwerk_fuzz_count} - 1")
+foreach(target_index RANGE ${bomwerk_fuzz_last})
+  string(JSON fuzz_name GET "${bomwerk_fuzz_json}" targets ${target_index} name)
+  string(JSON fuzz_source GET "${bomwerk_fuzz_json}" targets ${target_index} source)
+  string(JSON fuzz_variant ERROR_VARIABLE fuzz_no_variant
+         GET "${bomwerk_fuzz_json}" targets ${target_index} variant)
+  if(fuzz_no_variant)
+    set(fuzz_variant "")
+  endif()
+  set(fuzz_libraries "")
+  string(JSON fuzz_library_count LENGTH "${bomwerk_fuzz_json}" targets ${target_index} libraries)
+  if(fuzz_library_count GREATER 0)
+    math(EXPR fuzz_library_last "${fuzz_library_count} - 1")
+    foreach(library_index RANGE ${fuzz_library_last})
+      string(JSON fuzz_library GET "${bomwerk_fuzz_json}"
+             targets ${target_index} libraries ${library_index})
+      list(APPEND fuzz_libraries ${fuzz_library})
+    endforeach()
+  endif()
+  bomwerk_add_fuzzer(${fuzz_name} ${fuzz_source} "${fuzz_variant}" ${fuzz_libraries})
+
+  if(NOT BOMWERK_FUZZ)
+    set(fuzz_replay_arguments "")
+    string(JSON fuzz_suffix_count LENGTH "${bomwerk_fuzz_json}"
+           targets ${target_index} seed_suffixes)
+    if(fuzz_suffix_count GREATER 0)
+      math(EXPR fuzz_suffix_last "${fuzz_suffix_count} - 1")
+      foreach(suffix_index RANGE ${fuzz_suffix_last})
+        string(JSON fuzz_suffix GET "${bomwerk_fuzz_json}"
+               targets ${target_index} seed_suffixes ${suffix_index})
+        list(APPEND fuzz_replay_arguments --suffix ${fuzz_suffix})
+      endforeach()
+    endif()
+    string(JSON fuzz_path_count LENGTH "${bomwerk_fuzz_json}" targets ${target_index} seed_paths)
+    if(fuzz_path_count GREATER 0)
+      math(EXPR fuzz_path_last "${fuzz_path_count} - 1")
+      foreach(path_index RANGE ${fuzz_path_last})
+        string(JSON fuzz_path GET "${bomwerk_fuzz_json}"
+               targets ${target_index} seed_paths ${path_index})
+        list(APPEND fuzz_replay_arguments "${CMAKE_CURRENT_SOURCE_DIR}/${fuzz_path}")
+      endforeach()
+    endif()
+    string(JSON fuzz_generated ERROR_VARIABLE fuzz_no_generated
+           GET "${bomwerk_fuzz_json}" targets ${target_index} generated_seeds)
+    if(NOT fuzz_no_generated)
+      list(APPEND fuzz_replay_arguments "${BOMWERK_FUZZ_SEED_DIR}/${fuzz_generated}")
+    endif()
+    add_test(NAME ${fuzz_name}_seeds COMMAND ${fuzz_name} ${fuzz_replay_arguments})
+    # The GCC sanitizer build compiles UBSan as recoverable: without this a
+    # UB report would print and the replay would still pass.
+    set_tests_properties(${fuzz_name}_seeds PROPERTIES
+      ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
+    if(NOT fuzz_no_generated)
+      set_tests_properties(${fuzz_name}_seeds PROPERTIES FIXTURES_REQUIRED fuzz_binary_seeds)
+    endif()
+  endif()
+endforeach()
 
 # --all-cpes: scan/trim/binscan CLI wiring (flag parsing, scan's SPDX
 # rejection, trim/binscan's --output requirement). Same precedent as
@@ -620,6 +750,13 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME version_sync
     COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_version_sync.py)
+
+  # scripts/fuzz_targets.json agrees with tests/fuzz/ and with the fixtures it
+  # names, and scripts/run_fuzz.py shards, budgets and detects findings
+  # correctly (T40).
+  add_test(NAME fuzz_targets_manifest
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_fuzz_targets.py)
 
   # The fingerprint corpus manifest's shape, and the builder's agreement with the
   # matcher about which files count as evidence (two constants duplicated across

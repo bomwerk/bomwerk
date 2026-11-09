@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "core/file_index.hpp"
@@ -21,7 +22,8 @@ struct ParseOptions
   std::size_t max_file_bytes = core::json_utils::kMaxFileBytes;  ///< per-manifest read cap (1 MiB)
   std::size_t max_scanned_files =
       core::kDefaultMaxScannedFilesPerEcosystem;  ///< vcpkg.json files parsed per scan
-  std::size_t max_total_requirements = 10000;     ///< dependencies across all files
+  std::size_t max_total_requirements =
+      core::kDefaultMaxPackagesPerEcosystem;  ///< dependencies across all files
 
   /// Subtree roots to skip, `root`-relative and lexically normal (e.g. the
   /// submodules producer's `Component::root` values): a vendored submodule is
@@ -79,5 +81,17 @@ struct ParseOptions
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                                const std::filesystem::path& root,
                                                                const ParseOptions& options);
+
+/// Parse one file held in memory exactly as `parse` parses the file
+/// `file_name` (root-relative): its last segment must be `vcpkg.json`, or the
+/// result is empty with no warning. The path alone decides the role, as in a
+/// scan: `vcpkg.json` is a project manifest, `ports/<name>/vcpkg.json` a port
+/// definition whose own identity is also emitted. `file_name` is the label in
+/// warnings and evidence, and `options.max_file_bytes` bounds `bytes` the way
+/// it bounds a file read. Never touches the filesystem: this is the entry
+/// point of the `fuzz_vcpkg` harnesses.
+[[nodiscard]] core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                                     std::string_view bytes,
+                                                                     const ParseOptions& options);
 
 }  // namespace bomwerk::parsers::cpp::vcpkg

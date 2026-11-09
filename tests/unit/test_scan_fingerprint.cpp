@@ -2,6 +2,7 @@
 // match is allowed to change about a component's identity, and what it is not.
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -298,5 +299,6 @@ int main()
   a_match_with_no_component_is_reported_not_invented();
   a_rewritten_identity_merges_with_a_matching_declaration();
   no_matches_changes_nothing();
+  std::puts("test_scan_fingerprint: OK");
   return 0;
 }

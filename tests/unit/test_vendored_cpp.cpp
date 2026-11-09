@@ -734,6 +734,20 @@ int main()
     }
   }
 
+  // Given a version macro holding an empty string (found by fuzzing, T40),
+  // when matched in memory, then it is no match, and a later real definition
+  // of the same macro still wins.
+  {
+    namespace vendored = bomwerk::heuristics::vendored_cpp;
+    BOMWERK_TEST_CHECK(
+        !vendored::match_version_header("zlib", "zlib/zlib.h", "#define ZLIB_VERSION \"\"\n")
+             .has_value());
+    const auto later = vendored::match_version_header(
+        "zlib", "zlib/zlib.h", "#define ZLIB_VERSION \"\"\n#define ZLIB_VERSION \"1.3.1\"\n");
+    BOMWERK_TEST_CHECK(later.has_value());
+    BOMWERK_TEST_CHECK(later->version == "1.3.1");
+  }
+
   std::puts("test_vendored_cpp: OK");
   return 0;
 }

@@ -8,6 +8,7 @@
 // host `ar`, so the same bytes are tested on the Linux and macOS runners.
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -225,5 +226,6 @@ int main()
         std::is_sorted(first.value.indexed_symbols.begin(), first.value.indexed_symbols.end()));
   }
 
+  std::puts("test_archive_read: OK");
   return 0;
 }

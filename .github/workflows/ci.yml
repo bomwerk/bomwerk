@@ -117,6 +117,88 @@ jobs:
             exit 1
           fi
 
+  fuzz-smoke:
+    # A ten-minute libFuzzer campaign over every harness in tests/fuzz/ (T40,
+    # docs/fuzzing.md): 600 s of wall clock on four cores, starting from the
+    # corpus the nightly run saved on main. It only restores that corpus,
+    # never saves it, so a pull request cannot change what main fuzzes from.
+    # Any crash, leak, timeout or out-of-memory input fails the job and is
+    # uploaded as an artifact.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # A newer push to the same branch supersedes a campaign still running.
+    concurrency:
+      group: fuzz-smoke-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
+    steps:
+      - uses: actions/checkout@v4.1.0
+        with:
+          submodules: true
+      - name: Resolve vcpkg baseline commit (cache key input)
+        id: vcpkg_baseline
+        run: echo "sha=$(git -C vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      # Same key as build-test on ubuntu-24.04: vcpkg builds its ports with the
+      # system compiler either way, so the binary cache is shared.
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.vcpkg-binary-cache
+          key: vcpkg-bincache-ubuntu-24.04-${{ steps.vcpkg_baseline.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bincache-ubuntu-24.04-${{ steps.vcpkg_baseline.outputs.sha }}-
+            vcpkg-bincache-ubuntu-24.04-
+      - name: Bootstrap vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+      - name: Install LLVM Clang and its libFuzzer runtime
+        run: sudo apt-get update && sudo apt-get install -y clang-18 libclang-rt-18-dev
+      - name: Configure (libFuzzer)
+        run: >
+          cmake -B build-fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DBOMWERK_PRO=OFF
+          -DBOMWERK_FUZZ=ON
+          -DCMAKE_CXX_COMPILER=clang++-18
+      - name: Build the harnesses
+        run: cmake --build build-fuzz --target fuzzers --parallel
+      # The nightly saves one corpus per shard; all four extract into one tree.
+      - name: Restore the nightly corpus (shard 0)
+        uses: actions/cache/restore@v4
+        with:
+          path: .fuzz-corpus
+          key: fuzz-corpus-shard0-none
+          restore-keys: fuzz-corpus-shard0-
+      - name: Restore the nightly corpus (shard 1)
+        uses: actions/cache/restore@v4
+        with:
+          path: .fuzz-corpus
+          key: fuzz-corpus-shard1-none
+          restore-keys: fuzz-corpus-shard1-
+      - name: Restore the nightly corpus (shard 2)
+        uses: actions/cache/restore@v4
+        with:
+          path: .fuzz-corpus
+          key: fuzz-corpus-shard2-none
+          restore-keys: fuzz-corpus-shard2-
+      - name: Restore the nightly corpus (shard 3)
+        uses: actions/cache/restore@v4
+        with:
+          path: .fuzz-corpus
+          key: fuzz-corpus-shard3-none
+          restore-keys: fuzz-corpus-shard3-
+      - name: Fuzz every harness for ten minutes
+        run: >
+          python3 scripts/run_fuzz.py --build-dir build-fuzz
+          --corpus-root .fuzz-corpus --artifacts-dir fuzz-artifacts
+          --budget-seconds 600 --jobs 4
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-smoke-findings
+          path: fuzz-artifacts/
+          retention-days: 14
+
   format:
     runs-on: ubuntu-24.04
     steps:

@@ -1,0 +1,2 @@
+https://github.com/espressif/esp-idf
+../../kmackay/micro-ecc.git

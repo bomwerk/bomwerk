@@ -76,4 +76,11 @@ class Purl
 void canonicalize_purl(std::string& purl, std::string_view producer_name,
                        std::vector<Warning>& warnings);
 
+/// `canonicalize_purl` without the rewrite: validate `purl` via `Purl::parse`
+/// and leave it exactly as the producer built it, appending the same warning
+/// on failure. For producers whose purls are already in the form they want to
+/// emit, so that dogfooding the parser cannot change their output.
+void validate_purl(const std::string& purl, std::string_view producer_name,
+                   std::vector<Warning>& warnings);
+
 }  // namespace bomwerk::core

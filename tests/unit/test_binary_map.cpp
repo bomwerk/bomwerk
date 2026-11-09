@@ -8,6 +8,7 @@
 // attributed to a component on nothing more than a matching name.
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <set>
 #include <string>
@@ -359,5 +360,6 @@ int main()
     BOMWERK_TEST_CHECK(map.warnings.empty());
   }
 
+  std::puts("test_binary_map: OK");
   return 0;
 }

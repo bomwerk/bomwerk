@@ -17,6 +17,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/git_url.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/model.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
@@ -83,6 +84,9 @@ constexpr std::string_view kArchiveSuffixes[] = {".tar.gz", ".tgz", ".tar.bz2", 
                                                  ".zip",    ".7z",  ".tar"};
 
 constexpr std::string_view kUnknownComponentName = "unknown";
+constexpr std::string_view kProducerName = "cmake";
+constexpr std::string_view kCmakeListsName = "CMakeLists.txt";
+constexpr std::string_view kCmakeModuleExtension = ".cmake";
 
 bool is_all_digits(std::string_view text)
 {
@@ -228,11 +232,14 @@ std::optional<ForgeTarget> parse_cpm_shorthand(const std::string& argument)
 
 bool is_cmake_file(const fs::path& path)
 {
-  if (path.filename() == "CMakeLists.txt")
+  const std::string_view file_name = core::file_name_of(path);
+  if (file_name == kCmakeListsName)
   {
     return true;
   }
-  return path.extension() == ".cmake";
+  // Same rule as `path::extension()`: a dotfile named just `.cmake` has none.
+  return file_name.size() > kCmakeModuleExtension.size() &&
+         file_name.ends_with(kCmakeModuleExtension);
 }
 
 bool is_declaration_command(std::string_view lower_name)
@@ -268,6 +275,21 @@ std::string build_archive_purl(const std::string& name, const std::string& versi
   }
   purl += "download_url=" + core::percent_encode(url);
   return purl;
+}
+
+/// True for a checksum algorithm name as a purl `checksum` qualifier can carry
+/// it: lower-case letters, digits and `-` only (`sha256`, `sha-512`, `md5`).
+/// `URL_HASH` text is attacker-controlled, and the name is written into the
+/// purl unencoded.
+bool is_checksum_algorithm_name(std::string_view algorithm)
+{
+  return !algorithm.empty() && std::all_of(algorithm.begin(), algorithm.end(),
+                                           [](char character)
+                                           {
+                                             return (character >= 'a' && character <= 'z') ||
+                                                    (character >= '0' && character <= '9') ||
+                                                    character == '-';
+                                           });
 }
 
 core::Confidence lowered_by_one(core::Confidence confidence)
@@ -590,7 +612,10 @@ std::optional<core::Component> component_from_declaration(
       // Reject a non-hex value outright: unvalidated, it could inject '&'/'='
       // into the purl query string (a hostile URL_HASH crafted to look like
       // "SHA256=abc&download_url=evil") or leave garbage in Component::sha256.
-      if (core::is_hex_digits(hex))
+      // The algorithm is checked the same way: it is written into the purl
+      // verbatim, so a control byte or a '&' in front of the '=' would make
+      // the purl unparsable (found by fuzzing, T40).
+      if (is_checksum_algorithm_name(algorithm) && core::is_hex_digits(hex))
       {
         checksum_qualifier = algorithm + ":" + hex;
         if (algorithm == "sha256")
@@ -602,7 +627,8 @@ std::optional<core::Component> component_from_declaration(
       {
         result.warn(core::WarningCode::kMalformedEntrySkipped,
                     "cmake: '" + source_label + "' dependency '" + component.name +
-                        "' has a URL_HASH value that is not valid hex; ignoring the checksum",
+                        "' has a URL_HASH value that is not a valid <algorithm>=<hex> pair; "
+                        "ignoring the checksum",
                     "cmake");
       }
     }
@@ -667,16 +693,10 @@ std::optional<core::Component> component_from_declaration(
     confidence = core::Confidence::Low;
   }
 
-  // Dogfood core::Purl: a purl we cannot parse back is a builder bug, not merely
-  // degraded input: surface it so tests/fuzzers catch it (as submodules does).
-  const core::Result<core::Purl> validated = core::Purl::parse(component.purl);
-  if (!validated.complete)
-  {
-    result.warn(
-        core::WarningCode::kPurlValidationFailed,
-        "cmake: '" + source_label + "' produced an unparsable purl '" + component.purl + "'",
-        "cmake");
-  }
+  // A purl we cannot parse back is a bug in the builder, not degraded input:
+  // the shared helper surfaces it as kPurlValidationFailed so tests and the
+  // fuzz harness catch it. The purl itself is left as built.
+  core::validate_purl(component.purl, kProducerName, result.warnings);
 
   std::string detail = source_label + " -> " + command.name + "(" + component.name + ")";
   if (extracted.declare_only)
@@ -759,175 +779,135 @@ bool is_variable_binding_command(std::string_view lower_name)
          lower_name == "unset";
 }
 
-}  // namespace
-
-core::Result<std::vector<core::Component>> parse(const fs::path& root)
+/// The one format this producer reads, under two kinds of name.
+enum class ManifestKind
 {
-  return parse(root, ParseLimits{});
+  kCmakeFile,
+};
+
+/// Selects every `CMakeLists.txt` and `*.cmake`. An oversized file keeps its
+/// complete-line prefix: a command can still span the cut, but no line (a
+/// URL, a tag) is ever cut mid-token into a wrong value.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (!is_cmake_file(relative_path))
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kCmakeFile,
+                                           core::OversizedFilePolicy::kTrimToLastNewline};
 }
 
-core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseLimits& limits)
+/// Everything collected across the CMake files of one scan before any
+/// component is built. Variable definitions come from every file, not only
+/// the declaring one (protobuf sets `abseil-cpp-version` in dependencies.cmake
+/// and uses it in abseil-cpp.cmake), so expansion waits for the last file.
+struct ParseState
 {
-  std::error_code directory_error;
-  if (!fs::is_directory(root, directory_error) || directory_error)
-  {
-    spdlog::debug("cmake: '{}' is not a scannable directory", root.string());
-    return {};  // nothing to scan; not an error
-  }
-
-  const core::Result<core::FileIndex> file_index =
-      core::build_file_index(root, core::default_excluded_dir_names(),
-                             core::with_submodule_subtrees(root, limits.excluded_subtrees));
-
-  core::Result<std::vector<core::Component>> result = parse(file_index.value, root, limits);
-  for (const core::Warning& warning : file_index.warnings)
-  {
-    result.warn(warning);
-  }
-  return result;
-}
-
-core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
-                                                 const fs::path& root, const ParseLimits& limits)
-{
-  core::Result<std::vector<core::Component>> result;
-
-  // file_index.files is already sorted (core::build_file_index, rule 3); this
-  // filter preserves that order, so cmake_files needs no re-sort before the
-  // cap below.
-  std::vector<fs::path> cmake_files;
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (is_cmake_file(relative_path))
-    {
-      cmake_files.push_back(relative_path);
-    }
-  }
-
-  if (cmake_files.size() > limits.max_scanned_files)
-  {
-    result.warn(core::WarningCode::kFileLimitReached,
-                "cmake: " + std::to_string(cmake_files.size()) + " CMake files exceed the " +
-                    std::to_string(limits.max_scanned_files) +
-                    "-file limit; scanning the first files in sorted order only",
-                "cmake");
-    cmake_files.resize(limits.max_scanned_files);
-  }
-
   std::vector<SourcedCommand> declarations;
-  // Variable definitions come from every CMake file in the tree, not only the
-  // declaring one (protobuf sets `abseil-cpp-version` in dependencies.cmake
-  // and uses it in abseil-cpp.cmake), so expansion waits for the last file.
   core::VariableTable variables;
   std::vector<std::string> made_available_arguments;
   bool declarations_capped = false;
-  for (const fs::path& relative_path : cmake_files)
-  {
-    const std::string source_label = relative_path.string();
-    const fs::path file_path = root / relative_path;
+  std::size_t parsed_file_count = 0;
+};
 
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(file_path, limits.max_file_bytes);
-    if (!file_read.readable)
+core::ManifestWalkOptions walk_options_for(const ParseLimits& limits)
+{
+  return core::make_walk_options(limits, kProducerName, "CMake");
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseLimits& limits, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  ++state.parsed_file_count;
+  core::Result<std::vector<CmakeCommand>> scanned = scan_cmake_commands(file.bytes);
+  static constexpr std::string_view kUnterminatedCommandPrefix = "cmake: unterminated command ";
+  for (const core::Warning& warning : scanned.warnings)
+  {
+    // A truncated read always leaves the last in-flight command looking
+    // "unterminated" to the scanner, purely as a side effect of the cap
+    // cutting the file off mid-command: not a separate defect worth its
+    // own warning on top of the cap warning already emitted above.
+    if (file.truncated && warning.message.starts_with(kUnterminatedCommandPrefix))
     {
-      result.warn(core::WarningCode::kUnreadableFile, "cmake: cannot read '" + source_label + "'",
-                  "cmake");
       continue;
     }
-    if (file_read.truncated)
+    result.warn(core::Warning{warning.code, file.label + ": " + warning.message, warning.ecosystem,
+                              warning.affected_path});
+  }
+  for (CmakeCommand& command : scanned.value)
+  {
+    const std::string lower_name = core::to_lower_ascii(command.name);
+    if (is_make_available_command(lower_name))
     {
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "cmake: '" + source_label + "' exceeds the " +
-                      std::to_string(limits.max_file_bytes) +
-                      "-byte cap; only the first part scanned",
-                  "cmake");
-    }
-
-    core::Result<std::vector<CmakeCommand>> scanned = scan_cmake_commands(file_read.bytes);
-    static constexpr std::string_view kUnterminatedCommandPrefix = "cmake: unterminated command ";
-    for (const core::Warning& warning : scanned.warnings)
-    {
-      // A truncated read always leaves the last in-flight command looking
-      // "unterminated" to the scanner, purely as a side effect of the cap
-      // cutting the file off mid-command: not a separate defect worth its
-      // own warning on top of the cap warning already emitted above.
-      if (file_read.truncated && warning.message.starts_with(kUnterminatedCommandPrefix))
+      // A malformed/truncated MakeAvailable call cannot be trusted to name
+      // every argument it was meant to: recovering the wrong dependency as
+      // "confirmed built" would raise its confidence on bad evidence.
+      if (command.well_formed)
       {
+        for (const std::string& argument : command.arguments)
+        {
+          // FetchContent treats the dependency name case-insensitively
+          // (cmake.org/cmake/help/latest/module/FetchContent.html), so
+          // `FetchContent_Declare(GoogleTest ...)` followed by
+          // `FetchContent_MakeAvailable(googletest)` refers to the same
+          // dependency; normalize case here to match extract_declaration's
+          // lookup below.
+          state.made_available_arguments.push_back(argument);
+        }
+      }
+      else
+      {
+        result.warn(core::WarningCode::kMalformedEntrySkipped,
+                    "cmake: '" + file.label + "' has a malformed " + command.name +
+                        " call; its arguments are not trusted to confirm any dependency was built",
+                    "cmake");
+      }
+    }
+    else if (lower_name == "set")
+    {
+      record_set_definition(command, state.variables);
+    }
+    else if (is_variable_binding_command(lower_name))
+    {
+      mark_bound_variables_ambiguous(command, lower_name, state.variables);
+    }
+    else if (is_declaration_command(lower_name))
+    {
+      if (state.declarations.size() >= limits.max_total_declarations)
+      {
+        if (!state.declarations_capped)
+        {
+          result.warn(core::WarningCode::kEntryLimitReached,
+                      "cmake: more than " + std::to_string(limits.max_total_declarations) +
+                          " dependency declarations; ignoring the rest",
+                      "cmake");
+          state.declarations_capped = true;
+        }
         continue;
       }
-      result.warn(core::Warning{warning.code, source_label + ": " + warning.message,
-                                warning.ecosystem, warning.affected_path});
-    }
-    for (CmakeCommand& command : scanned.value)
-    {
-      const std::string lower_name = core::to_lower_ascii(command.name);
-      if (is_make_available_command(lower_name))
-      {
-        // A malformed/truncated MakeAvailable call cannot be trusted to name
-        // every argument it was meant to: recovering the wrong dependency as
-        // "confirmed built" would raise its confidence on bad evidence.
-        if (command.well_formed)
-        {
-          for (const std::string& argument : command.arguments)
-          {
-            // FetchContent treats the dependency name case-insensitively
-            // (cmake.org/cmake/help/latest/module/FetchContent.html), so
-            // `FetchContent_Declare(GoogleTest ...)` followed by
-            // `FetchContent_MakeAvailable(googletest)` refers to the same
-            // dependency; normalize case here to match extract_declaration's
-            // lookup below.
-            made_available_arguments.push_back(argument);
-          }
-        }
-        else
-        {
-          result.warn(
-              core::WarningCode::kMalformedEntrySkipped,
-              "cmake: '" + source_label + "' has a malformed " + command.name +
-                  " call; its arguments are not trusted to confirm any dependency was built",
-              "cmake");
-        }
-      }
-      else if (lower_name == "set")
-      {
-        record_set_definition(command, variables);
-      }
-      else if (is_variable_binding_command(lower_name))
-      {
-        mark_bound_variables_ambiguous(command, lower_name, variables);
-      }
-      else if (is_declaration_command(lower_name))
-      {
-        if (declarations.size() >= limits.max_total_declarations)
-        {
-          if (!declarations_capped)
-          {
-            result.warn(core::WarningCode::kEntryLimitReached,
-                        "cmake: more than " + std::to_string(limits.max_total_declarations) +
-                            " dependency declarations; ignoring the rest",
-                        "cmake");
-            declarations_capped = true;
-          }
-          continue;
-        }
-        declarations.push_back({std::move(command), source_label, lower_name});
-      }
+      state.declarations.push_back({std::move(command), file.label, lower_name});
     }
   }
+}
 
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
   std::set<std::string> made_available;
-  for (const std::string& argument : made_available_arguments)
+  for (const std::string& argument : state.made_available_arguments)
   {
     made_available.insert(core::to_lower_ascii(
-        core::expand_variables(argument, variables, core::kCmakeVariableDialect)));
+        core::expand_variables(argument, state.variables, core::kCmakeVariableDialect)));
   }
 
   std::vector<core::Component> components;
-  for (const SourcedCommand& declaration : declarations)
+  for (const SourcedCommand& declaration : state.declarations)
   {
     std::optional<core::Component> component =
         component_from_declaration(declaration.command, declaration.source_label,
-                                   declaration.lower_name, made_available, variables, result);
+                                   declaration.lower_name, made_available, state.variables, result);
     if (component.has_value())
     {
       spdlog::debug("cmake {} -> {}", declaration.source_label, component->purl);
@@ -940,8 +920,59 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
   // evidence. run_scan merges again over all producers: idempotent.
   result.value = core::merge_all(std::move(components));
   spdlog::debug("parsed CMake dependencies: {} components from {} files", result.value.size(),
-                cmake_files.size());
+                state.parsed_file_count);
   return result;
+}
+
+}  // namespace
+
+core::Result<std::vector<core::Component>> parse(const fs::path& root)
+{
+  return parse(root, ParseLimits{});
+}
+
+core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseLimits& limits)
+{
+  // A `root` that is not a directory yields an empty index, not an error.
+  const core::Result<core::FileIndex> file_index =
+      core::build_file_index(root, core::default_excluded_dir_names(),
+                             core::with_submodule_subtrees(root, limits.excluded_subtrees));
+  core::Result<std::vector<core::Component>> result = parse(file_index.value, root, limits);
+  for (const core::Warning& warning : file_index.warnings)
+  {
+    result.warn(warning);
+  }
+  if (!file_index.complete)
+  {
+    result.complete = false;
+  }
+  return result;
+}
+
+core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
+                                                 const fs::path& root, const ParseLimits& limits)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  // Files keep being read after the declaration cap: a later file can still
+  // define a variable an earlier declaration needs.
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(limits), result.warnings, manifest_kind,
+      [] { return false; }, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, limits, state, result); });
+  return finish(std::move(state), std::move(result));
+}
+
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseLimits& limits)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  core::for_manifest_bytes(file_name, bytes, limits.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, limits, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 }  // namespace bomwerk::parsers::cpp::cmake_deps

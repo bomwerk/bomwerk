@@ -10,6 +10,7 @@
 
 #include "core/model.hpp"
 #include "core/warning.hpp"
+#include "core/warning_code.hpp"
 #include "parsers/ci/github_actions.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
@@ -403,6 +404,47 @@ int main()
     BOMWERK_TEST_CHECK(!result.warnings.empty());
     BOMWERK_TEST_CHECK(result.value.size() == 1);
     BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/actions/aaa@v1");
+  }
+
+  // Given a workflow the cap cuts inside a `uses:` value, when parsed, then
+  // only complete lines count: the cut-off reference never becomes a
+  // component with a truncated name.
+  {
+    TempTree tree;
+    const std::string workflow =
+        "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n"
+        "      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n";
+    tree.write(".github/workflows/ci.yml", workflow);
+    github_actions::ParseOptions options;
+    options.max_file_bytes = workflow.find("setup-python") + 5;
+    const auto result = github_actions::parse(tree.root(), options);
+    BOMWERK_TEST_CHECK(any_purl_contains(result.value, "checkout"));
+    BOMWERK_TEST_CHECK(!any_purl_contains(result.value, "setup"));
+  }
+
+  // Given more `uses:` lines than the budget across two workflows, when
+  // parsed, then the limit is warned once and no reference past the budget is
+  // reported.
+  {
+    TempTree tree;
+    tree.write(".github/workflows/a.yml",
+               "jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n"
+               "      - uses: actions/cache@v4\n");
+    tree.write(".github/workflows/b.yml",
+               "jobs:\n  b:\n    steps:\n      - uses: actions/upload-artifact@v4\n");
+    github_actions::ParseOptions options;
+    options.max_total_uses_references = 1;
+    const auto result = github_actions::parse(tree.root(), options);
+    BOMWERK_TEST_CHECK(!any_purl_contains(result.value, "upload-artifact"));
+    std::size_t limit_warnings = 0;
+    for (const auto& warning : result.warnings)
+    {
+      if (warning.code == bomwerk::core::WarningCode::kEntryLimitReached)
+      {
+        ++limit_warnings;
+      }
+    }
+    BOMWERK_TEST_CHECK(limit_warnings == 1);
   }
 
   std::puts("test_github_actions: OK");

@@ -12,6 +12,7 @@
 
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -25,6 +26,7 @@ namespace bomwerk::parsers::lockfiles::cargo
 namespace
 {
 
+constexpr std::string_view kProducerName = "cargo";
 constexpr std::string_view kCargoLockName = "Cargo.lock";
 
 /// A registry `checksum` is the sha256 of the packaged `.crate` archive:
@@ -37,23 +39,6 @@ constexpr std::size_t kSha256HexLength = 64;
 std::string build_cargo_purl(const std::string& crate_name, const std::string& version)
 {
   return "pkg:cargo/" + core::percent_encode(crate_name) + "@" + core::percent_encode(version);
-}
-
-/// Canonicalize `component.purl` in place, warning when the produced purl is
-/// somehow invalid (defensive: percent-encoding should make that impossible).
-void canonicalize_purl(core::Component& component,
-                       core::Result<std::vector<core::Component>>& result)
-{
-  const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-  if (!parsed_purl.complete)
-  {
-    result.warn(core::WarningCode::kPurlValidationFailed,
-                "cargo: produced purl failed validation: " + component.purl, "cargo");
-  }
-  else
-  {
-    component.purl = parsed_purl.value.canonical();
-  }
 }
 
 /// Parse the TOML shell of a Cargo.lock. vcpkg's tomlplusplus port ships a
@@ -152,7 +137,7 @@ void parse_cargo_lock(std::string_view bytes, const std::string& label, std::siz
     // Lock entries are cargo's own resolver output -> High.
     component.evidence.push_back({core::Source::Manifest, detail, core::Confidence::High});
 
-    canonicalize_purl(component, result);
+    core::canonicalize_purl(component.purl, kProducerName, result.warnings);
     components.push_back(std::move(component));
   }
   if (skipped_entry_count > 0)
@@ -164,58 +149,87 @@ void parse_cargo_lock(std::string_view bytes, const std::string& label, std::siz
   }
 }
 
+/// The one format this producer reads.
+enum class ManifestKind
+{
+  kCargoLock,
+};
+
+/// Selects `Cargo.lock` files. A truncated TOML document cannot parse, so an
+/// oversized one is skipped rather than guessed at.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (core::file_name_of(relative_path) != kCargoLockName)
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kCargoLock,
+                                           core::OversizedFilePolicy::kSkip};
+}
+
+/// State shared by every Cargo.lock of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, kCargoLockName);
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  parse_cargo_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                   state.components, result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (relative_path.filename().string() != kCargoLockName)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "cargo: file limit reached; remaining Cargo.lock files skipped", "cargo");
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "cargo: unreadable file: " + label, "cargo");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      // A truncated TOML document cannot parse; skipping beats guessing.
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "cargo: file exceeds size limit, skipped: " + label, "cargo");
-      continue;
-    }
-    parse_cargo_lock(file_read.bytes, label, options.max_total_packages, package_budget, components,
-                     result);
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

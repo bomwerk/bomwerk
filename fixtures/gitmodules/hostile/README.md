@@ -3,7 +3,8 @@
 Hand-written adversarial inputs. A scanner is a security product: on **any** of
 these the parser must warn and continue: never crash, hang, read out of
 bounds, escape the repo, or exit with code 2 for a merely-malformed file
-(rule 1). These double as the libFuzzer seed corpus once a fuzz harness exists.
+(rule 1). These double as the seed corpus of the `fuzz_submodules` and `fuzz_git_config`
+harnesses (see `docs/fuzzing.md`).
 
 | File | What it probes |
 |---|---|

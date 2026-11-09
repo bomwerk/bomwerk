@@ -1,4 +1,4 @@
-#include <cassert>
+// ctest unit test for the conan producer (framework-free).
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -9,6 +9,7 @@
 
 #include "core/model.hpp"
 #include "core/warning.hpp"
+#include "core/warning_code.hpp"
 #include "parsers/cpp/conan.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
@@ -62,16 +63,16 @@ int main()
                "[generators]\n"
                "CMakeDeps\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.warnings.empty());
-    assert(result.value.size() == 2);
-    assert(result.value[0].purl == "pkg:conan/fmt@10.2.1");
-    assert(result.value[1].purl == "pkg:conan/zlib@1.2.13");
-    assert(result.value[1].name == "zlib");
-    assert(result.value[1].version == "1.2.13");
-    assert(highest_confidence(result.value[0]) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:conan/fmt@10.2.1");
+    BOMWERK_TEST_CHECK(result.value[1].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(result.value[1].name == "zlib");
+    BOMWERK_TEST_CHECK(result.value[1].version == "1.2.13");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
     // No user/channel in the reference: no supplier is invented.
-    assert(result.value[1].supplier.empty());
+    BOMWERK_TEST_CHECK(result.value[1].supplier.empty());
   }
 
   // Given a [requires] section header with stray surrounding whitespace
@@ -82,9 +83,9 @@ int main()
     TempTree tree;
     tree.write("conanfile.txt", "[ requires ]\nzlib/1.2.13\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:conan/zlib@1.2.13");
   }
 
   // Given [tool_requires], [build_requires] and [test_requires] sections, when
@@ -97,8 +98,8 @@ int main()
                "[build_requires]\nninja/1.11.1\n"
                "[test_requires]\ngtest/1.14.0\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 3);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
     const Component* cmake_component = find_by_purl_prefix(result.value, "pkg:conan/cmake");
     BOMWERK_TEST_CHECK(cmake_component != nullptr);
     BOMWERK_TEST_CHECK(cmake_component->evidence[0].detail.find("[tool_requires]") !=
@@ -111,10 +112,11 @@ int main()
     TempTree tree;
     tree.write("conanfile.txt", "[requires]\nopenssl/3.2.0@bincrafters/stable\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:conan/openssl@3.2.0?channel=stable&user=bincrafters");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl ==
+                       "pkg:conan/openssl@3.2.0?channel=stable&user=bincrafters");
     // The reference's user segment is conan's own publisher field.
-    assert(result.value[0].supplier == "bincrafters");
+    BOMWERK_TEST_CHECK(result.value[0].supplier == "bincrafters");
   }
 
   // Given a revision-pinned reference, when parsed with defaults, then the
@@ -125,15 +127,15 @@ int main()
     TempTree tree;
     tree.write("conanfile.txt", "[requires]\nzlib/1.2.13#a5c1f2e3\n");
     const auto default_result = conan::parse(tree.root());
-    assert(default_result.value.size() == 1);
-    assert(default_result.value[0].purl == "pkg:conan/zlib@1.2.13");
-    assert(highest_confidence(default_result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(default_result.value.size() == 1);
+    BOMWERK_TEST_CHECK(default_result.value[0].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(highest_confidence(default_result.value[0]) == Confidence::High);
 
     conan::ParseOptions revision_options;
     revision_options.emit_recipe_revision_qualifier = true;
     const auto revision_result = conan::parse(tree.root(), revision_options);
-    assert(revision_result.value.size() == 1);
-    assert(revision_result.value[0].purl == "pkg:conan/zlib@1.2.13?rrev=a5c1f2e3");
+    BOMWERK_TEST_CHECK(revision_result.value.size() == 1);
+    BOMWERK_TEST_CHECK(revision_result.value[0].purl == "pkg:conan/zlib@1.2.13?rrev=a5c1f2e3");
   }
 
   // Given a version range, when parsed, then the component is reported at Low
@@ -142,9 +144,9 @@ int main()
     TempTree tree;
     tree.write("conanfile.txt", "[requires]\nzlib/[>=1.2 <2.0]\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].version == "[>=1.2 <2.0]");
-    assert(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == "[>=1.2 <2.0]");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
   }
 
   // Given comment lines, inline " #" comments and blank lines, when parsed,
@@ -159,11 +161,11 @@ int main()
                "fmt/10.2.1#abc123\n"
                "\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 2);
-    assert(result.value[1].purl == "pkg:conan/zlib@1.2.13");
-    assert(result.value[0].purl == "pkg:conan/fmt@10.2.1");
-    assert(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.value[1].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:conan/fmt@10.2.1");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
   }
 
   // Given no conan files at all, when parsed, then the result is empty: not a
@@ -172,9 +174,9 @@ int main()
     TempTree tree;
     tree.write("README.md", "no conan here\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.empty());
-    assert(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
   }
 
   // Given two conanfile.txt in different directories naming the same
@@ -185,8 +187,8 @@ int main()
     tree.write("conanfile.txt", "[requires]\nzlib/1.2.13\n");
     tree.write("app/conanfile.txt", "[requires]\nzlib/1.2.13\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].evidence.size() == 2);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].evidence.size() == 2);
   }
 
   // Given a file larger than max_file_bytes, when parsed, then a truncation
@@ -199,8 +201,8 @@ int main()
     conan::ParseOptions tight_options;
     tight_options.max_file_bytes = 64;
     const auto result = conan::parse(tree.root(), tight_options);
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     BOMWERK_TEST_CHECK(!result.warnings.empty());
   }
 
@@ -214,10 +216,10 @@ int main()
                "class Pkg(ConanFile):\n"
                "    requires = \"zlib/1.2.13\", \"fmt/10.2.1\"\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 2);
-    assert(result.value[1].purl == "pkg:conan/zlib@1.2.13");
-    assert(highest_confidence(result.value[1]) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.value[1].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[1]) == Confidence::Medium);
   }
 
   // Given a multi-line list attribute and a tool_requires attribute, when
@@ -232,10 +234,11 @@ int main()
                "    ]\n"
                "    tool_requires = \"cmake/3.27.0\"\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 3);
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
     const Component* openssl_component = find_by_purl_prefix(result.value, "pkg:conan/openssl");
     BOMWERK_TEST_CHECK(openssl_component != nullptr);
-    assert(openssl_component->purl == "pkg:conan/openssl@3.2.0?channel=stable&user=corp");
+    BOMWERK_TEST_CHECK(openssl_component->purl ==
+                       "pkg:conan/openssl@3.2.0?channel=stable&user=corp");
   }
 
   // Given self.requires()/self.tool_requires() calls inside methods, when
@@ -250,10 +253,10 @@ int main()
                "    def build_requirements(self):\n"
                "        self.tool_requires(\"cmake/[>=3.25]\")\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 3);
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
     const Component* cmake_component = find_by_purl_prefix(result.value, "pkg:conan/cmake");
     BOMWERK_TEST_CHECK(cmake_component != nullptr);
-    assert(highest_confidence(*cmake_component) == Confidence::Low);  // range
+    BOMWERK_TEST_CHECK(highest_confidence(*cmake_component) == Confidence::Low);  // range
   }
 
   // Given a docstring that merely MENTIONS self.requires("fake/1.0"), when
@@ -267,8 +270,8 @@ int main()
                "    \"\"\"\n"
                "    requires = \"zlib/1.2.13\"\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:conan/zlib@1.2.13");
   }
 
   // Given a requires list with more than 50 continuation lines (kMaxPythonContinuationLines),
@@ -289,7 +292,7 @@ int main()
         "    tool_requires = \"cmake/3.27.0\"\n";
     tree.write("conanfile.py", conanfile);
     const auto result = conan::parse(tree.root());
-    assert(result.complete);  // Truncation is a warning, not an error (Hard Rule 1)
+    BOMWERK_TEST_CHECK(result.complete);  // Truncation is a warning, not an error (Hard Rule 1)
     // Check that a truncation warning was emitted
     bool found_truncation_warning = false;
     for (const bomwerk::core::Warning& warning : result.warnings)
@@ -321,11 +324,11 @@ int main()
                "        self.requires(f\"zlib/{self.zlib_version}\")\n"
                "        self.requires(f\"{name}/1.0\")\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].name == "zlib");
-    assert(result.value[0].version.empty());
-    assert(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].name == "zlib");
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
     BOMWERK_TEST_CHECK(result.warnings.size() == 2);
   }
 
@@ -337,7 +340,7 @@ int main()
                "class Pkg(ConanFile):\n"
                "    python_requires = \"mybase/1.0@corp/stable\"\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     BOMWERK_TEST_CHECK(result.value[0].evidence[0].detail.find("[python_requires]") !=
                        std::string::npos);
   }
@@ -359,13 +362,13 @@ int main()
                "  \"python_requires\": [\"mybase/1.0#dd44ee55%1700000001.0\"]\n"
                "}\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.warnings.empty());
-    assert(result.value.size() == 4);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 4);
     const Component* zlib_component = find_by_purl_prefix(result.value, "pkg:conan/zlib");
     BOMWERK_TEST_CHECK(zlib_component != nullptr);
-    assert(zlib_component->purl == "pkg:conan/zlib@1.2.13");
-    assert(highest_confidence(*zlib_component) == Confidence::High);
+    BOMWERK_TEST_CHECK(zlib_component->purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(highest_confidence(*zlib_component) == Confidence::High);
     BOMWERK_TEST_CHECK(zlib_component->evidence[0].detail.find("rev=a5c1f2e3") !=
                        std::string::npos);
   }
@@ -386,11 +389,12 @@ int main()
                "  \"version\": \"0.4\"\n"
                "}\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
     const Component* openssl_component = find_by_purl_prefix(result.value, "pkg:conan/openssl");
     BOMWERK_TEST_CHECK(openssl_component != nullptr);
-    assert(openssl_component->purl == "pkg:conan/openssl@1.1.1w?channel=stable&user=corp");
+    BOMWERK_TEST_CHECK(openssl_component->purl ==
+                       "pkg:conan/openssl@1.1.1w?channel=stable&user=corp");
   }
 
   // Given a conan-1 graph_lock node missing its "ref" field, when parsed, then
@@ -412,8 +416,8 @@ int main()
                "  \"version\": \"0.4\"\n"
                "}\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const Component* openssl_component = find_by_purl_prefix(result.value, "pkg:conan/openssl");
     BOMWERK_TEST_CHECK(openssl_component != nullptr);
     BOMWERK_TEST_CHECK(!result.warnings.empty());
@@ -426,8 +430,8 @@ int main()
     TempTree tree;
     tree.write("conan.lock", "{ not json ]\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
     BOMWERK_TEST_CHECK(result.warnings.size() == 1);
   }
 
@@ -438,8 +442,8 @@ int main()
     std::string deep_json(50000, '[');
     tree.write("conan.lock", deep_json);
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
     BOMWERK_TEST_CHECK(!result.warnings.empty());
   }
 
@@ -450,8 +454,8 @@ int main()
     tree.write("conan.lock",
                "{\"version\": \"0.5\", \"requires\": [42, {\"a\": 1}, \"zlib/1.2.13#ab%1.0\"]}\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     BOMWERK_TEST_CHECK(!result.warnings.empty());
   }
 
@@ -464,8 +468,8 @@ int main()
     TempTree tree;
     tree.write("conan.lock", "{\"version\": \"0.5\", \"requires\": \"zlib/1.2.13\"}\n");
     const auto result = conan::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
     BOMWERK_TEST_CHECK(!result.warnings.empty());
   }
 
@@ -478,10 +482,10 @@ int main()
     tree.write("conan.lock",
                "{\"version\": \"0.5\", \"requires\": [\"zlib/1.2.13#a5c1f2e3%1708593606.497\"]}\n");
     const auto result = conan::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:conan/zlib@1.2.13");
-    assert(result.value[0].evidence.size() == 2);
-    assert(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(result.value[0].evidence.size() == 2);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
   }
 
   // Given the JSON `conan graph info --format=json` writes (user-run: bomwerk
@@ -500,11 +504,11 @@ int main()
                "  }\n"
                "}\n");
     const auto result = conan::parse_graph_file(tree.root() / "graph.json", conan::ParseOptions{});
-    assert(result.complete);
-    assert(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
     const Component* zlib_component = find_by_purl_prefix(result.value, "pkg:conan/zlib");
     BOMWERK_TEST_CHECK(zlib_component != nullptr);
-    assert(highest_confidence(*zlib_component) == Confidence::High);
+    BOMWERK_TEST_CHECK(highest_confidence(*zlib_component) == Confidence::High);
   }
 
   // Given a graph node missing its "ref" field, when ingested, then the
@@ -525,8 +529,8 @@ int main()
                "  }\n"
                "}\n");
     const auto result = conan::parse_graph_file(tree.root() / "graph.json", conan::ParseOptions{});
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const Component* cmake_component = find_by_purl_prefix(result.value, "pkg:conan/cmake");
     BOMWERK_TEST_CHECK(cmake_component != nullptr);
     BOMWERK_TEST_CHECK(!result.warnings.empty());
@@ -539,14 +543,14 @@ int main()
     tree.write("graph.json", "not json at all");
     const auto missing_result =
         conan::parse_graph_file(tree.root() / "no-such-file.json", conan::ParseOptions{});
-    assert(missing_result.complete);
-    assert(missing_result.value.empty());
+    BOMWERK_TEST_CHECK(missing_result.complete);
+    BOMWERK_TEST_CHECK(missing_result.value.empty());
     BOMWERK_TEST_CHECK(!missing_result.warnings.empty());
 
     const auto malformed_result =
         conan::parse_graph_file(tree.root() / "graph.json", conan::ParseOptions{});
-    assert(malformed_result.complete);
-    assert(malformed_result.value.empty());
+    BOMWERK_TEST_CHECK(malformed_result.complete);
+    BOMWERK_TEST_CHECK(malformed_result.value.empty());
     BOMWERK_TEST_CHECK(!malformed_result.warnings.empty());
   }
 
@@ -608,10 +612,61 @@ int main()
     conan::ParseOptions options;
     options.max_scanned_files = 1;
     const auto result = conan::parse(tree.root(), options);
-    assert(result.complete);
-    assert(!result.warnings.empty());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:conan/aaa@1.0.0");
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:conan/aaa@1.0.0");
+  }
+
+  // Given two conanfile.txt whose requirements together exceed the budget,
+  // when parsed, then the limit is warned exactly once, however many files
+  // are left, and no requirement past the budget is reported.
+  {
+    TempTree tree;
+    tree.write("a/conanfile.txt", "[requires]\nzlib/1.2.13\nfmt/10.0.0\nboost/1.83.0\n");
+    tree.write("b/conanfile.txt", "[requires]\nopenssl/3.1.0\n");
+    conan::ParseOptions options;
+    options.max_total_requirements = 2;
+    const auto result = conan::parse(tree.root(), options);
+    std::size_t limit_warnings = 0;
+    for (const auto& warning : result.warnings)
+    {
+      if (warning.code == bomwerk::core::WarningCode::kEntryLimitReached)
+      {
+        ++limit_warnings;
+      }
+    }
+    BOMWERK_TEST_CHECK(limit_warnings == 1);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+  }
+
+  // Given a conan.lock larger than the cap, when parsed, then it is skipped
+  // with one size warning: a JSON prefix is never parsed into a second,
+  // invalid-JSON warning.
+  {
+    TempTree tree;
+    tree.write("conan.lock", R"({"version": "0.5", "requires": ["zlib/1.2.13"]})");
+    conan::ParseOptions options;
+    options.max_file_bytes = 20;
+    const auto result = conan::parse(tree.root(), options);
+    BOMWERK_TEST_CHECK(result.value.empty());
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(result.warnings[0].code ==
+                       bomwerk::core::WarningCode::kFileSizeLimitExceeded);
+  }
+
+  // Given a conanfile.txt the cap cuts inside its last requirement, when
+  // parsed, then only complete lines count: the cut-off reference never
+  // becomes a component with a truncated name.
+  {
+    TempTree tree;
+    const std::string conanfile = "[requires]\nzlib/1.2.13\nfmt/10.0.0\n";
+    tree.write("conanfile.txt", conanfile);
+    conan::ParseOptions options;
+    options.max_file_bytes = conanfile.find("fmt/") + 4;
+    const auto result = conan::parse(tree.root(), options);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl.find("zlib") != std::string::npos);
   }
 
   std::puts("test_conan: OK");

@@ -4,6 +4,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/model.hpp"
@@ -77,5 +78,13 @@ struct ScanConfig
 /// by name so a typo is never silently ignored. `complete` stays true: a
 /// broken config degrades the run (exit 1), it never aborts it.
 [[nodiscard]] Result<ScanConfig> load_scan_config(const std::filesystem::path& config_path);
+
+/// `load_scan_config` for a `bomwerk.toml` already in memory: the same size
+/// cap, the same parse and the same warnings, with `config_path` naming the
+/// file in them. `bomwerk.toml` is read from the repository under scan, so it
+/// is untrusted input; this is the entry point of the `fuzz_scan_config`
+/// harness and never touches the filesystem.
+[[nodiscard]] Result<ScanConfig> parse_scan_config(std::string_view bytes,
+                                                   const std::filesystem::path& config_path);
 
 }  // namespace bomwerk::core

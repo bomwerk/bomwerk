@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -319,5 +320,6 @@ int main()
         std::is_sorted(first.value.exported_symbols.begin(), first.value.exported_symbols.end()));
   }
 
+  std::puts("test_elf_read: OK");
   return 0;
 }

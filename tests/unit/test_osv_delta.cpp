@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -155,5 +156,6 @@ int main()
     BOMWERK_TEST_CHECK(delta.purl == "pkg:pypi/requests@2.31.0");
   }
 
+  std::puts("test_osv_delta: OK");
   return 0;
 }

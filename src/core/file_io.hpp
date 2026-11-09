@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 #include "core/sha256.hpp"
 
@@ -26,6 +27,14 @@ struct BoundedFileRead
 /// `{bytes: "ab", readable: true, truncated: true}`.
 [[nodiscard]] BoundedFileRead read_file_bounded(const std::filesystem::path& path,
                                                 std::size_t max_bytes);
+
+/// The in-memory counterpart of `read_file_bounded`: exactly what reading a
+/// file that holds `bytes` would yield, so a parser fed from memory (a fuzz
+/// harness, `parse_bytes`) takes the same size-cap path as one fed from disk.
+/// Bytes already in memory are always readable.
+/// Example: `bound_in_memory_bytes("abc", 2)` yields
+/// `{bytes: "ab", readable: true, truncated: true}`.
+[[nodiscard]] BoundedFileRead bound_in_memory_bytes(std::string_view bytes, std::size_t max_bytes);
 
 /// First line of a small text file, bounded and trimmed. Empty when the file is
 /// absent or unreadable: callers treat that as "no value", never an error.

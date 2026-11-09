@@ -1,5 +1,4 @@
 // ctest unit test for the CMake command lexer (the pure scanner half).
-#include <cassert>
 #include <cstddef>
 #include <cstdio>
 #include <string>
@@ -41,9 +40,9 @@ int main()
         "  GIT_TAG        v1.14.0\n"
         ")\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.complete);
-    assert(result.warnings.empty());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const CmakeCommand& command = result.value[0];
     BOMWERK_TEST_CHECK(command.name == "FetchContent_Declare");
     BOMWERK_TEST_CHECK(command.line == 1);
@@ -64,8 +63,8 @@ int main()
         "#[[ a bracket\n comment spanning lines ]]\n"
         "CPMAddPackage(NAME fmt VERSION 10.2.1) # trailing comment\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.warnings.empty());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const CmakeCommand& command = result.value[0];
     BOMWERK_TEST_CHECK(command.name == "CPMAddPackage");
     BOMWERK_TEST_CHECK(command.arguments.size() == 4);
@@ -93,8 +92,8 @@ int main()
     const std::string text =
         "target_compile_definitions(vina PUBLIC -DVERSION=\\\"${GIT_VERSION}\\\")\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.warnings.empty());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const CmakeCommand& command = result.value[0];
     BOMWERK_TEST_CHECK(command.name == "target_compile_definitions");
     BOMWERK_TEST_CHECK(command.arguments.size() == 3);
@@ -106,9 +105,9 @@ int main()
   {
     const std::string text = "CPMAddPackage(\"gh:fmtlib/fmt#10.2.1\")\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.value.size() == 1);
-    assert(result.value[0].arguments.size() == 1);
-    assert(result.value[0].arguments[0] == "gh:fmtlib/fmt#10.2.1");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].arguments.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].arguments[0] == "gh:fmtlib/fmt#10.2.1");
   }
 
   // Given a bracket argument, when scanned, then its literal (unescaped) content
@@ -116,9 +115,9 @@ int main()
   {
     const std::string text = "message([=[ raw ]] text with ) ]=])\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.value.size() == 1);
-    assert(result.value[0].arguments.size() == 1);
-    assert(result.value[0].arguments[0] == " raw ]] text with ) ");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].arguments.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].arguments[0] == " raw ]] text with ) ");
   }
 
   // Given a command name in lower case with a space before '(', when scanned,
@@ -126,9 +125,9 @@ int main()
   {
     const std::string text = "fetchcontent_declare (dep GIT_TAG main)\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.value.size() == 1);
-    assert(result.value[0].name == "fetchcontent_declare");
-    assert(result.value[0].arguments.size() == 3);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].name == "fetchcontent_declare");
+    BOMWERK_TEST_CHECK(result.value[0].arguments.size() == 3);
   }
 
   // Given an unterminated call, when scanned, then a warning is recorded, the
@@ -137,11 +136,11 @@ int main()
   {
     const std::string text = "FetchContent_Declare(dep GIT_TAG v1\n";
     const auto result = scan_cmake_commands(text);
-    assert(result.complete);
-    assert(!result.warnings.empty());
-    assert(result.value.size() == 1);
-    assert(result.value[0].name == "FetchContent_Declare");
-    assert(!result.value[0].well_formed);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].name == "FetchContent_Declare");
+    BOMWERK_TEST_CHECK(!result.value[0].well_formed);
   }
 
   // Given hostile bytes (NUL, high bytes, stray parens), when scanned, then the
@@ -151,8 +150,8 @@ int main()
     text.push_back('\0');
     text += "\x80\xff))) ((( \n";
     const auto result = scan_cmake_commands(std::string_view(text.data(), text.size()));
-    assert(result.complete);
-    assert(find_command(result.value, "CPMAddPackage") != nullptr);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(find_command(result.value, "CPMAddPackage") != nullptr);
   }
 
   std::puts("test_cmake_scanner: OK");

@@ -6,6 +6,7 @@
 #include <sqlite3.h>
 
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 
@@ -253,5 +254,6 @@ int main()
                        kDestructiveSchemaVersion);  // untouched, not stamped back down
   }
 
+  std::puts("test_sqlite_support: OK");
   return 0;
 }

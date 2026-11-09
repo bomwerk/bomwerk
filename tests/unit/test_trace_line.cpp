@@ -3,6 +3,7 @@
 // The line is hand-built without a JSON library (the shim links nothing), so
 // every assertion here re-parses it with nlohmann: the trace is only worth
 // writing if the reader can read it back.
+#include <cstdio>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -142,5 +143,6 @@ int main()
     BOMWERK_TEST_CHECK(record["argv"].empty());
   }
 
+  std::puts("test_trace_line: OK");
   return 0;
 }

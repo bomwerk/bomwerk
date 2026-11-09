@@ -3,6 +3,7 @@
 // The parent process sets BOMWERK_REAL_* and the shim reads it. Nothing checks
 // at compile time that the two agree, so this test is what keeps them honest:
 // a silent disagreement would leave every shim unable to find its real tool.
+#include <cstdio>
 #include <set>
 #include <string>
 
@@ -75,5 +76,6 @@ int main()
     BOMWERK_TEST_CHECK(!is_shimmed_tool_name(""));
   }
 
+  std::puts("test_shim_names: OK");
   return 0;
 }

@@ -11,6 +11,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -42,6 +43,10 @@ constexpr std::size_t kDelimiterPairLength = 2;
 
 constexpr std::string_view kUsesKey = "uses";
 
+constexpr std::string_view kProducerName = "github-actions";
+constexpr std::string_view kWorkflowDirectory = ".github/workflows/";
+constexpr std::string_view kWorkflowExtensions[] = {".yml", ".yaml"};
+
 /// Sentinel for "no block scalar body is currently being skipped".
 constexpr std::size_t kNoBlockScalar = static_cast<std::size_t>(-1);
 
@@ -50,12 +55,27 @@ constexpr std::size_t kNoBlockScalar = static_cast<std::size_t>(-1);
 /// recognize workflows nested any deeper, so neither does this scan.
 bool is_workflow_file(const fs::path& relative_path)
 {
-  if (relative_path.parent_path() != fs::path(".github") / "workflows")
+  // Index paths are root-relative and lexically normal, so the check is a
+  // plain prefix test on the path's own text: no path is built per file.
+  const std::string_view native_path(relative_path.native());
+  if (!native_path.starts_with(kWorkflowDirectory))
   {
     return false;
   }
-  const std::string extension = relative_path.extension().string();
-  return extension == ".yml" || extension == ".yaml";
+  const std::string_view file_name = native_path.substr(kWorkflowDirectory.size());
+  if (file_name.find('/') != std::string_view::npos)
+  {
+    return false;
+  }
+  // Same rule as `path::extension()`: a dotfile named just `.yml` has none.
+  for (const std::string_view extension : kWorkflowExtensions)
+  {
+    if (file_name.size() > extension.size() && file_name.ends_with(extension))
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Offset of the first unquoted ':' that ends `content` or is followed by a
@@ -384,17 +404,10 @@ std::optional<core::Component> component_from_uses_reference(
 
   component.purl = build_github_action_purl(parsed.owner, parsed.repo, purl_ref);
 
-  // Dogfood core::Purl: a purl we cannot parse back is a bug in the builder,
-  // not merely degraded input: surface it so tests/fuzzers catch it, the
-  // same idiom every other producer follows.
-  const core::Result<core::Purl> validated = core::Purl::parse(component.purl);
-  if (!validated.complete)
-  {
-    result.warn(core::WarningCode::kPurlValidationFailed,
-                "github-actions: '" + source_label + "' produced an unparsable purl '" +
-                    component.purl + "'",
-                "github-actions");
-  }
+  // A purl we cannot parse back is a bug in the builder, not degraded input:
+  // the shared helper surfaces it as kPurlValidationFailed so tests and the
+  // fuzz harness catch it. The purl itself is left as built.
+  core::validate_purl(component.purl, kProducerName, result.warnings);
 
   component.evidence.push_back(
       {core::Source::Manifest, source_label + " -> uses: " + raw_value, confidence});
@@ -409,7 +422,6 @@ void scan_workflow_file(std::string_view bytes, const std::string& source_label,
                         std::vector<core::Component>& components,
                         core::Result<std::vector<core::Component>>& result)
 {
-  bytes = core::json_utils::without_utf8_bom(bytes);
   std::size_t position = 0;
   std::size_t block_scalar_indentation = kNoBlockScalar;
 
@@ -513,54 +525,81 @@ void scan_workflow_file(std::string_view bytes, const std::string& source_label,
   }
 }
 
+/// The one format this producer reads.
+enum class ManifestKind
+{
+  kWorkflow,
+};
+
+/// Selects workflow files GitHub itself would run. Line-based: an oversized
+/// workflow keeps its complete-line prefix, so a `uses:` line cut mid-value
+/// can never become a wrong component.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (!is_workflow_file(relative_path))
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kWorkflow,
+                                           core::OversizedFilePolicy::kTrimToLastNewline};
+}
+
+/// State shared by every workflow of one scan: one `uses:` budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t uses_budget = 0;
+  bool budget_warned = false;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "workflow");
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseOptions& /*options*/, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  scan_workflow_file(file.bytes, file.label, state.uses_budget, state.budget_warned,
+                     state.components, result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t uses_budget = options.max_total_uses_references;
-  bool budget_warned = false;
+  ParseState state;
+  state.uses_budget = options.max_total_uses_references;
+  // Workflows keep being opened after the budget warning, so the warnings
+  // they raise beyond the budget one (a `uses:` line with no value) are not lost.
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [] { return false; }, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (!is_workflow_file(relative_path))
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "github-actions: file limit reached; remaining workflow files skipped",
-                  "github-actions");
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "github-actions: unreadable file: " + label,
-                  "github-actions");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "github-actions: '" + label + "' exceeds the " +
-                      std::to_string(options.max_file_bytes) +
-                      "-byte cap; only the first part scanned",
-                  "github-actions");
-    }
-    scan_workflow_file(file_read.bytes, label, uses_budget, budget_warned, components, result);
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.uses_budget = options.max_total_uses_references;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

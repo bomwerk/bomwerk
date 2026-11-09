@@ -1,0 +1,2 @@
+VERSION=1.2.3;NAME=zlib
+${NAME}-${VERSION}.tar.gz

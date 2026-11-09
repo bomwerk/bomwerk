@@ -12,6 +12,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
 #include "core/text.hpp"
@@ -29,6 +30,7 @@ using core::json_utils::exceeds_json_nesting_depth;
 using core::json_utils::kMaxJsonNestingDepth;
 using core::json_utils::without_utf8_bom;
 
+constexpr std::string_view kProducerName = "conan";
 constexpr std::string_view kConanfileTxtName = "conanfile.txt";
 
 /// conanfile.txt sections whose entries are dependency references. Other
@@ -119,33 +121,44 @@ std::optional<core::Component> component_from_reference(
   return component;
 }
 
+/// The requirement budget every conan file of one scan shares.
+struct RequirementBudget
+{
+  std::size_t remaining = 0;
+  bool warned = false;  ///< the one exhaustion warning has been emitted
+};
+
 /// Consume one unit of the shared cross-file requirement budget. Returns
 /// true when the caller should proceed; false when the budget is already
-/// exhausted (a warning has been emitted and the caller should stop parsing
-/// this file: each exhausted call site still warns independently, so a
-/// scan with many manifests left to skip may repeat this warning once per
-/// file; that is pre-existing, unchanged behavior, not introduced here).
-bool try_consume_requirement_budget(std::size_t& requirement_budget,
+/// exhausted, in which case the caller stops parsing this file's entries. The
+/// exhaustion warning is emitted once per scan, however many entries or
+/// files are left. Later files are still opened, so any other warning they
+/// raise (a malformed line, an unreadable file) is still reported.
+bool try_consume_requirement_budget(RequirementBudget& requirement_budget,
                                     core::Result<std::vector<core::Component>>& result)
 {
-  if (requirement_budget == 0)
+  if (requirement_budget.remaining == 0)
   {
-    result.warn(core::WarningCode::kEntryLimitReached,
-                "conan: requirement limit reached; remaining entries skipped", "conan");
+    if (!requirement_budget.warned)
+    {
+      result.warn(core::WarningCode::kEntryLimitReached,
+                  "conan: requirement limit reached; remaining entries skipped", "conan");
+      requirement_budget.warned = true;
+    }
     return false;
   }
-  --requirement_budget;
+  --requirement_budget.remaining;
   return true;
 }
 
 /// Parse one conanfile.txt: section-oriented, line-based. `label` is the
 /// root-relative path used in warnings and evidence details.
 void parse_conanfile_txt(const std::string& bytes, const std::string& label,
-                         const ParseOptions& options, std::size_t& requirement_budget,
+                         const ParseOptions& options, RequirementBudget& requirement_budget,
                          std::vector<core::Component>& components,
                          core::Result<std::vector<core::Component>>& result)
 {
-  std::string_view remaining = without_utf8_bom(bytes);
+  std::string_view remaining = bytes;  // the manifest walk already stripped any BOM
   std::string current_section;
   while (!remaining.empty())
   {
@@ -374,11 +387,11 @@ void emit_python_requirement(const PythonStringLiteral& literal, const std::stri
 /// (Hard Rule 9: running a scanned repo's python is an RCE vector). Static
 /// misses (computed requirements) are covered by conan.lock / --conan-graph.
 void parse_conanfile_py(const std::string& bytes, const std::string& label,
-                        const ParseOptions& options, std::size_t& requirement_budget,
+                        const ParseOptions& options, RequirementBudget& requirement_budget,
                         std::vector<core::Component>& components,
                         core::Result<std::vector<core::Component>>& result)
 {
-  std::string_view remaining = without_utf8_bom(bytes);
+  std::string_view remaining = bytes;  // the manifest walk already stripped any BOM
   PythonScanState scan_state;
   int attribute_bracket_depth = 0;
   bool collecting_attribute = false;
@@ -492,7 +505,7 @@ constexpr std::string_view kLockRequirementArrays[] = {"requires", "build_requir
 /// ref). Lock entries are conan's own resolution output -> High confidence.
 void emit_lock_requirement(const std::string& reference_text, const std::string& label,
                            const std::string& section, const ParseOptions& options,
-                           std::size_t& requirement_budget,
+                           RequirementBudget& requirement_budget,
                            std::vector<core::Component>& components,
                            core::Result<std::vector<core::Component>>& result)
 {
@@ -515,11 +528,12 @@ void emit_lock_requirement(const std::string& reference_text, const std::string&
 /// no-throw mode behind the depth pre-scan; malformed JSON degrades to one
 /// warning (rule 1).
 void parse_conan_lock(const std::string& bytes, const std::string& label,
-                      const ParseOptions& options, std::size_t& requirement_budget,
+                      const ParseOptions& options, RequirementBudget& requirement_budget,
                       std::vector<core::Component>& components,
                       core::Result<std::vector<core::Component>>& result)
 {
-  const std::string_view json_bytes = without_utf8_bom(bytes);
+  // The manifest walk already stripped any UTF-8 byte-order mark.
+  const std::string_view json_bytes = bytes;
   if (exceeds_json_nesting_depth(json_bytes, kMaxJsonNestingDepth))
   {
     result.warn(core::WarningCode::kJsonNestingDepthExceeded,
@@ -628,112 +642,20 @@ void parse_conan_lock(const std::string& bytes, const std::string& label,
   }
 }
 
-}  // namespace
-
-core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
-                                                 const fs::path& root, const ParseOptions& options)
+/// Parse `conan graph info --format=json` output: every node's `ref` except
+/// the consumer (node "0"). Parsed in no-throw mode behind the depth
+/// pre-scan; malformed JSON degrades to one warning (rule 1).
+void parse_graph_json(std::string_view bytes, const std::string& label, const ParseOptions& options,
+                      RequirementBudget& requirement_budget,
+                      std::vector<core::Component>& components,
+                      core::Result<std::vector<core::Component>>& result)
 {
-  core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t requirement_budget = options.max_total_requirements;
-
-  for (const fs::path& relative_path : file_index.files)
-  {
-    const std::string filename = relative_path.filename().string();
-    const bool is_txt_manifest = filename == kConanfileTxtName;
-    const bool is_py_manifest = filename == kConanfilePyName;
-    const bool is_lock_file = filename == kConanLockName;
-    if (!is_txt_manifest && !is_py_manifest && !is_lock_file)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "conan: file limit reached; remaining conan files skipped", "conan");
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "conan: unreadable file: " + label, "conan");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "conan: file exceeds size limit, parsing first part only: " + label, "conan");
-    }
-    if (is_txt_manifest)
-    {
-      parse_conanfile_txt(file_read.bytes, label, options, requirement_budget, components, result);
-    }
-    else if (is_py_manifest)
-    {
-      parse_conanfile_py(file_read.bytes, label, options, requirement_budget, components, result);
-    }
-    else
-    {
-      parse_conan_lock(file_read.bytes, label, options, requirement_budget, components, result);
-    }
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
-}
-
-core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)
-{
-  const core::Result<core::FileIndex> file_index =
-      core::build_file_index(root, core::default_excluded_dir_names(),
-                             core::with_submodule_subtrees(root, options.excluded_subtrees));
-  core::Result<std::vector<core::Component>> result = parse(file_index.value, root, options);
-  for (const core::Warning& warning : file_index.warnings)
-  {
-    result.warn(warning);
-  }
-  return result;
-}
-
-core::Result<std::vector<core::Component>> parse(const fs::path& root)
-{
-  return parse(root, ParseOptions{});
-}
-
-core::Result<std::vector<core::Component>> parse_graph_file(const fs::path& graph_json_path,
-                                                            const ParseOptions& options)
-{
-  core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t requirement_budget = options.max_total_requirements;
-  const std::string label = graph_json_path.filename().generic_string();
-
-  const core::BoundedFileRead file_read =
-      core::read_file_bounded(graph_json_path, options.max_graph_file_bytes);
-  if (!file_read.readable)
-  {
-    result.warn(core::WarningCode::kUnreadableFile,
-                "conan: unreadable graph file: " + graph_json_path.generic_string(), "conan");
-    return result;
-  }
-  if (file_read.truncated)
-  {
-    result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                "conan: graph file exceeds size limit, skipped: " + label, "conan");
-    return result;  // truncated JSON cannot parse; skipping beats guessing
-  }
-
-  const std::string_view json_bytes = without_utf8_bom(file_read.bytes);
+  const std::string_view json_bytes = without_utf8_bom(bytes);
   if (exceeds_json_nesting_depth(json_bytes, kMaxJsonNestingDepth))
   {
     result.warn(core::WarningCode::kJsonNestingDepthExceeded,
                 "conan: " + label + ": JSON nesting exceeds depth limit, skipped", "conan");
-    return result;
+    return;
   }
   const nlohmann::json parsed =
       nlohmann::json::parse(json_bytes, nullptr, /*allow_exceptions=*/false);
@@ -741,7 +663,7 @@ core::Result<std::vector<core::Component>> parse_graph_file(const fs::path& grap
   {
     result.warn(core::WarningCode::kInvalidJson, "conan: " + label + ": not valid JSON, skipped",
                 "conan");
-    return result;
+    return;
   }
 
   const auto graph_iterator = parsed.find("graph");
@@ -750,7 +672,7 @@ core::Result<std::vector<core::Component>> parse_graph_file(const fs::path& grap
     result.warn(core::WarningCode::kMalformedEntrySkipped,
                 "conan: " + label + ": no graph.nodes object, is this `conan graph info` output?",
                 "conan");
-    return result;
+    return;
   }
   const auto nodes_iterator = graph_iterator->find("nodes");
   if (nodes_iterator == graph_iterator->end() || !nodes_iterator->is_object())
@@ -758,7 +680,7 @@ core::Result<std::vector<core::Component>> parse_graph_file(const fs::path& grap
     result.warn(core::WarningCode::kMalformedEntrySkipped,
                 "conan: " + label + ": no graph.nodes object, is this `conan graph info` output?",
                 "conan");
-    return result;
+    return;
   }
   bool malformed_node_reported = false;
   for (const auto& [node_key, node_value] : nodes_iterator->items())
@@ -786,7 +708,174 @@ core::Result<std::vector<core::Component>> parse_graph_file(const fs::path& grap
     emit_lock_requirement(reference_iterator->get<std::string>(), label, "graph", options,
                           requirement_budget, components, result);
   }
+}
 
+/// The formats this producer reads.
+enum class ManifestKind
+{
+  kConanfileTxt,
+  kConanfilePy,
+  kConanLock,
+};
+
+/// Selects conanfile.txt and conanfile.py (line-oriented: an oversized one
+/// keeps its complete-line prefix, so a requirement cut mid-reference never
+/// becomes a wrong component) and conan.lock (JSON: a prefix cannot parse, so
+/// an oversized one is skipped).
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  const std::string_view file_name = core::file_name_of(relative_path);
+  if (file_name == kConanfileTxtName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kConanfileTxt,
+                                             core::OversizedFilePolicy::kTrimToLastNewline};
+  }
+  if (file_name == kConanfilePyName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kConanfilePy,
+                                             core::OversizedFilePolicy::kTrimToLastNewline};
+  }
+  if (file_name == kConanLockName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kConanLock,
+                                             core::OversizedFilePolicy::kSkip};
+  }
+  return std::nullopt;
+}
+
+/// State shared by every conan file of one scan: one requirement budget.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  RequirementBudget requirement_budget;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "conan");
+}
+
+void parse_manifest(ManifestKind kind, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  switch (kind)
+  {
+    case ManifestKind::kConanfileTxt:
+      parse_conanfile_txt(file.bytes, file.label, options, state.requirement_budget,
+                          state.components, result);
+      return;
+    case ManifestKind::kConanfilePy:
+      parse_conanfile_py(file.bytes, file.label, options, state.requirement_budget,
+                         state.components, result);
+      return;
+    case ManifestKind::kConanLock:
+      parse_conan_lock(file.bytes, file.label, options, state.requirement_budget, state.components,
+                       result);
+      return;
+  }
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
+}  // namespace
+
+core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
+                                                 const fs::path& root, const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.requirement_budget.remaining = options.max_total_requirements;
+  // Files keep being opened after the budget warning, so the warnings they
+  // raise beyond the budget one are not lost.
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [] { return false; }, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
+
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.requirement_budget.remaining = options.max_total_requirements;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
+
+core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)
+{
+  const core::Result<core::FileIndex> file_index =
+      core::build_file_index(root, core::default_excluded_dir_names(),
+                             core::with_submodule_subtrees(root, options.excluded_subtrees));
+  core::Result<std::vector<core::Component>> result = parse(file_index.value, root, options);
+  for (const core::Warning& warning : file_index.warnings)
+  {
+    result.warn(warning);
+  }
+  if (!file_index.complete)
+  {
+    result.complete = false;
+  }
+  return result;
+}
+
+core::Result<std::vector<core::Component>> parse(const fs::path& root)
+{
+  return parse(root, ParseOptions{});
+}
+
+core::Result<std::vector<core::Component>> parse_graph_file(const fs::path& graph_json_path,
+                                                            const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  const std::string label = graph_json_path.filename().generic_string();
+  const core::BoundedFileRead file_read =
+      core::read_file_bounded(graph_json_path, options.max_graph_file_bytes);
+  if (!file_read.readable)
+  {
+    result.warn(core::WarningCode::kUnreadableFile,
+                "conan: unreadable graph file: " + graph_json_path.generic_string(), "conan");
+    return result;
+  }
+  if (file_read.truncated)
+  {
+    result.warn(core::WarningCode::kFileSizeLimitExceeded,
+                "conan: graph file exceeds size limit, skipped: " + label, "conan");
+    return result;  // truncated JSON cannot parse; skipping beats guessing
+  }
+  RequirementBudget requirement_budget{options.max_total_requirements};
+  std::vector<core::Component> components;
+  parse_graph_json(file_read.bytes, label, options, requirement_budget, components, result);
+  result.value = core::merge_all(std::move(components));
+  return result;
+}
+
+core::Result<std::vector<core::Component>> parse_graph_bytes(std::string_view file_name,
+                                                             std::string_view bytes,
+                                                             const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  const std::string label = fs::path(file_name).filename().generic_string();
+  if (bytes.size() > options.max_graph_file_bytes)
+  {
+    result.warn(core::WarningCode::kFileSizeLimitExceeded,
+                "conan: graph file exceeds size limit, skipped: " + label, "conan");
+    return result;
+  }
+  RequirementBudget requirement_budget{options.max_total_requirements};
+  std::vector<core::Component> components;
+  parse_graph_json(bytes, label, options, requirement_budget, components, result);
   result.value = core::merge_all(std::move(components));
   return result;
 }

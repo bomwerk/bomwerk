@@ -1,5 +1,4 @@
 // ctest unit test for the git-config INI reader
-#include <cassert>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -40,10 +39,10 @@ int main()
         "[submodule \"lib/mbedtls\"]\n\tpath = lib/mbedtls\n"
         "\turl = https://github.com/Mbed-TLS/mbedtls.git\n",
         ".gitmodules");
-    assert(result.warnings.empty());
-    assert(result.value.sections.size() == 1);
-    assert(result.value.sections[0].name == "submodule");
-    assert(result.value.sections[0].subsection == "lib/mbedtls");
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.sections.size() == 1);
+    BOMWERK_TEST_CHECK(result.value.sections[0].name == "submodule");
+    BOMWERK_TEST_CHECK(result.value.sections[0].subsection == "lib/mbedtls");
     const std::string* path = result.value.sections[0].find("path");
     BOMWERK_TEST_CHECK(path != nullptr && *path == "lib/mbedtls");
   }
@@ -53,8 +52,8 @@ int main()
   {
     const auto result = parse_git_config(
         "\xEF\xBB\xBF# a comment\n\n[submodule \"x\"]\n\tpath = libs/x\n", ".gitmodules");
-    assert(result.value.sections.size() == 1);
-    assert(result.value.sections[0].subsection == "x");
+    BOMWERK_TEST_CHECK(result.value.sections.size() == 1);
+    BOMWERK_TEST_CHECK(result.value.sections[0].subsection == "x");
   }
 
   // Given a remote/origin block, when queried via GitConfig::find, then the
@@ -71,7 +70,7 @@ int main()
   {
     const auto result =
         parse_git_config("[submodule \"broken\"\n\tpath = libs/broken\n", ".gitmodules");
-    assert(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
     BOMWERK_TEST_CHECK(count_submodule_sections(result.value) == 0);
   }
 
@@ -81,10 +80,12 @@ int main()
     const std::string long_value(9000, 'a');
     const auto result = parse_git_config(
         "[submodule \"x\"]\n\turl = " + long_value + "\n\tpath = libs/x\n", ".gitmodules");
-    assert(!result.warnings.empty());
-    assert(result.value.sections.size() == 1);
-    assert(result.value.sections[0].find("url") == nullptr);   // the overlong url line was dropped
-    assert(result.value.sections[0].find("path") != nullptr);  // the normal line survived
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.sections.size() == 1);
+    BOMWERK_TEST_CHECK(result.value.sections[0].find("url") ==
+                       nullptr);  // the overlong url line was dropped
+    BOMWERK_TEST_CHECK(result.value.sections[0].find("path") !=
+                       nullptr);  // the normal line survived
   }
 
   // Given a real vendored fixture, when read from disk, then all 11 openssl
@@ -92,7 +93,7 @@ int main()
   {
     const fs::path fixture = fs::path(BOMWERK_FIXTURES_DIR) / "gitmodules" / "openssl.gitmodules";
     const auto result = read_git_config(fixture);
-    assert(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
     BOMWERK_TEST_CHECK(count_submodule_sections(result.value) == 11);
   }
 

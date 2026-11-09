@@ -13,6 +13,15 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- Every parser of untrusted input has a libFuzzer harness: the manifest and
+  lockfile producers, GitHub Actions workflows, `.gitmodules`, ELF and `ar`
+  binaries, CycloneDX input, build trace lines, vendored version headers, the
+  fingerprint corpus index, `bomwerk.toml`, and OSV, NVD and registry license
+  responses. Pull requests run a ten-minute fuzz smoke, a two-hour run fuzzes
+  every night, and each harness also runs as a ctest that replays its seeds and
+  every input that once crashed it. Each producer has a `parse_bytes` entry
+  point that parses a file from memory through the same code a scan uses. See
+  `docs/fuzzing.md` (T40).
 - `scan` reads Zephyr west manifests (`west.yml`, `west.yaml`) and reports one
   component per `manifest.projects[]` entry, resolved by west's own rules: an
   explicit `url` wins, otherwise the project's remote (or `defaults.remote`,
@@ -103,6 +112,13 @@ contained the paid extension's source.
   `bomwerk.toml` scope now match the code.
 
 ### Changed
+- Parsing no longer slows down quadratically on hostile or unusual input, with
+  the same output as before. Fixed spots: the XML scanner behind `pom.xml` and
+  `.csproj` reading, merging many duplicates of one component, Maven and NuGet
+  line numbers in warnings, GNU `ar` long names, relative submodule urls and the
+  west remote lookup. MSBuild files are stripped of comments once instead of
+  twice, OSV severity answers are parsed once, and manifest discovery no longer
+  allocates a file name per indexed file (T40).
 - Release candidate `1.0.0-rc.1`: `bomwerk --version` carries the SemVer
   pre-release label, `vcpkg.json` is checked against the CMake version by the
   `version_sync` test, the README lists every prerequisite a clean Ubuntu 24.04
@@ -122,6 +138,25 @@ contained the paid extension's source.
   `macos-15`, and Apple links no longer warn about the repeated core library (#6).
 
 ### Fixed
+- `scan` now reports an incomplete result when the directory walk stops early on a repository whose only manifests are CMake or Conan files, as it already did for every other ecosystem (T40).
+- A Python requirement or lock entry whose name is only separators (`_`, `._.`, `..-`) is skipped instead of producing a purl with no name (`pkg:pypi/`). Found by fuzzing (T40).
+- A vendored version macro holding an empty string (`#define ZLIB_VERSION ""`) is no longer reported as a match with an empty version; a later real definition of the same macro still counts. Found by fuzzing (T40).
+- A CMake `URL_HASH` whose algorithm is not a plain name (a control byte or `&` before the `=`, with a valid hex digest) no longer produces an unparsable purl: the checksum is ignored with a warning and the component is still reported. Found by fuzzing (T40).
+- An oversized GitHub Actions workflow, CMake file or `conanfile.txt`/`conanfile.py`
+  is now read up to its last complete line, so a `uses:` value, `GIT_TAG` or
+  requirement cut off by the size cap can no longer become a component with a
+  truncated name or version. An oversized `conan.lock` is skipped with one
+  warning instead of being parsed as broken JSON. Every manifest producer now
+  reads files through one shared pipeline with the same warning texts for an
+  unreadable or oversized file (T40).
+- `scan` strips a UTF-8 byte-order mark from every manifest, not only the JSON
+  ones, so a `Cargo.lock`, `go.sum`, `pom.xml`, `pnpm-lock.yaml`, `yarn.lock`,
+  `Gemfile.lock`, `pubspec.lock`, requirements file, `west.yml` or CMake file
+  saved with one no longer loses its first entry (T40).
+- When the GitHub Actions, conan or vcpkg producer reaches its entry budget it
+  warns once, instead of repeating the warning for every remaining file. The
+  CMake producer and the conan producer now report a scan as incomplete when
+  the directory walk itself was cut short (T40).
 - The HTML report renders an empty or unknown value as `-` instead of `: `, in table
   cells and summary tiles (#5).
 - A build variable no parser could resolve no longer ends up in a component purl

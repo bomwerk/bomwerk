@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <system_error>
 
 #include "core/git_config.hpp"
@@ -20,6 +22,9 @@ namespace bomwerk::parsers::cpp::submodules
 {
 namespace
 {
+
+constexpr std::string_view kProducerName = "submodules";
+constexpr std::string_view kGitmodulesName = ".gitmodules";
 
 /// Normalize the superproject's origin URL to a `scheme://host/owner/repo` base
 /// so relative submodule URLs resolve with '/'-separated path popping even when
@@ -61,49 +66,21 @@ std::string generic_purl_from_path(const fs::path& relative_path, const std::str
   return purl;
 }
 
-}  // namespace
+/// The checked-out commit of the submodule whose working tree is at a
+/// root-relative path, or empty when it is not checked out.
+using HeadCommitLookup = std::function<std::string(const fs::path&)>;
 
-core::Result<std::vector<core::Component>> parse(const fs::path& root)
+/// One component per `[submodule]` section of an already-parsed `.gitmodules`.
+/// `origin_base` (empty when unknown) resolves relative submodule URLs, and
+/// `head_commit_for` answers each submodule's pinned commit: the only two
+/// things that come from outside the `.gitmodules` text itself.
+void append_submodule_components(const core::GitConfig& modules, const std::string& origin_base,
+                                 const HeadCommitLookup& head_commit_for,
+                                 core::Result<std::vector<core::Component>>& result)
 {
-  core::Result<std::vector<core::Component>> result;
-
-  const fs::path gitmodules_path = root / ".gitmodules";
-  std::error_code exists_error;
-  if (!fs::exists(gitmodules_path, exists_error) || exists_error)
-  {
-    return result;  // no .gitmodules => no submodules; not an error
-  }
-
-  core::Result<core::GitConfig> modules = core::read_git_config(gitmodules_path);
-  for (core::Warning& warning : modules.warnings)
-  {
-    result.warnings.push_back(std::move(warning));
-  }
-
-  // Bounds every gitdir resolution below (see core::resolve_git_dir): a
-  // submodule's `.git` file legitimately points outside its OWN directory, but
-  // never outside this scanned tree as a whole.
-  std::error_code root_absolute_error;
-  const fs::path containment_root = fs::absolute(root, root_absolute_error).lexically_normal();
-
-  // Origin URL (for relative submodule URLs), read from the superproject's own
-  // config: same file-only path, never a git subprocess.
-  std::string origin_base;
-  const fs::path superproject_git_dir =
-      root_absolute_error ? fs::path{} : core::resolve_git_dir(root, containment_root);
-  if (!superproject_git_dir.empty())
-  {
-    core::Result<core::GitConfig> config = core::read_git_config(superproject_git_dir / "config");
-    const std::string* origin_url = config.value.find("remote", "origin", "url");
-    if (origin_url != nullptr)
-    {
-      origin_base = origin_resolution_base(*origin_url);
-    }
-  }
-
   std::size_t resolved_count = 0;
   std::size_t declared_count = 0;
-  for (const core::GitConfigSection& section : modules.value.sections)
+  for (const core::GitConfigSection& section : modules.sections)
   {
     if (section.name != "submodule")
     {
@@ -132,15 +109,7 @@ core::Result<std::vector<core::Component>> parse(const fs::path& root)
     const std::string* url_value = section.find("url");
     const std::string* branch_value = section.find("branch");
 
-    const fs::path submodule_work_dir = root / relative_path;
-    const fs::path submodule_git_dir =
-        root_absolute_error ? fs::path{}
-                            : core::resolve_git_dir(submodule_work_dir, containment_root);
-    std::string commit;
-    if (!submodule_git_dir.empty())
-    {
-      commit = core::read_head_commit(submodule_git_dir);
-    }
+    const std::string commit = head_commit_for(relative_path);
     const bool resolved = !commit.empty();
     if (resolved)
     {
@@ -193,15 +162,10 @@ core::Result<std::vector<core::Component>> parse(const fs::path& root)
       component.purl = generic_purl_from_path(relative_path, commit);
     }
 
-    // Dogfood core::Purl: a purl we cannot parse back is a bug in the builder,
-    // not merely degraded input: surface it so tests and fuzzers catch it.
-    const core::Result<core::Purl> validated = core::Purl::parse(component.purl);
-    if (!validated.complete)
-    {
-      result.warn(core::WarningCode::kPurlValidationFailed, "submodule '" + relative_path.string() +
-                                                                "' produced an unparsable purl '" +
-                                                                component.purl + "'");
-    }
+    // A purl we cannot parse back is a bug in the builder, not degraded
+    // input: the shared helper surfaces it as kPurlValidationFailed so tests
+    // and the fuzz harness catch it. The purl itself is left as built.
+    core::validate_purl(component.purl, kProducerName, result.warnings);
 
     const core::Confidence declared_confidence =
         resolved ? core::Confidence::High : core::Confidence::Low;
@@ -233,6 +197,76 @@ core::Result<std::vector<core::Component>> parse(const fs::path& root)
 
   spdlog::debug("parsed .gitmodules: {} submodules, {}/{} commits resolved", result.value.size(),
                 resolved_count, declared_count);
+}
+
+}  // namespace
+
+core::Result<std::vector<core::Component>> parse(const fs::path& root)
+{
+  core::Result<std::vector<core::Component>> result;
+
+  const fs::path gitmodules_path = root / kGitmodulesName;
+  std::error_code exists_error;
+  if (!fs::exists(gitmodules_path, exists_error) || exists_error)
+  {
+    return result;  // no .gitmodules => no submodules; not an error
+  }
+
+  core::Result<core::GitConfig> modules = core::read_git_config(gitmodules_path);
+  for (core::Warning& warning : modules.warnings)
+  {
+    result.warnings.push_back(std::move(warning));
+  }
+
+  // Bounds every gitdir resolution below (see core::resolve_git_dir): a
+  // submodule's `.git` file legitimately points outside its OWN directory, but
+  // never outside this scanned tree as a whole.
+  std::error_code root_absolute_error;
+  const fs::path containment_root = fs::absolute(root, root_absolute_error).lexically_normal();
+
+  // Origin URL (for relative submodule URLs), read from the superproject's own
+  // config: same file-only path, never a git subprocess.
+  std::string origin_base;
+  const fs::path superproject_git_dir =
+      root_absolute_error ? fs::path{} : core::resolve_git_dir(root, containment_root);
+  if (!superproject_git_dir.empty())
+  {
+    core::Result<core::GitConfig> config = core::read_git_config(superproject_git_dir / "config");
+    const std::string* origin_url = config.value.find("remote", "origin", "url");
+    if (origin_url != nullptr)
+    {
+      origin_base = origin_resolution_base(*origin_url);
+    }
+  }
+
+  append_submodule_components(
+      modules.value, origin_base,
+      [&](const fs::path& relative_path) -> std::string
+      {
+        if (root_absolute_error)
+        {
+          return {};
+        }
+        const fs::path submodule_git_dir =
+            core::resolve_git_dir(root / relative_path, containment_root);
+        return submodule_git_dir.empty() ? std::string{}
+                                         : core::read_head_commit(submodule_git_dir);
+      },
+      result);
+  return result;
+}
+
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view gitmodules_bytes)
+{
+  core::Result<std::vector<core::Component>> result;
+  core::Result<core::GitConfig> modules =
+      core::parse_git_config(gitmodules_bytes, std::string(kGitmodulesName));
+  for (core::Warning& warning : modules.warnings)
+  {
+    result.warnings.push_back(std::move(warning));
+  }
+  append_submodule_components(
+      modules.value, std::string{}, [](const fs::path&) { return std::string{}; }, result);
   return result;
 }
 

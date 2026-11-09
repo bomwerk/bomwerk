@@ -1,0 +1,18 @@
+{
+ "graph": {
+  "nodes": {
+   "0": {
+    "ref": "conanfile",
+    "context": "host"
+   },
+   "1": {
+    "ref": "zlib/1.2.13#abc",
+    "context": "host"
+   },
+   "2": {
+    "ref": "openssl/3.2.0@acme/stable",
+    "context": "host"
+   }
+  }
+ }
+}

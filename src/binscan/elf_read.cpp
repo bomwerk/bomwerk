@@ -753,37 +753,30 @@ void ElfReader::read(ElfImage& out)
   out.symbols_unavailable = !collect_exported_symbols(out);
 }
 
-}  // namespace
-
-core::Result<ElfImage> read_elf(const fs::path& path)
+/// Everything `read_elf` does once the bytes are in hand: `label` names the
+/// image in warnings, `truncated` says the bytes are only a capped prefix.
+void read_elf_image(const std::string& label, std::string_view bytes, bool truncated,
+                    core::Result<ElfImage>& outcome)
 {
-  core::Result<ElfImage> outcome;
-
-  const core::BoundedFileRead file = core::read_file_bounded(path, kMaxBinaryBytes);
-  if (!file.readable)
-  {
-    outcome.warn(core::WarningCode::kBinaryUnreadable, path.string() + ": cannot be read; skipped");
-    return outcome;
-  }
-  if (file.truncated)
+  if (truncated)
   {
     outcome.warn(core::WarningCode::kBinaryTooLarge,
-                 path.string() + ": larger than " + std::to_string(kMaxBinaryBytes) +
+                 label + ": larger than " + std::to_string(kMaxBinaryBytes) +
                      " bytes; refused rather than parsed from a partial image");
-    return outcome;
+    return;
   }
 
-  const ByteCursor identification(as_image(file.bytes), ByteOrder::Little);
+  const ByteCursor identification(as_image(bytes), ByteOrder::Little);
   if (identification.size() < kIdentSize)
   {
-    return outcome;  // too small to be an ELF; not a warning, see read_elf's doc
+    return;  // too small to be an ELF; not a warning, see read_elf's doc
   }
   for (std::size_t index = 0; index < kMagic.size(); ++index)
   {
     const std::optional<std::uint64_t> byte = identification.uint_at(index, IntegerWidth::OneByte);
     if (!byte || *byte != kMagic[index])
     {
-      return outcome;  // not an ELF at all; the caller aggregates this
+      return;  // not an ELF at all; the caller aggregates this
     }
   }
 
@@ -794,22 +787,44 @@ core::Result<ElfImage> read_elf(const fs::path& path)
   if (!file_class || (*file_class != kClass32 && *file_class != kClass64))
   {
     outcome.warn(core::WarningCode::kBinaryMalformedHeader,
-                 path.string() + ": ELF magic with an unknown class byte; skipped");
+                 label + ": ELF magic with an unknown class byte; skipped");
     outcome.value.shape = ElfShape::Malformed;
-    return outcome;
+    return;
   }
   if (!file_data || (*file_data != kDataLittleEndian && *file_data != kDataBigEndian))
   {
     outcome.warn(core::WarningCode::kBinaryMalformedHeader,
-                 path.string() + ": ELF magic with an unknown data-encoding byte; skipped");
+                 label + ": ELF magic with an unknown data-encoding byte; skipped");
     outcome.value.shape = ElfShape::Malformed;
-    return outcome;
+    return;
   }
 
   const ByteOrder byte_order = *file_data == kDataBigEndian ? ByteOrder::Big : ByteOrder::Little;
-  ElfReader reader(identification.with_byte_order(byte_order), *file_class == kClass64,
-                   path.string(), outcome);
+  ElfReader reader(identification.with_byte_order(byte_order), *file_class == kClass64, label,
+                   outcome);
   reader.read(outcome.value);
+}
+
+}  // namespace
+
+core::Result<ElfImage> read_elf(const fs::path& path)
+{
+  core::Result<ElfImage> outcome;
+  const core::BoundedFileRead file = core::read_file_bounded(path, kMaxBinaryBytes);
+  if (!file.readable)
+  {
+    outcome.warn(core::WarningCode::kBinaryUnreadable, path.string() + ": cannot be read; skipped");
+    return outcome;
+  }
+  read_elf_image(path.string(), file.bytes, file.truncated, outcome);
+  return outcome;
+}
+
+core::Result<ElfImage> read_elf_bytes(std::string_view label, std::string_view bytes)
+{
+  core::Result<ElfImage> outcome;
+  read_elf_image(std::string(label), bytes.substr(0, kMaxBinaryBytes),
+                 bytes.size() > kMaxBinaryBytes, outcome);
   return outcome;
 }
 

@@ -1,5 +1,4 @@
 // ctest unit test for directory exclusions
-#include <cassert>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -55,15 +54,15 @@ int main()
     list_stream << "generated\n";
   }
   auto loaded = load_excluded_dir_names(list_path);
-  assert(loaded.warnings.empty());
-  assert(loaded.value.size() == 1);
-  assert(loaded.value.contains("generated"));
+  BOMWERK_TEST_CHECK(loaded.warnings.empty());
+  BOMWERK_TEST_CHECK(loaded.value.size() == 1);
+  BOMWERK_TEST_CHECK(loaded.value.contains("generated"));
   fs::remove(list_path);
 
   // Unreadable file degrades to the defaults with a warning: never throws (rule 1).
   auto missing = load_excluded_dir_names(fs::temp_directory_path() / "bomwerk_no_such_list.txt");
-  assert(missing.warnings.size() == 1);
-  assert(missing.value == default_excluded_dir_names());
+  BOMWERK_TEST_CHECK(missing.warnings.size() == 1);
+  BOMWERK_TEST_CHECK(missing.value == default_excluded_dir_names());
 
   std::puts("test_exclusions: OK");
   return 0;

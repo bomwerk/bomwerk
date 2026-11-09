@@ -118,12 +118,7 @@ core::CvssScore best_severity(const json& metrics_object)
 
 /// What one CPE's cached/fetched payload (a whole CVE API 2.0 response object)
 /// contains.
-struct ExtractedPayload
-{
-  std::vector<core::ScoredAdvisory> advisories;
-  bool truncated = false;  ///< totalResults exceeded what one page returned
-  bool malformed = false;  ///< payload was not the expected JSON shape
-};
+using ExtractedPayload = NvdCvePayload;
 
 ExtractedPayload extract_advisories(const std::string& payload)
 {
@@ -195,6 +190,11 @@ void finalize_advisories(std::vector<core::ScoredAdvisory>& advisories)
 }
 
 }  // namespace
+
+NvdCvePayload parse_nvd_cve_payload(const std::string& payload)
+{
+  return extract_advisories(payload);
+}
 
 core::Result<MatchOutcome> match_via_cpe(
     const std::vector<core::Component>& components, const NvdOptions& options,

@@ -11,6 +11,7 @@
 namespace fs = std::filesystem;
 
 using bomwerk::core::build_file_index;
+using bomwerk::core::file_name_of;
 using bomwerk::core::FileIndex;
 using bomwerk::core::normalized_subtree_path;
 using bomwerk::core::path_in_scan_scope;
@@ -18,6 +19,17 @@ using bomwerk::test::TempTree;
 
 int main()
 {
+  // Given root-relative paths at several depths, when their file name is
+  // taken, then it is exactly what filename().string() gives, without a copy.
+  {
+    for (const fs::path& relative_path :
+         {fs::path("Cargo.lock"), fs::path("app/Cargo.lock"), fs::path("a/b/c/.gitmodules"),
+          fs::path(".github/workflows/ci.yml"), fs::path("")})
+    {
+      BOMWERK_TEST_CHECK(file_name_of(relative_path) == relative_path.filename().string());
+    }
+  }
+
   // Given a small tree with no exclusions, when indexed, then every regular
   // file is present as a root-relative path, sorted.
   {
