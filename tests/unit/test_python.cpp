@@ -339,6 +339,35 @@ int main()
     BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:pypi/aaa@1.0.0");
   }
 
+  // Given names made only of separators in requirements.txt, uv.lock and
+  // poetry.lock (found by fuzzing, T40), when parsed, then they normalize to
+  // nothing, are skipped, and the real package beside them is still reported
+  // with a valid purl.
+  {
+    namespace python_parser = bomwerk::parsers::lockfiles::python;
+    const auto requirements =
+        python_parser::parse_bytes("requirements.txt", "_\n_._ ==1.0\nflask==2.0.1\n", {});
+    const auto uv_lock =
+        python_parser::parse_bytes("uv.lock",
+                                   "[[package]]\nname = \"_\"\nversion = \"1.0\"\n\n"
+                                   "[[package]]\nname = \"flask\"\nversion = \"2.0.1\"\n",
+                                   {});
+    const auto poetry_lock =
+        python_parser::parse_bytes("poetry.lock",
+                                   "[[package]]\nname = \"..-\"\nversion = \"1.0\"\n\n"
+                                   "[[package]]\nname = \"flask\"\nversion = \"2.0.1\"\n",
+                                   {});
+    for (const auto* result : {&requirements, &uv_lock, &poetry_lock})
+    {
+      BOMWERK_TEST_CHECK(result->value.size() == 1);
+      BOMWERK_TEST_CHECK(result->value[0].purl == "pkg:pypi/flask@2.0.1");
+      for (const auto& warning : result->warnings)
+      {
+        BOMWERK_TEST_CHECK(warning.code != bomwerk::core::WarningCode::kPurlValidationFailed);
+      }
+    }
+  }
+
   std::puts("test_python: OK");
   return 0;
 }

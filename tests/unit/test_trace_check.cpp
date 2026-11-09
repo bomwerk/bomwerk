@@ -6,7 +6,7 @@
 // things that matter: corruption is counted and reported rather than passed
 // silently to the compile scan, and a good trace comes out in a reproducible order.
 #include <algorithm>
-#include <cassert>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -15,6 +15,7 @@
 #include "core/result.hpp"
 #include "observe/trace_check.hpp"
 #include "observe/trace_line.hpp"
+#include "support/check.hpp"
 #include "support/temp_tree.hpp"
 
 using bomwerk::core::Result;
@@ -68,15 +69,15 @@ int main()
                                  trace_line_for("cc", "mango.c")});
 
     const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
-    assert(outcome.complete);
-    assert(outcome.warnings.empty());
-    assert(outcome.value.total_lines == 3);
-    assert(outcome.value.malformed_lines == 0);
-    assert(outcome.value.sorted_lines == 3);
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(outcome.warnings.empty());
+    BOMWERK_TEST_CHECK(outcome.value.total_lines == 3);
+    BOMWERK_TEST_CHECK(outcome.value.malformed_lines == 0);
+    BOMWERK_TEST_CHECK(outcome.value.sorted_lines == 3);
 
     const std::vector<std::string> lines = read_lines(trace_path);
-    assert(lines.size() == 3);
-    assert(std::is_sorted(lines.begin(), lines.end()));
+    BOMWERK_TEST_CHECK(lines.size() == 3);
+    BOMWERK_TEST_CHECK(std::is_sorted(lines.begin(), lines.end()));
   }
 
   // Given a trace carrying a corrupted line: what an interleaved concurrent
@@ -89,14 +90,14 @@ int main()
                                  trace_line_for("ld", "app")});
 
     const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
-    assert(outcome.complete);  // partial output beats none (rule 1)
-    assert(outcome.value.total_lines == 3);
-    assert(outcome.value.malformed_lines == 1);
-    assert(outcome.value.sorted_lines == 2);
-    assert(outcome.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.complete);  // partial output beats none (rule 1)
+    BOMWERK_TEST_CHECK(outcome.value.total_lines == 3);
+    BOMWERK_TEST_CHECK(outcome.value.malformed_lines == 1);
+    BOMWERK_TEST_CHECK(outcome.value.sorted_lines == 2);
+    BOMWERK_TEST_CHECK(outcome.warnings.size() == 1);
 
     const std::vector<std::string> lines = read_lines(trace_path);
-    assert(lines.size() == 2);
+    BOMWERK_TEST_CHECK(lines.size() == 2);
   }
 
   // Given a line that parses as JSON but is not a trace record, when it is
@@ -110,9 +111,9 @@ int main()
                                  "[1,2,3]", "{\"cwd\":\"/w\"}", trace_line_for("cc", "good.c")});
 
     const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
-    assert(outcome.value.total_lines == 4);
-    assert(outcome.value.malformed_lines == 3);
-    assert(outcome.value.sorted_lines == 1);
+    BOMWERK_TEST_CHECK(outcome.value.total_lines == 4);
+    BOMWERK_TEST_CHECK(outcome.value.malformed_lines == 3);
+    BOMWERK_TEST_CHECK(outcome.value.sorted_lines == 1);
   }
 
   // Given a trace of several tools, when it is validated, then invocations are
@@ -124,10 +125,10 @@ int main()
                                  trace_line_for("ld", "app"), trace_line_for("ar", "lib.a")});
 
     const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
-    assert(outcome.value.invocations_by_tool.size() == 3);
-    assert(outcome.value.invocations_by_tool.at("cc") == 2);
-    assert(outcome.value.invocations_by_tool.at("ld") == 1);
-    assert(outcome.value.invocations_by_tool.at("ar") == 1);
+    BOMWERK_TEST_CHECK(outcome.value.invocations_by_tool.size() == 3);
+    BOMWERK_TEST_CHECK(outcome.value.invocations_by_tool.at("cc") == 2);
+    BOMWERK_TEST_CHECK(outcome.value.invocations_by_tool.at("ld") == 1);
+    BOMWERK_TEST_CHECK(outcome.value.invocations_by_tool.at("ar") == 1);
   }
 
   // Given an empty trace: the build never reached a compiler: when it is
@@ -139,10 +140,10 @@ int main()
     write_raw_trace(trace_path, {});
 
     const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
-    assert(outcome.complete);
-    assert(outcome.value.total_lines == 0);
-    assert(outcome.value.malformed_lines == 0);
-    assert(outcome.warnings.empty());
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(outcome.value.total_lines == 0);
+    BOMWERK_TEST_CHECK(outcome.value.malformed_lines == 0);
+    BOMWERK_TEST_CHECK(outcome.warnings.empty());
   }
 
   // Given no trace file at all, when validation runs, then it warns instead of
@@ -150,8 +151,8 @@ int main()
   {
     TempTree tree;
     const Result<TraceStats> outcome = validate_and_sort_trace(tree.root() / "absent.jsonl");
-    assert(outcome.value.total_lines == 0);
-    assert(outcome.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.value.total_lines == 0);
+    BOMWERK_TEST_CHECK(outcome.warnings.size() == 1);
   }
 
   // Given blank lines mixed into a trace, when it is validated, then they are
@@ -162,9 +163,10 @@ int main()
     write_raw_trace(trace_path, {trace_line_for("cc", "a.c"), "", trace_line_for("cc", "b.c")});
 
     const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
-    assert(outcome.value.total_lines == 2);
-    assert(outcome.value.malformed_lines == 0);
+    BOMWERK_TEST_CHECK(outcome.value.total_lines == 2);
+    BOMWERK_TEST_CHECK(outcome.value.malformed_lines == 0);
   }
 
+  std::puts("test_trace_check: OK");
   return 0;
 }

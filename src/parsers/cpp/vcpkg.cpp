@@ -13,6 +13,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -28,8 +29,8 @@ namespace
 
 using core::json_utils::exceeds_json_nesting_depth;
 using core::json_utils::kMaxJsonNestingDepth;
-using core::json_utils::without_utf8_bom;
 
+constexpr std::string_view kProducerName = "vcpkg";
 constexpr std::string_view kVcpkgManifestName = "vcpkg.json";
 constexpr std::string_view kVcpkgPortsDirectoryName = "ports";
 
@@ -74,19 +75,33 @@ bool is_vcpkg_port_definition(const fs::path& relative_path)
   return path_component == path_end;  // exactly 3 segments
 }
 
+/// The dependency budget every vcpkg.json of one scan shares.
+struct RequirementBudget
+{
+  std::size_t remaining = 0;
+  bool warned = false;  ///< the one exhaustion warning has been emitted
+};
+
 /// Consume one unit of the shared cross-file dependency budget. Returns true
-/// when the caller should proceed; false when the budget is already exhausted
-/// (a warning has been emitted and the caller should stop parsing this file).
-bool try_consume_requirement_budget(std::size_t& requirement_budget,
+/// when the caller should proceed; false when the budget is already exhausted,
+/// in which case the caller stops parsing this file's dependencies. The
+/// exhaustion warning is emitted once per scan. Later files are still opened:
+/// a port definition (`ports/<name>/vcpkg.json`) reports its own identity
+/// without spending the budget, so skipping the file would drop that port.
+bool try_consume_requirement_budget(RequirementBudget& requirement_budget,
                                     core::Result<std::vector<core::Component>>& result)
 {
-  if (requirement_budget == 0)
+  if (requirement_budget.remaining == 0)
   {
-    result.warn(core::WarningCode::kEntryLimitReached,
-                "vcpkg: dependency limit reached; remaining entries skipped", "vcpkg");
+    if (!requirement_budget.warned)
+    {
+      result.warn(core::WarningCode::kEntryLimitReached,
+                  "vcpkg: dependency limit reached; remaining entries skipped", "vcpkg");
+      requirement_budget.warned = true;
+    }
     return false;
   }
-  --requirement_budget;
+  --requirement_budget.remaining;
   return true;
 }
 
@@ -342,11 +357,13 @@ std::optional<core::Component> component_from_port_identity(
 /// (`component_from_port_identity`). Parsed in no-throw mode behind the depth
 /// pre-scan; malformed JSON degrades to one warning (rule 1). `label` is the
 /// root-relative path used in warnings and evidence details.
-void parse_manifest(const std::string& bytes, const std::string& label, bool is_port_definition,
-                    std::size_t& requirement_budget, std::vector<core::Component>& components,
-                    core::Result<std::vector<core::Component>>& result)
+void parse_vcpkg_json(const std::string& bytes, const std::string& label, bool is_port_definition,
+                      RequirementBudget& requirement_budget,
+                      std::vector<core::Component>& components,
+                      core::Result<std::vector<core::Component>>& result)
 {
-  const std::string_view json_bytes = without_utf8_bom(bytes);
+  // The manifest walk already stripped any UTF-8 byte-order mark.
+  const std::string_view json_bytes = bytes;
   if (exceeds_json_nesting_depth(json_bytes, kMaxJsonNestingDepth))
   {
     result.warn(core::WarningCode::kJsonNestingDepthExceeded,
@@ -405,52 +422,83 @@ void parse_manifest(const std::string& bytes, const std::string& label, bool is_
   }
 }
 
+/// The two roles a vcpkg.json can play, told apart by path alone.
+enum class ManifestKind
+{
+  kProjectManifest,
+  kPortDefinition,
+};
+
+/// Selects every `vcpkg.json`; one under `ports/<name>/` is a port definition
+/// (see `is_vcpkg_port_definition`). A truncated JSON manifest cannot parse,
+/// so an oversized one is skipped rather than guessed at.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (core::file_name_of(relative_path) != kVcpkgManifestName)
+  {
+    return std::nullopt;
+  }
+  const ManifestKind kind = is_vcpkg_port_definition(relative_path)
+                                ? ManifestKind::kPortDefinition
+                                : ManifestKind::kProjectManifest;
+  return core::ManifestMatch<ManifestKind>{kind, core::OversizedFilePolicy::kSkip};
+}
+
+/// State shared by every vcpkg.json of one scan: one requirement budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  RequirementBudget requirement_budget;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, kVcpkgManifestName);
+}
+
+void parse_manifest(ManifestKind kind, const core::WalkedManifestFile& file,
+                    const ParseOptions& /*options*/, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  parse_vcpkg_json(file.bytes, file.label, kind == ManifestKind::kPortDefinition,
+                   state.requirement_budget, state.components, result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t requirement_budget = options.max_total_requirements;
+  ParseState state;
+  state.requirement_budget.remaining = options.max_total_requirements;
+  // Files keep being opened after the budget warning: a port definition
+  // still reports its own identity, which costs no budget.
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [] { return false; }, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (relative_path.filename().string() != kVcpkgManifestName)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "vcpkg: file limit reached; remaining vcpkg.json files skipped", "vcpkg");
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const bool is_port_definition = is_vcpkg_port_definition(relative_path);
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "vcpkg: unreadable file: " + label, "vcpkg");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      // A truncated JSON manifest cannot parse; skipping beats guessing.
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "vcpkg: file exceeds size limit, skipped: " + label, "vcpkg");
-      continue;
-    }
-    parse_manifest(file_read.bytes, label, is_port_definition, requirement_budget, components,
-                   result);
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.requirement_budget.remaining = options.max_total_requirements;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

@@ -5,6 +5,9 @@
 .bomwerk/
 build/
 build*/
+# ...except the fuzz seeds for the build-variable resolver, whose directory
+# name would otherwise match `build*/` and never reach CI.
+!fixtures/fuzz/seeds/build_variables/
 .cache/
 .DS_Store
 compile_commands.json

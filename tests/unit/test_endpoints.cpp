@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <string>
 #include <string_view>
 
@@ -119,5 +120,6 @@ int main()
     }
   }
 
+  std::puts("test_endpoints: OK");
   return 0;
 }

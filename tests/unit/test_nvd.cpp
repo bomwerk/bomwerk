@@ -1,5 +1,7 @@
+// ctest unit test for the NVD CPE fallback matcher (framework-free).
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <vector>
@@ -588,5 +590,6 @@ int main()
     BOMWERK_TEST_CHECK(!vuln::is_high_confidence_provenance(vuln::MatchProvenance::CpeFallback));
   }
 
+  std::puts("test_nvd: OK");
   return 0;
 }

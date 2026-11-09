@@ -4,6 +4,7 @@
 // directly (same precedent as test_all_cpes_cli.cpp) since CLI command implementations are
 // intentionally not a production library.
 #include <CLI/CLI.hpp>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -161,5 +162,6 @@ int main()
     BOMWERK_TEST_CHECK(run_scan(none_options) == core::kExitClean);
   }
 
+  std::puts("test_fail_on_cli: OK");
   return 0;
 }

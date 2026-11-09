@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -61,5 +62,35 @@ struct ParseLimits
 /// `output::canonical_spdx_license_id`, catching drift a future edit to
 /// either table could otherwise introduce silently.
 [[nodiscard]] std::vector<std::string_view> recognized_license_spdx_ids();
+
+/// One version header recognized by the version tables.
+struct VersionHeaderMatch
+{
+  std::string canonical_name;  ///< the library the header identifies, e.g. "zlib"
+  std::string version;
+  std::filesystem::path header_path;  ///< as passed in
+  std::string evidence;               ///< the macro line(s) as the header wrote them
+};
+
+/// Match one version header held in memory exactly as `parse` matches the
+/// file `header_path` inside a vendored folder named `vendor_folder_name`:
+/// the same tables, the same `max_header_bytes` cap and last-line trim, and
+/// the same rule that bare-dotted and split-macro rows need the folder to
+/// name their library. Never touches the filesystem: this is the entry point
+/// of the `fuzz_vendored_version_header` harness.
+[[nodiscard]] std::optional<VersionHeaderMatch> match_version_header(
+    std::string_view vendor_folder_name, const std::filesystem::path& header_path,
+    std::string_view header_bytes, const ParseLimits& limits = {});
+
+/// One row of the version tables: which header file names which library.
+struct VersionHeaderRow
+{
+  std::string_view header_filename;
+  std::string_view canonical_name;
+};
+
+/// Every row of every version table, in table order, so a test or harness
+/// can try each one without restating the tables.
+[[nodiscard]] std::vector<VersionHeaderRow> version_header_signatures();
 
 }  // namespace bomwerk::heuristics::vendored_cpp

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "core/model.hpp"
@@ -147,5 +148,31 @@ struct LicenseEnrichmentSummary
     std::vector<core::Component>& components, const LicenseEnrichmentOptions& options,
     const HttpGetFunction& http_get, const std::function<std::int64_t()>& now_epoch_seconds,
     const std::function<void(std::chrono::milliseconds)>& sleep_for);
+
+/// The package registries license enrichment asks.
+enum class LicenseRegistry
+{
+  CratesIo,
+  PyPi,
+  RubyGems
+};
+
+/// The license a registry response states, and whether the response had the
+/// shape that registry's API documents.
+struct RegistryLicense
+{
+  std::string text;
+  bool usable_shape = false;
+};
+
+/// Read one registry version-metadata response exactly as enrichment does.
+/// Registries are network peers, so their bytes are untrusted: malformed or
+/// hostile JSON degrades to an unusable shape, never a throw. Entry point of
+/// the `fuzz_license_*` harnesses.
+[[nodiscard]] RegistryLicense parse_registry_license_payload(LicenseRegistry registry,
+                                                             const std::string& payload);
+
+/// Read one cached license entry exactly as enrichment does on a cache hit.
+[[nodiscard]] RegistryLicense parse_cached_license_payload(const std::string& payload);
 
 }  // namespace bomwerk::vuln

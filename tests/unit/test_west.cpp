@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -372,6 +374,32 @@ int main()
     BOMWERK_TEST_CHECK(result.value.empty());
     BOMWERK_TEST_CHECK(warnings_with_code(result, WarningCode::kDependencyMissingSource) == 1);
     BOMWERK_TEST_CHECK(warnings_with_code(result, WarningCode::kEntriesSkippedUnresolved) == 1);
+  }
+
+  // Given a west.yml and a west.yaml and a file budget of one, when parsed,
+  // then both names share that one budget: one manifest is read and the
+  // other is reported by the file-limit warning.
+  {
+    std::ifstream stream(fs::path(BOMWERK_FIXTURES_DIR) / "west/explicit-url/west.yml",
+                         std::ios::binary);
+    const std::string manifest((std::istreambuf_iterator<char>(stream)),
+                               std::istreambuf_iterator<char>());
+    BOMWERK_TEST_CHECK(!manifest.empty());
+    TempTree tree;
+    tree.write("a/west.yml", manifest);
+    tree.write("b/west.yaml", manifest);
+    west::ParseOptions options;
+    options.max_scanned_files = 1;
+    const auto result = west::parse(tree.root(), options);
+    BOMWERK_TEST_CHECK(!result.value.empty());
+    BOMWERK_TEST_CHECK(any_warning_contains(result, "file limit reached"));
+    for (const Component& component : result.value)
+    {
+      for (const auto& evidence : component.evidence)
+      {
+        BOMWERK_TEST_CHECK(evidence.detail.find("b/west.yaml") == std::string::npos);
+      }
+    }
   }
 
   std::puts("test_west: OK");

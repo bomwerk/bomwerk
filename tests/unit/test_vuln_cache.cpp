@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -462,5 +463,6 @@ int main()
         kZlibPurl, {AdvisoryRevision{"CVE-2024-0001", ""}}, {}, kFetchedAt));
   }
 
+  std::puts("test_vuln_cache: OK");
   return 0;
 }

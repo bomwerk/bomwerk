@@ -1,7 +1,9 @@
+// ctest unit test for the OSV vulnerability matcher (framework-free).
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -1057,5 +1059,6 @@ int main()
     BOMWERK_TEST_CHECK(matches.value.hits.size() == 4);
   }
 
+  std::puts("test_osv: OK");
   return 0;
 }

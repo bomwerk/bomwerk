@@ -3,6 +3,7 @@
 // sources are linked directly (same precedent as test_fail_on_cli.cpp) since CLI command
 // implementations are intentionally not a production library.
 #include <CLI/CLI.hpp>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -107,5 +108,6 @@ checksum = "5f0e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
     BOMWERK_TEST_CHECK(exit_code == core::kExitCompletedWithWarnings);
   }
 
+  std::puts("test_license_fallback_timeout_cli: OK");
   return 0;
 }

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "core/cvss.hpp"
 #include "core/model.hpp"
 #include "core/result.hpp"
+#include "vuln/delta.hpp"
 #include "vuln/endpoints.hpp"
 #include "vuln/finding.hpp"
 #include "vuln/http.hpp"
@@ -166,5 +168,36 @@ struct MatchOptions
 [[nodiscard]] core::Result<MatchOutcome> match_components(
     const std::vector<core::Component>& components, const MatchOptions& options,
     const HttpPostFunction& http_post, const std::function<std::int64_t()>& now_epoch_seconds);
+
+/// What one purl's DETECTION payload (the per-query `querybatch` response
+/// object: `{"vulns":[{"id":...,"modified":...}]}`, `{}` for "no known
+/// vulnerabilities", or carrying a `next_page_token`) contains.
+struct OsvDetectionPayload
+{
+  std::vector<AdvisoryRevision> advisory_revisions;
+  bool truncated = false;  ///< a next_page_token was present: ids may be incomplete
+  bool malformed = false;  ///< payload was not the expected JSON shape
+};
+
+/// One advisory as its FULL OSV `/v1/query` record states it: its severity,
+/// and the CVE-shaped ids its `aliases[]` array says name the same
+/// vulnerability.
+struct OsvAdvisoryRecord
+{
+  core::CvssScore severity;
+  std::vector<std::string> cve_aliases;  ///< sorted, deduplicated (rule 3)
+};
+
+/// Read one detection payload exactly as the matcher does, cached or fresh.
+/// OSV is a network peer, so its bytes are untrusted: malformed or hostile
+/// JSON degrades to `malformed`, never a throw. Entry point of the
+/// `fuzz_osv_detection` harness.
+[[nodiscard]] OsvDetectionPayload parse_osv_detection_payload(const std::string& payload);
+
+/// Every advisory id of one FULL `/v1/query` payload mapped to its severity
+/// and CVE aliases, exactly as severity hydration reads it; an unusable
+/// payload yields an empty map. Entry point of the `fuzz_osv_full` harness.
+[[nodiscard]] std::map<std::string, OsvAdvisoryRecord> parse_osv_full_payload(
+    const std::string& payload);
 
 }  // namespace bomwerk::vuln

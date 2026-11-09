@@ -115,6 +115,16 @@ BoundedFileRead read_file_bounded(const std::filesystem::path& path, std::size_t
   return outcome;
 }
 
+BoundedFileRead bound_in_memory_bytes(std::string_view bytes, std::size_t max_bytes)
+{
+  BoundedFileRead outcome;
+  outcome.readable = true;
+  // Same rule as `read_file_bounded`: truncated means bytes remain past the cap.
+  outcome.truncated = bytes.size() > max_bytes;
+  outcome.bytes.assign(bytes.substr(0, max_bytes));
+  return outcome;
+}
+
 std::string read_first_line_bounded(const std::filesystem::path& path, std::size_t max_bytes)
 {
   const BoundedFileRead file_read = read_file_bounded(path, max_bytes);

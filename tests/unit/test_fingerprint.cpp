@@ -726,5 +726,6 @@ int main()
   an_empty_index_matches_nothing();
   a_sliver_of_matching_files_is_not_a_match();
   a_correct_prefilter_entry_lets_the_file_through();
+  std::puts("test_fingerprint: OK");
   return 0;
 }

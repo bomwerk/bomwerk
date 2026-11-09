@@ -1,5 +1,6 @@
 #include "core/purl.hpp"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -163,10 +164,15 @@ std::string_view purl_version_of(std::string_view purl_without_extras)
   return purl_without_extras.substr(version_marker + 1);
 }
 
-void canonicalize_purl(std::string& purl, std::string_view producer_name,
-                       std::vector<Warning>& warnings)
+namespace
 {
-  const Result<Purl> parsed_purl = Purl::parse(purl);
+
+/// Parse `purl`; on failure append the shared validation warning and return
+/// nullopt.
+std::optional<Purl> parse_or_warn(const std::string& purl, std::string_view producer_name,
+                                  std::vector<Warning>& warnings)
+{
+  Result<Purl> parsed_purl = Purl::parse(purl);
   if (!parsed_purl.complete)
   {
     warnings.push_back(
@@ -174,9 +180,27 @@ void canonicalize_purl(std::string& purl, std::string_view producer_name,
                 std::string(producer_name) + ": produced purl failed validation: " + purl,
                 std::string(producer_name),
                 {}});
-    return;
+    return std::nullopt;
   }
-  purl = parsed_purl.value.canonical();
+  return std::move(parsed_purl.value);
+}
+
+}  // namespace
+
+void canonicalize_purl(std::string& purl, std::string_view producer_name,
+                       std::vector<Warning>& warnings)
+{
+  const std::optional<Purl> parsed_purl = parse_or_warn(purl, producer_name, warnings);
+  if (parsed_purl.has_value())
+  {
+    purl = parsed_purl->canonical();
+  }
+}
+
+void validate_purl(const std::string& purl, std::string_view producer_name,
+                   std::vector<Warning>& warnings)
+{
+  parse_or_warn(purl, producer_name, warnings);
 }
 
 std::string_view purl_name_of(std::string_view purl_without_extras)

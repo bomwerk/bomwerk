@@ -8,6 +8,7 @@
 // never a partially-filled record, and never a silent drop, because a dropped
 // compile is a component wrongly reported unused.
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -169,5 +170,6 @@ int main()
     BOMWERK_TEST_CHECK(outcome.warnings.size() == 1);
   }
 
+  std::puts("test_trace_read: OK");
   return 0;
 }

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -15,6 +16,7 @@
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -32,8 +34,8 @@ namespace
 
 using core::json_utils::exceeds_json_nesting_depth;
 using core::json_utils::kMaxJsonNestingDepth;
-using core::json_utils::without_utf8_bom;
 
+constexpr std::string_view kProducerName = "nuget";
 constexpr std::string_view kPackagesLockName = "packages.lock.json";
 constexpr std::string_view kPackagesConfigName = "packages.config";
 constexpr std::string_view kCsprojExtension = ".csproj";
@@ -72,23 +74,6 @@ std::string build_nuget_purl(const std::string& package_name, const std::string&
   return purl;
 }
 
-/// Canonicalize `component.purl` in place, warning when it fails validation
-/// (defensive: percent-encoding should make that impossible).
-void canonicalize_purl(core::Component& component,
-                       core::Result<std::vector<core::Component>>& result)
-{
-  const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-  if (!parsed_purl.complete)
-  {
-    result.warn(core::WarningCode::kPurlValidationFailed,
-                "nuget: produced purl failed validation: " + component.purl, "nuget");
-  }
-  else
-  {
-    component.purl = parsed_purl.value.canonical();
-  }
-}
-
 /// Append one `pkg:nuget` component built from a declared (not resolved)
 /// manifest entry: `.csproj`/`packages.config`: at `Confidence::Medium`: a
 /// manifest declares a version, it does not resolve one, the same "declares,
@@ -105,13 +90,12 @@ void emit_declared_nuget_component(const std::string& package_name, const std::s
   component.version = version;
   component.purl = build_nuget_purl(component.name, component.version);
   component.evidence.push_back({core::Source::Manifest, std::move(detail), confidence});
-  canonicalize_purl(component, result);
+  core::canonicalize_purl(component.purl, kProducerName, result.warnings);
   components.push_back(std::move(component));
 }
 
 using core::xml_scan::find_attribute_value;
 using core::xml_scan::find_next_tag;
-using core::xml_scan::line_number_at;
 using core::xml_scan::TagMatch;
 
 /// One parsed `Directory.Packages.props`: the package-name-to-version map
@@ -209,7 +193,8 @@ void parse_packages_lock(const std::string& bytes, const std::string& label,
                          std::vector<core::Component>& components,
                          core::Result<std::vector<core::Component>>& result)
 {
-  const std::string_view json_bytes = without_utf8_bom(bytes);
+  // The manifest walk already stripped any UTF-8 byte-order mark.
+  const std::string_view json_bytes = bytes;
   if (exceeds_json_nesting_depth(json_bytes, kMaxJsonNestingDepth))
   {
     result.warn(core::WarningCode::kJsonNestingDepthExceeded,
@@ -296,7 +281,7 @@ void parse_packages_lock(const std::string& bytes, const std::string& label,
       }
       // Lock entries are NuGet's own resolver output -> High.
       component.evidence.push_back({core::Source::Manifest, detail, core::Confidence::High});
-      canonicalize_purl(component, result);
+      core::canonicalize_purl(component.purl, kProducerName, result.warnings);
       components.push_back(std::move(component));
     }
     if (budget_exhausted)
@@ -392,6 +377,10 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
     return core::expand_variables(text, *project_properties, core::kMsbuildVariableDialect);
   };
 
+  // PackageReference tags are met in document order, so line numbers are
+  // counted incrementally: recounting from the start for each one was
+  // quadratic.
+  core::xml_scan::LineCounter line_counter(bytes);
   while (true)
   {
     const std::optional<TagMatch> tag =
@@ -405,7 +394,7 @@ void parse_csproj(const std::string& bytes, const fs::path& csproj_directory,
     {
       const std::size_t tag_offset =
           static_cast<std::size_t>(tag->attribute_text.data() - bytes.data());
-      return label + ":" + std::to_string(line_number_at(bytes, tag_offset));
+      return label + ":" + std::to_string(line_counter.line_number_at(tag_offset));
     };
 
     const std::optional<std::string> declared_name =
@@ -568,21 +557,141 @@ void parse_packages_config(const std::string& bytes, const std::string& label,
   }
 }
 
+/// The formats this producer reads. Every one is a whole document (JSON or
+/// XML), so an oversized file is skipped rather than parsed from a prefix.
+enum class ManifestKind
+{
+  kPackagesLock,
+  kPackagesConfig,
+  kCsproj,
+  kDirectoryPackagesProps,
+};
+
+/// True for `<name>.csproj`, matching `path::extension()`: a file named just
+/// `.csproj` is a dotfile with no extension.
+bool has_csproj_extension(std::string_view file_name)
+{
+  return file_name.size() > kCsprojExtension.size() && file_name.ends_with(kCsprojExtension);
+}
+
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  const std::string_view file_name = core::file_name_of(relative_path);
+  std::optional<ManifestKind> kind;
+  if (file_name == kDirectoryPackagesPropsName)
+  {
+    kind = ManifestKind::kDirectoryPackagesProps;
+  }
+  else if (file_name == kPackagesLockName)
+  {
+    kind = ManifestKind::kPackagesLock;
+  }
+  else if (file_name == kPackagesConfigName)
+  {
+    kind = ManifestKind::kPackagesConfig;
+  }
+  else if (has_csproj_extension(file_name))
+  {
+    kind = ManifestKind::kCsproj;
+  }
+  if (!kind.has_value())
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{*kind, core::OversizedFilePolicy::kSkip};
+}
+
+/// State shared by every NuGet file of one scan: one package budget, the
+/// central package versions each Directory.Packages.props declares (keyed by
+/// its directory), and the MSBuild property tables `$(Name)` references
+/// resolve against.
+struct ParseState
+{
+  ParseState(const core::FileIndex& file_index, const fs::path& root, std::size_t max_file_bytes,
+             std::function<bool()> try_open_file, std::size_t initial_package_budget)
+      : package_budget(initial_package_budget),
+        property_scopes(file_index, root, max_file_bytes, std::move(try_open_file))
+  {
+  }
+
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+  std::map<fs::path, DirectoryPackagesFile> directory_packages_by_directory;
+  msbuild::PropertyScopes property_scopes;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "manifest");
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind kind, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  const fs::path directory = fs::path(file.label).parent_path();
+  switch (kind)
+  {
+    case ManifestKind::kDirectoryPackagesProps:
+      state.directory_packages_by_directory[directory] =
+          parse_directory_packages_props(file.bytes, file.label, result);
+      return;
+    case ManifestKind::kPackagesLock:
+      parse_packages_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                          state.components, result);
+      return;
+    case ManifestKind::kPackagesConfig:
+      parse_packages_config(file.bytes, file.label, options.max_total_packages,
+                            state.package_budget, state.components, result);
+      return;
+    case ManifestKind::kCsproj:
+      parse_csproj(file.bytes, directory, state.directory_packages_by_directory,
+                   state.property_scopes, file.label, options.max_total_packages,
+                   state.package_budget, state.components, result);
+      return;
+  }
+}
+
+/// Takes the state by reference: it holds the MSBuild property tables, which
+/// refer into the caller's file index, so it is finished in place.
+core::Result<std::vector<core::Component>> finish(ParseState& state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  for (const core::Warning& warning : state.property_scopes.warnings())
+  {
+    result.warn(warning);
+  }
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
+  const core::ManifestWalkOptions walk_options = walk_options_for(options);
   std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
   bool file_limit_warned = false;
 
-  // Shared across both phases below: once max_scanned_files manifest files
-  // have been opened (Directory.Packages.props included: it is read the same
-  // as any other manifest, so it is bounded the same way), no further file is
-  // opened, with exactly one warning regardless of which phase trips it.
+  // Discovery is this producer's own, not `core::for_each_manifest_file`:
+  // the MSBuild property files `PropertyScopes` opens lazily count against the
+  // same file budget as the manifests, and Directory.Packages.props must all
+  // be read before any project. Each file still goes through the shared
+  // per-file read (`core::read_manifest_file`) and `parse_manifest`.
+  //
+  // Once max_scanned_files files have been opened, no further file is opened,
+  // with exactly one warning regardless of which phase trips it.
   auto file_limit_reached = [&]()
   {
     if (scanned_file_count < options.max_scanned_files)
@@ -591,127 +700,79 @@ core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_ind
     }
     if (!file_limit_warned)
     {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "nuget: file limit reached; remaining manifest files skipped", "nuget");
+      result.warnings.push_back(core::file_limit_warning(walk_options));
       file_limit_warned = true;
     }
     return true;
   };
 
-  // MSBuild property tables for `$(Name)` references. Every file they read
-  // counts against the same file budget as the manifests above, and a file
-  // that is also a Directory.Packages.props is read once here and once by
-  // phase 1: the budget is generous, the double count is harmless.
-  msbuild::PropertyScopes property_scopes(file_index, root, options.max_file_bytes,
-                                          [&]()
-                                          {
-                                            if (file_limit_reached())
-                                            {
-                                              return false;
-                                            }
-                                            ++scanned_file_count;
-                                            return true;
-                                          });
+  // A file that is both a property source and a Directory.Packages.props is
+  // read once by the property tables and once by phase 1: the budget is
+  // generous, the double count is harmless.
+  ParseState state(
+      file_index, root, options.max_file_bytes,
+      [&]()
+      {
+        if (file_limit_reached())
+        {
+          return false;
+        }
+        ++scanned_file_count;
+        return true;
+      },
+      options.max_total_packages);
 
-  // Phase 1: every Directory.Packages.props first, so CPM resolution in phase
+  // Phase 1 reads every Directory.Packages.props, so CPM resolution in phase
   // 2 sees the complete directory->version map regardless of how a props file
-  // happens to sort relative to the .csproj files that reference it.
-  std::map<fs::path, DirectoryPackagesFile> directory_packages_by_directory;
-  for (const fs::path& relative_path : file_index.files)
+  // happens to sort relative to the .csproj files that reference it. Phase 2
+  // reads packages.lock.json, packages.config and .csproj.
+  for (const bool central_versions_phase : {true, false})
   {
-    if (relative_path.filename().string() != kDirectoryPackagesPropsName)
+    for (const fs::path& relative_path : file_index.files)
     {
-      continue;
-    }
-    if (file_limit_reached())
-    {
-      break;
-    }
-    ++scanned_file_count;
+      const std::optional<core::ManifestMatch<ManifestKind>> match = manifest_kind(relative_path);
+      if (!match.has_value() ||
+          (match->kind == ManifestKind::kDirectoryPackagesProps) != central_versions_phase)
+      {
+        continue;
+      }
+      if (file_limit_reached())
+      {
+        break;
+      }
+      if (!central_versions_phase && package_budget_exhausted(state, result))
+      {
+        break;
+      }
+      ++scanned_file_count;
 
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "nuget: unreadable file: " + label, "nuget");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "nuget: file exceeds size limit, skipped: " + label, "nuget");
-      continue;
-    }
-    directory_packages_by_directory[relative_path.parent_path()] =
-        parse_directory_packages_props(file_read.bytes, label, result);
-  }
-
-  // Phase 2: packages.lock.json, packages.config and .csproj, same order and
-  // limits nuget.cpp used before Directory.Packages.props support landed.
-  for (const fs::path& relative_path : file_index.files)
-  {
-    const std::string filename = relative_path.filename().string();
-    const bool is_packages_lock = filename == kPackagesLockName;
-    const bool is_packages_config = filename == kPackagesConfigName;
-    const bool is_csproj = relative_path.extension().string() == kCsprojExtension;
-    if (!is_packages_lock && !is_packages_config && !is_csproj)
-    {
-      continue;
-    }
-    if (file_limit_reached())
-    {
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "nuget: unreadable file: " + label, "nuget");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      // A truncated manifest cannot parse reliably: skipping beats guessing.
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "nuget: file exceeds size limit, skipped: " + label, "nuget");
-      continue;
-    }
-
-    if (is_packages_lock)
-    {
-      parse_packages_lock(file_read.bytes, label, options.max_total_packages, package_budget,
-                          components, result);
-    }
-    else if (is_packages_config)
-    {
-      parse_packages_config(file_read.bytes, label, options.max_total_packages, package_budget,
-                            components, result);
-    }
-    else
-    {
-      parse_csproj(file_read.bytes, relative_path.parent_path(), directory_packages_by_directory,
-                   property_scopes, label, options.max_total_packages, package_budget, components,
-                   result);
+      const std::optional<core::WalkedManifestFile> file =
+          core::read_manifest_file(root, relative_path, options.max_file_bytes, kProducerName,
+                                   match->oversized, result.warnings);
+      if (file.has_value())
+      {
+        parse_manifest(match->kind, *file, options, state, result);
+      }
     }
   }
+  return finish(state, std::move(result));
+}
 
-  for (const core::Warning& warning : property_scopes.warnings())
-  {
-    result.warn(warning);
-  }
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  // An empty index: `PropertyScopes` then never finds a property file to
+  // open, so `$(Name)` references resolve only against the project itself.
+  const core::FileIndex no_other_files;
+  ParseState state(
+      no_other_files, fs::path(), options.max_file_bytes, [] { return false; },
+      options.max_total_packages);
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(state, std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

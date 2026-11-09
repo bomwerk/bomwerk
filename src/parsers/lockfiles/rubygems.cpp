@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -9,6 +10,7 @@
 
 #include "core/exclusions.hpp"
 #include "core/file_io.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -22,6 +24,7 @@ namespace bomwerk::parsers::lockfiles::rubygems
 namespace
 {
 
+constexpr std::string_view kProducerName = "rubygems";
 constexpr std::string_view kGemfileLockName = "Gemfile.lock";
 
 /// The exact indentation Bundler writes for a resolved gem under `specs:`.
@@ -198,16 +201,7 @@ void parse_gemfile_lock(std::string_view bytes, const std::string& label, std::s
     // Lock entries are Bundler's own resolver output -> High.
     component.evidence.push_back({core::Source::Manifest, detail, core::Confidence::High});
 
-    const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-    if (!parsed_purl.complete)
-    {
-      result.warn(core::WarningCode::kPurlValidationFailed,
-                  "rubygems: produced purl failed validation: " + component.purl, "rubygems");
-    }
-    else
-    {
-      component.purl = parsed_purl.value.canonical();
-    }
+    core::canonicalize_purl(component.purl, kProducerName, result.warnings);
     components.push_back(std::move(component));
   }
 
@@ -220,64 +214,87 @@ void parse_gemfile_lock(std::string_view bytes, const std::string& label, std::s
   }
 }
 
+/// The one format this producer reads.
+enum class ManifestKind
+{
+  kGemfileLock,
+};
+
+/// Selects `Gemfile.lock` files. Line-based: an oversized one keeps its
+/// complete-line prefix, so a cut-off tail line never counts as malformed.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (core::file_name_of(relative_path) != kGemfileLockName)
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kGemfileLock,
+                                           core::OversizedFilePolicy::kTrimToLastNewline};
+}
+
+/// State shared by every Gemfile.lock of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, kGemfileLockName);
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  parse_gemfile_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                     state.components, result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (relative_path.filename().string() != kGemfileLockName)
-    {
-      continue;
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "rubygems: file limit reached; remaining Gemfile.lock files skipped", "rubygems");
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "rubygems: unreadable file: " + label,
-                  "rubygems");
-      continue;
-    }
-    std::string_view bytes = file_read.bytes;
-    if (file_read.truncated)
-    {
-      // Line-based: the readable prefix still parses; drop the cut-off tail
-      // line so it cannot count as malformed.
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "rubygems: file exceeds size limit, parsing first part only: " + label,
-                  "rubygems");
-      const std::size_t last_newline = bytes.rfind('\n');
-      bytes = (last_newline == std::string_view::npos) ? std::string_view{}
-                                                       : bytes.substr(0, last_newline + 1);
-    }
-    parse_gemfile_lock(bytes, label, options.max_total_packages, package_budget, components,
-                       result);
-  }
-
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

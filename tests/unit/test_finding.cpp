@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -160,5 +161,6 @@ int main()
     BOMWERK_TEST_CHECK(merged.deltas.purls_unchanged == 0);
   }
 
+  std::puts("test_finding: OK");
   return 0;
 }

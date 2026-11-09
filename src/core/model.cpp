@@ -80,7 +80,16 @@ std::string component_identity(const Component& component)
   return component.name + "@" + component.version;
 }
 
-void merge_into(Component& destination, const Component& source)
+namespace
+{
+
+/// `merge_into` without the final evidence normalization: `merge_all` folds
+/// many duplicates into one component and normalizes once at the end, since
+/// re-sorting the growing evidence after every duplicate is quadratic.
+/// `evidence_order` compares every Evidence field, so one sort-and-dedupe of
+/// the concatenation equals repeated ones: the result depends only on the
+/// multiset of evidence entries.
+void merge_fields_and_append_evidence(Component& destination, const Component& source)
 {
   if (destination.name.empty())
   {
@@ -121,6 +130,13 @@ void merge_into(Component& destination, const Component& source)
   }
   destination.evidence.insert(destination.evidence.end(), source.evidence.begin(),
                               source.evidence.end());
+}
+
+}  // namespace
+
+void merge_into(Component& destination, const Component& source)
+{
+  merge_fields_and_append_evidence(destination, source);
   normalize_evidence(destination.evidence);
 }
 
@@ -146,12 +162,11 @@ std::vector<Component> merge_all(std::vector<Component> components)
     auto existing_entry = components_by_identity.find(identity_key);
     if (existing_entry == components_by_identity.end())
     {
-      normalize_evidence(component.evidence);
       components_by_identity.emplace(std::move(identity_key), std::move(component));
     }
     else
     {
-      merge_into(existing_entry->second, component);
+      merge_fields_and_append_evidence(existing_entry->second, component);
     }
   }
 
@@ -159,6 +174,7 @@ std::vector<Component> merge_all(std::vector<Component> components)
   merged.reserve(components_by_identity.size());
   for (auto& [identity_key, component] : components_by_identity)
   {
+    normalize_evidence(component.evidence);
     merged.push_back(std::move(component));
   }
   return merged;

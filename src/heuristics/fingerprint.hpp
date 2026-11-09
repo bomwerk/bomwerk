@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/file_index.hpp"
@@ -154,6 +155,11 @@ struct Index
 /// product output and not a compared artifact.
 [[nodiscard]] core::Result<Index> load_index(const std::filesystem::path& index_path,
                                              LoadLimits limits = {});
+
+/// `load_index` for an index already in memory: the same cap, the same parse
+/// and the same refusals. Never touches the filesystem: this is the entry
+/// point of the `fuzz_fingerprint_index` harness.
+[[nodiscard]] core::Result<Index> load_index_bytes(std::string_view bytes, LoadLimits limits = {});
 
 /// What the corpus said about one vendor root.
 struct RootMatch

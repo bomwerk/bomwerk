@@ -1,0 +1,37 @@
+{
+ "totalResults": 2,
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2022-37434",
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2018-25032",
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+       }
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

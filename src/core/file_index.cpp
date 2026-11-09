@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 #include "core/exclusions.hpp"
@@ -123,6 +124,22 @@ bool file_is_included(const fs::path& relative_path, const std::set<fs::path>& i
 }
 
 }  // namespace
+
+std::string_view file_name_of(const fs::path& relative_path) noexcept
+{
+  // POSIX hosts only (Linux and macOS; Windows is a Phase-2 target): there the
+  // native string is `char` and `/` is the only separator, so the last segment
+  // is a plain substring of storage the path already owns.
+  static_assert(std::is_same_v<fs::path::value_type, char>,
+                "file_name_of assumes a POSIX path representation");
+  const std::string_view native_path(relative_path.native());
+  const std::size_t last_separator = native_path.rfind('/');
+  if (last_separator == std::string_view::npos)
+  {
+    return native_path;
+  }
+  return native_path.substr(last_separator + 1);
+}
 
 Result<FileIndex> build_file_index(const fs::path& root,
                                    const std::set<std::string>& excluded_dir_names,

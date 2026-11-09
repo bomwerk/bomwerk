@@ -1,6 +1,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <thread>
 #include <vector>
 
@@ -65,5 +66,6 @@ int main()
     BOMWERK_TEST_CHECK(true_count.load() == 1);
   }
 
+  std::puts("test_progress_ticker: OK");
   return 0;
 }

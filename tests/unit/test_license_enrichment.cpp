@@ -1,6 +1,8 @@
+// ctest unit test for registry license enrichment (framework-free).
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -659,5 +661,6 @@ int main()
     BOMWERK_TEST_CHECK(warnings_mention(enriched.warnings, "time budget"));
   }
 
+  std::puts("test_license_enrichment: OK");
   return 0;
 }

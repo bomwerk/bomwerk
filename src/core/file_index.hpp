@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "core/result.hpp"
@@ -19,6 +20,15 @@ struct FileIndex
   /// iteration order is unspecified).
   std::vector<std::filesystem::path> files;
 };
+
+/// The last segment of a root-relative, lexically-normal path, as a view into
+/// `relative_path`'s own storage: the same text as
+/// `relative_path.filename().string()`, without allocating a string. Every
+/// producer filters the whole index by file name, so on a monorepo index of
+/// hundreds of thousands of files the allocation, not the comparison,
+/// dominates. The view is valid as long as `relative_path` is.
+/// Example: `file_name_of("app/Cargo.lock")` -> `"Cargo.lock"`.
+[[nodiscard]] std::string_view file_name_of(const std::filesystem::path& relative_path) noexcept;
 
 /// Walk `root` once: skip any directory whose basename is in
 /// `excluded_dir_names`, and any subtree rooted at a path in

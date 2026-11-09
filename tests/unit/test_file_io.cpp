@@ -1,6 +1,5 @@
 // ctest unit test for the bounded file-read and file-digest helpers
 // (core/file_io).
-#include <cassert>
 #include <cstddef>
 #include <cstdio>
 #include <string>
@@ -10,6 +9,7 @@
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
 
+using bomwerk::core::bound_in_memory_bytes;
 using bomwerk::core::BoundedFileDigest;
 using bomwerk::core::BoundedFileFastHash;
 using bomwerk::core::BoundedFileRead;
@@ -159,15 +159,39 @@ void the_fast_hash_matches_the_published_empty_input_value()
 
 int main()
 {
+  // Given bytes held in memory, when bounded at, above and below their size,
+  // then each answer equals what read_file_bounded gives for the same file.
+  {
+    TempTree tree;
+    tree.write("three.bin", "abc");
+    for (const std::size_t max_bytes :
+         {std::size_t{0}, std::size_t{2}, std::size_t{3}, std::size_t{4}})
+    {
+      const BoundedFileRead from_disk = read_file_bounded(tree.root() / "three.bin", max_bytes);
+      const BoundedFileRead from_memory = bound_in_memory_bytes("abc", max_bytes);
+      BOMWERK_TEST_CHECK(from_memory.readable);
+      BOMWERK_TEST_CHECK(from_memory.bytes == from_disk.bytes);
+      BOMWERK_TEST_CHECK(from_memory.truncated == from_disk.truncated);
+    }
+  }
+
+  // Given an empty buffer, when bounded, then it is readable, empty and whole.
+  {
+    const BoundedFileRead empty = bound_in_memory_bytes("", 8);
+    BOMWERK_TEST_CHECK(empty.readable);
+    BOMWERK_TEST_CHECK(empty.bytes.empty());
+    BOMWERK_TEST_CHECK(!empty.truncated);
+  }
+
   // Given a file smaller than the cap, when read, then the whole content comes
   // back untruncated.
   {
     TempTree tree;
     tree.write("small.txt", "abc");
     const BoundedFileRead outcome = read_file_bounded(tree.root() / "small.txt", 100);
-    assert(outcome.readable);
-    assert(!outcome.truncated);
-    assert(outcome.bytes == "abc");
+    BOMWERK_TEST_CHECK(outcome.readable);
+    BOMWERK_TEST_CHECK(!outcome.truncated);
+    BOMWERK_TEST_CHECK(outcome.bytes == "abc");
   }
 
   // Given a file larger than the cap, when read, then only the first max_bytes
@@ -176,9 +200,9 @@ int main()
     TempTree tree;
     tree.write("big.txt", "abcdef");
     const BoundedFileRead outcome = read_file_bounded(tree.root() / "big.txt", 2);
-    assert(outcome.readable);
-    assert(outcome.truncated);
-    assert(outcome.bytes == "ab");
+    BOMWERK_TEST_CHECK(outcome.readable);
+    BOMWERK_TEST_CHECK(outcome.truncated);
+    BOMWERK_TEST_CHECK(outcome.bytes == "ab");
   }
 
   // Given a file of exactly the cap size, when read, then it is complete and
@@ -187,9 +211,9 @@ int main()
     TempTree tree;
     tree.write("exact.txt", "abcd");
     const BoundedFileRead outcome = read_file_bounded(tree.root() / "exact.txt", 4);
-    assert(outcome.readable);
-    assert(!outcome.truncated);
-    assert(outcome.bytes == "abcd");
+    BOMWERK_TEST_CHECK(outcome.readable);
+    BOMWERK_TEST_CHECK(!outcome.truncated);
+    BOMWERK_TEST_CHECK(outcome.bytes == "abcd");
   }
 
   // Given a missing file, when read, then readable is false and bytes empty :
@@ -197,8 +221,8 @@ int main()
   {
     TempTree tree;
     const BoundedFileRead outcome = read_file_bounded(tree.root() / "absent.txt", 100);
-    assert(!outcome.readable);
-    assert(outcome.bytes.empty());
+    BOMWERK_TEST_CHECK(!outcome.readable);
+    BOMWERK_TEST_CHECK(outcome.bytes.empty());
   }
 
   // Given a multi-line file with surrounding whitespace, when the first line is
@@ -206,13 +230,14 @@ int main()
   {
     TempTree tree;
     tree.write("lines.txt", "  ref: refs/heads/main \r\nsecond line\n");
-    assert(read_first_line_bounded(tree.root() / "lines.txt", 4096) == "ref: refs/heads/main");
+    BOMWERK_TEST_CHECK(read_first_line_bounded(tree.root() / "lines.txt", 4096) ==
+                       "ref: refs/heads/main");
   }
 
   // Given a missing file, when the first line is read, then it is empty.
   {
     TempTree tree;
-    assert(read_first_line_bounded(tree.root() / "absent.txt", 4096).empty());
+    BOMWERK_TEST_CHECK(read_first_line_bounded(tree.root() / "absent.txt", 4096).empty());
   }
 
   // Given content with an embedded NUL before the newline, when the first line
@@ -226,7 +251,7 @@ int main()
     std::string expected = "ab";
     expected.push_back('\0');
     expected += "cd";
-    assert(read_first_line_bounded(tree.root() / "nul.txt", 4096) == expected);
+    BOMWERK_TEST_CHECK(read_first_line_bounded(tree.root() / "nul.txt", 4096) == expected);
   }
 
   whole_file_digests_equal_the_in_memory_digest();

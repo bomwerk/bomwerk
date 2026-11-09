@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "core/file_index.hpp"
 #include "core/name_list.hpp"
 
 namespace fs = std::filesystem;
@@ -76,10 +77,14 @@ std::vector<fs::path> matching_paths(const std::vector<fs::path>& files,
                                      const std::vector<std::string_view>& names)
 {
   std::vector<fs::path> matches;
+  if (names.empty())
+  {
+    return matches;  // nothing can match: skip the pass over every indexed file
+  }
   for (const fs::path& relative_path : files)
   {
-    const std::string filename = relative_path.filename().string();
-    const bool is_match = std::any_of(names.begin(), names.end(), [&filename](std::string_view name)
+    const std::string_view filename = file_name_of(relative_path);
+    const bool is_match = std::any_of(names.begin(), names.end(), [filename](std::string_view name)
                                       { return matches_manifest_name(filename, name); });
     if (is_match && !is_inside_installed_dependencies(relative_path))
     {

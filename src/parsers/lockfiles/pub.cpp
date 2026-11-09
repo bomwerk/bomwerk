@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,6 +23,7 @@ namespace bomwerk::parsers::lockfiles::pub
 namespace
 {
 
+constexpr std::string_view kProducerName = "pub";
 constexpr std::string_view kPubspecLockName = "pubspec.lock";
 constexpr std::size_t kPackagesKeyIndentation = 0;
 constexpr std::string_view kPackagesKey = "packages";
@@ -297,38 +299,87 @@ void parse_pubspec_lock(std::string_view bytes, const std::string& label, std::s
   }
 }
 
+/// The one format this producer reads.
+enum class ManifestKind
+{
+  kPubspecLock,
+};
+
+/// Selects `pubspec.lock` files. The format is line-based YAML whose entries
+/// stand alone, so an oversized lockfile keeps its complete-line prefix.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(const fs::path& relative_path)
+{
+  if (core::file_name_of(relative_path) != kPubspecLockName)
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kPubspecLock,
+                                           core::OversizedFilePolicy::kTrimToLastNewline};
+}
+
+/// State shared by every pubspec.lock of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, kPubspecLockName);
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind /*kind*/, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  parse_pubspec_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                     state.components, result);
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings, manifest_kind,
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  core::ManifestWalkOptions walk_options;
-  walk_options.max_scanned_files = options.max_scanned_files;
-  walk_options.max_file_bytes = options.max_file_bytes;
-  walk_options.producer_name = "pub";
-  walk_options.file_label = std::string(kPubspecLockName);
-  walk_options.truncate_at_last_newline = true;
-  const core::Result<std::vector<core::WalkedManifestFile>> walked =
-      core::walk_bounded_manifest_files(file_index, root, kPubspecLockName, walk_options);
-  for (const core::Warning& warning : walked.warnings)
-  {
-    result.warn(warning);
-  }
-  for (const core::WalkedManifestFile& file : walked.value)
-  {
-    if (package_budget == 0 && !result.complete)
-    {
-      break;
-    }
-    parse_pubspec_lock(file.bytes, file.label, options.max_total_packages, package_budget,
-                       components, result);
-  }
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+                           manifest_kind, [&](ManifestKind kind, core::WalkedManifestFile&& file)
+                           { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

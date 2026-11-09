@@ -1,0 +1,1 @@
+pkg:npm/%40babel/core@7.24.0

@@ -1,4 +1,4 @@
-#include <cassert>
+// ctest unit test for conan reference parsing (framework-free).
 #include <cstdio>
 #include <string>
 
@@ -16,11 +16,11 @@ int main()
   // version are set.
   {
     const ConanReference reference = parse_conan_reference("zlib/1.2.13");
-    assert(reference.name == "zlib");
-    assert(reference.version == "1.2.13");
-    assert(reference.user.empty());
-    assert(reference.channel.empty());
-    assert(reference.revision.empty());
+    BOMWERK_TEST_CHECK(reference.name == "zlib");
+    BOMWERK_TEST_CHECK(reference.version == "1.2.13");
+    BOMWERK_TEST_CHECK(reference.user.empty());
+    BOMWERK_TEST_CHECK(reference.channel.empty());
+    BOMWERK_TEST_CHECK(reference.revision.empty());
   }
 
   // Given the full name/version@user/channel#revision form, when parsed, then
@@ -28,11 +28,11 @@ int main()
   {
     const ConanReference reference =
         parse_conan_reference("openssl/3.2.0@bincrafters/stable#4f23a5d");
-    assert(reference.name == "openssl");
-    assert(reference.version == "3.2.0");
-    assert(reference.user == "bincrafters");
-    assert(reference.channel == "stable");
-    assert(reference.revision == "4f23a5d");
+    BOMWERK_TEST_CHECK(reference.name == "openssl");
+    BOMWERK_TEST_CHECK(reference.version == "3.2.0");
+    BOMWERK_TEST_CHECK(reference.user == "bincrafters");
+    BOMWERK_TEST_CHECK(reference.channel == "stable");
+    BOMWERK_TEST_CHECK(reference.revision == "4f23a5d");
   }
 
   // Given a conan-2 lockfile entry with a %timestamp suffix, when parsed, then
@@ -40,20 +40,20 @@ int main()
   {
     const ConanReference reference =
         parse_conan_reference("fmt/10.2.1#f52e03ae3d251dec704634230cd806a2%1708593606.497");
-    assert(reference.name == "fmt");
-    assert(reference.version == "10.2.1");
-    assert(reference.revision == "f52e03ae3d251dec704634230cd806a2");
+    BOMWERK_TEST_CHECK(reference.name == "fmt");
+    BOMWERK_TEST_CHECK(reference.version == "10.2.1");
+    BOMWERK_TEST_CHECK(reference.revision == "f52e03ae3d251dec704634230cd806a2");
   }
 
   // Given a conan-1 lockfile ref with a dangling '@' (empty user/channel),
   // when parsed, then user and channel stay empty.
   {
     const ConanReference reference = parse_conan_reference("zlib/1.2.13@#abc123");
-    assert(reference.name == "zlib");
-    assert(reference.version == "1.2.13");
-    assert(reference.user.empty());
-    assert(reference.channel.empty());
-    assert(reference.revision == "abc123");
+    BOMWERK_TEST_CHECK(reference.name == "zlib");
+    BOMWERK_TEST_CHECK(reference.version == "1.2.13");
+    BOMWERK_TEST_CHECK(reference.user.empty());
+    BOMWERK_TEST_CHECK(reference.channel.empty());
+    BOMWERK_TEST_CHECK(reference.revision == "abc123");
   }
 
   // Given a hostile reference where a stray '%' precedes the revision (not
@@ -62,16 +62,16 @@ int main()
   // the revision is not truncated away by an earlier, unrelated '%'.
   {
     const ConanReference reference = parse_conan_reference("pkg/1.0%oops#deadbeef");
-    assert(reference.name == "pkg");
-    assert(reference.version == "1.0%oops");
-    assert(reference.revision == "deadbeef");
+    BOMWERK_TEST_CHECK(reference.name == "pkg");
+    BOMWERK_TEST_CHECK(reference.version == "1.0%oops");
+    BOMWERK_TEST_CHECK(reference.revision == "deadbeef");
   }
 
   // Given a version range, when parsed, then the range is kept verbatim as the
   // version and recognized as a range.
   {
     const ConanReference reference = parse_conan_reference("zlib/[>=1.2 <2.0]");
-    assert(reference.version == "[>=1.2 <2.0]");
+    BOMWERK_TEST_CHECK(reference.version == "[>=1.2 <2.0]");
     BOMWERK_TEST_CHECK(is_conan_version_range(reference.version));
     BOMWERK_TEST_CHECK(!is_conan_version_range("1.2.13"));
   }
@@ -79,16 +79,16 @@ int main()
   // Given surrounding whitespace and a name-only string, when parsed, then the
   // name is trimmed and nothing else is invented. Empty input yields all-empty.
   {
-    assert(parse_conan_reference("  cmake  ").name == "cmake");
-    assert(parse_conan_reference("  cmake  ").version.empty());
-    assert(parse_conan_reference("").name.empty());
+    BOMWERK_TEST_CHECK(parse_conan_reference("  cmake  ").name == "cmake");
+    BOMWERK_TEST_CHECK(parse_conan_reference("  cmake  ").version.empty());
+    BOMWERK_TEST_CHECK(parse_conan_reference("").name.empty());
   }
 
   // Given a plain reference, when a purl is built, then it is the canonical
   // pkg:conan form without qualifiers.
   {
     const ConanReference reference = parse_conan_reference("zlib/1.2.13");
-    assert(build_conan_purl(reference, false) == "pkg:conan/zlib@1.2.13");
+    BOMWERK_TEST_CHECK(build_conan_purl(reference, false) == "pkg:conan/zlib@1.2.13");
   }
 
   // Given user/channel and a revision, when purls are built with and without
@@ -97,10 +97,10 @@ int main()
   {
     const ConanReference reference =
         parse_conan_reference("openssl/3.2.0@bincrafters/stable#4f23a5d");
-    assert(build_conan_purl(reference, false) ==
-           "pkg:conan/openssl@3.2.0?channel=stable&user=bincrafters");
-    assert(build_conan_purl(reference, true) ==
-           "pkg:conan/openssl@3.2.0?channel=stable&rrev=4f23a5d&user=bincrafters");
+    BOMWERK_TEST_CHECK(build_conan_purl(reference, false) ==
+                       "pkg:conan/openssl@3.2.0?channel=stable&user=bincrafters");
+    BOMWERK_TEST_CHECK(build_conan_purl(reference, true) ==
+                       "pkg:conan/openssl@3.2.0?channel=stable&rrev=4f23a5d&user=bincrafters");
   }
 
   // Given structural bytes leaked from a hostile manifest, when a purl is
@@ -109,7 +109,8 @@ int main()
     ConanReference reference;
     reference.name = "bad name";
     reference.version = "[>=1.2 <2.0]";
-    assert(build_conan_purl(reference, false) == "pkg:conan/bad%20name@%5B%3E%3D1.2%20%3C2.0%5D");
+    BOMWERK_TEST_CHECK(build_conan_purl(reference, false) ==
+                       "pkg:conan/bad%20name@%5B%3E%3D1.2%20%3C2.0%5D");
   }
 
   // Given a reference with an empty name, when a purl is built, then the name
@@ -117,7 +118,7 @@ int main()
   {
     ConanReference reference;
     reference.version = "1.0";
-    assert(build_conan_purl(reference, false) == "pkg:conan/unknown@1.0");
+    BOMWERK_TEST_CHECK(build_conan_purl(reference, false) == "pkg:conan/unknown@1.0");
   }
 
   std::puts("test_conan_ref: OK");

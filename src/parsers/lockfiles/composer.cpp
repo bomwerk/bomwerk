@@ -14,6 +14,7 @@
 #include "core/file_io.hpp"
 #include "core/json_utils.hpp"
 #include "core/manifest_names.hpp"
+#include "core/manifest_walk.hpp"
 #include "core/percent.hpp"
 #include "core/purl.hpp"
 #include "core/submodule_paths.hpp"
@@ -29,8 +30,8 @@ namespace
 
 using core::json_utils::exceeds_json_nesting_depth;
 using core::json_utils::kMaxJsonNestingDepth;
-using core::json_utils::without_utf8_bom;
 
+constexpr std::string_view kProducerName = "composer";
 constexpr std::string_view kComposerLockName = "composer.lock";
 constexpr std::string_view kComposerJsonName = "composer.json";
 
@@ -77,16 +78,7 @@ void emit_composer_component(std::string_view vendor, std::string_view package_n
   component.scope = scope;
   component.evidence.push_back({core::Source::Manifest, std::move(detail), confidence});
 
-  const core::Result<core::Purl> parsed_purl = core::Purl::parse(component.purl);
-  if (!parsed_purl.complete)
-  {
-    result.warn(core::WarningCode::kPurlValidationFailed,
-                "composer: produced purl failed validation: " + component.purl, "composer");
-  }
-  else
-  {
-    component.purl = parsed_purl.value.canonical();
-  }
+  core::canonicalize_purl(component.purl, kProducerName, result.warnings);
   components.push_back(std::move(component));
 }
 
@@ -124,7 +116,8 @@ bool is_platform_requirement(std::string_view requirement_name)
 nlohmann::json parse_json_object(const std::string& bytes, const std::string& label,
                                  core::Result<std::vector<core::Component>>& result)
 {
-  const std::string_view json_bytes = without_utf8_bom(bytes);
+  // The manifest walk already stripped any UTF-8 byte-order mark.
+  const std::string_view json_bytes = bytes;
   if (exceeds_json_nesting_depth(json_bytes, kMaxJsonNestingDepth))
   {
     result.warn(core::WarningCode::kJsonNestingDepthExceeded,
@@ -439,108 +432,134 @@ void drop_versionless_shadowed_by_versioned(std::vector<core::Component>& compon
                 });
 }
 
+/// The formats this producer reads.
+enum class ManifestKind
+{
+  kComposerLock,
+  kComposerJson,
+};
+
+/// The directories a composer.lock already covers. The lock is composer's own
+/// resolver output, so where one sits beside a composer.json the lock is
+/// authoritative and the manifest's declared ranges add nothing but a weaker
+/// duplicate. Built from `file_index` alone: no stat() calls.
+std::set<fs::path> directories_with_lock(const core::FileIndex& file_index)
+{
+  std::set<fs::path> directories;
+  for (const fs::path& relative_path : file_index.files)
+  {
+    if (core::file_name_of(relative_path) == kComposerLockName)
+    {
+      directories.insert(relative_path.parent_path());
+    }
+  }
+  return directories;
+}
+
+/// Selects composer.lock files, and composer.json files that neither sit
+/// beside a lock (`locked_directories`) nor belong to an installed package
+/// (vendor/acme/lib/composer.json is acme's declaration, not this project's).
+/// Both skips are silent and come before the file budget is charged: neither
+/// is a degraded read, just a file this producer has no reason to open. A
+/// truncated JSON file cannot parse, so oversized ones are skipped.
+std::optional<core::ManifestMatch<ManifestKind>> manifest_kind(
+    const fs::path& relative_path, const std::set<fs::path>& locked_directories)
+{
+  const std::string_view file_name = core::file_name_of(relative_path);
+  if (file_name == kComposerLockName)
+  {
+    return core::ManifestMatch<ManifestKind>{ManifestKind::kComposerLock,
+                                             core::OversizedFilePolicy::kSkip};
+  }
+  if (file_name != kComposerJsonName || locked_directories.count(relative_path.parent_path()) > 0 ||
+      core::is_inside_installed_dependencies(relative_path))
+  {
+    return std::nullopt;
+  }
+  return core::ManifestMatch<ManifestKind>{ManifestKind::kComposerJson,
+                                           core::OversizedFilePolicy::kSkip};
+}
+
+/// State shared by every composer file of one scan: one package budget for all.
+struct ParseState
+{
+  std::vector<core::Component> components;
+  std::size_t package_budget = 0;
+};
+
+core::ManifestWalkOptions walk_options_for(const ParseOptions& options)
+{
+  return core::make_walk_options(options, kProducerName, "composer");
+}
+
+/// An additional valid entry already proved exhaustion and warned once: stop
+/// opening files after that proof, but not merely because an earlier file
+/// ended exactly at the configured limit.
+bool package_budget_exhausted(const ParseState& state,
+                              const core::Result<std::vector<core::Component>>& result)
+{
+  return state.package_budget == 0 && !result.complete;
+}
+
+void parse_manifest(ManifestKind kind, const core::WalkedManifestFile& file,
+                    const ParseOptions& options, ParseState& state,
+                    core::Result<std::vector<core::Component>>& result)
+{
+  switch (kind)
+  {
+    case ManifestKind::kComposerLock:
+      parse_composer_lock(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                          state.components, result);
+      return;
+    case ManifestKind::kComposerJson:
+      parse_composer_json(file.bytes, file.label, options.max_total_packages, state.package_budget,
+                          state.components, result);
+      return;
+  }
+}
+
+core::Result<std::vector<core::Component>> finish(ParseState state,
+                                                  core::Result<std::vector<core::Component>> result)
+{
+  // After every file is read, so a lock in one directory can shadow a
+  // lockless manifest in another; before the merge, so the survivors still
+  // dedupe and order by purl as before.
+  drop_versionless_shadowed_by_versioned(state.components);
+  result.value = core::merge_all(std::move(state.components));
+  return result;
+}
+
 }  // namespace
 
 core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                  const fs::path& root, const ParseOptions& options)
 {
   core::Result<std::vector<core::Component>> result;
-  std::vector<core::Component> components;
-  std::size_t scanned_file_count = 0;
-  std::size_t package_budget = options.max_total_packages;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  const std::set<fs::path> locked_directories = directories_with_lock(file_index);
+  core::for_each_manifest_file(
+      file_index, root, walk_options_for(options), result.warnings,
+      [&](const fs::path& path) { return manifest_kind(path, locked_directories); },
+      [&] { return package_budget_exhausted(state, result); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
+}
 
-  // Phase 1: the directories a composer.lock already covers. The lock is
-  // composer's own resolver output, so where one sits beside a composer.json
-  // the lock is authoritative and the manifest's declared ranges add nothing
-  // but a weaker duplicate. Built from `file_index` alone: no stat() calls.
-  std::set<fs::path> directories_with_lock;
-  for (const fs::path& relative_path : file_index.files)
-  {
-    if (relative_path.filename().string() == kComposerLockName)
-    {
-      directories_with_lock.insert(relative_path.parent_path());
-    }
-  }
-
-  // Phase 2: parse. composer.lock where there is one, else the composer.json
-  // beside it, whose `require`/`require-dev` are declared ranges and so land
-  // version-less at Medium (see this producer's header).
-  for (const fs::path& relative_path : file_index.files)
-  {
-    const std::string filename = relative_path.filename().string();
-    const bool is_composer_lock = filename == kComposerLockName;
-    const bool is_composer_json = filename == kComposerJsonName;
-    if (!is_composer_lock && !is_composer_json)
-    {
-      continue;
-    }
-    if (is_composer_json)
-    {
-      // Both skips are silent and come before the file budget is charged:
-      // neither is a degraded read, just a file this producer has no reason
-      // to open.
-      if (directories_with_lock.count(relative_path.parent_path()) > 0)
-      {
-        continue;
-      }
-      // An installed package's own manifest is not this project's
-      // declaration: vendor/acme/lib/composer.json is acme's, and its
-      // requirements are already in this project's lock or manifest.
-      if (core::is_inside_installed_dependencies(relative_path))
-      {
-        continue;
-      }
-    }
-    if (scanned_file_count >= options.max_scanned_files)
-    {
-      result.warn(core::WarningCode::kFileLimitReached,
-                  "composer: file limit reached; remaining composer files skipped", "composer");
-      break;
-    }
-    if (package_budget == 0 && !result.complete)
-    {
-      // An additional valid entry already proved exhaustion and warned once;
-      // stop opening files after that proof, but not merely because an earlier
-      // file ended exactly at the configured limit.
-      break;
-    }
-    ++scanned_file_count;
-
-    const std::string label = relative_path.generic_string();
-    const core::BoundedFileRead file_read =
-        core::read_file_bounded(root / relative_path, options.max_file_bytes);
-    if (!file_read.readable)
-    {
-      result.warn(core::WarningCode::kUnreadableFile, "composer: unreadable file: " + label,
-                  "composer");
-      continue;
-    }
-    if (file_read.truncated)
-    {
-      // A truncated JSON file cannot parse; skipping beats guessing.
-      result.warn(core::WarningCode::kFileSizeLimitExceeded,
-                  "composer: file exceeds size limit, skipped: " + label, "composer");
-      continue;
-    }
-
-    if (is_composer_lock)
-    {
-      parse_composer_lock(file_read.bytes, label, options.max_total_packages, package_budget,
-                          components, result);
-    }
-    else
-    {
-      parse_composer_json(file_read.bytes, label, options.max_total_packages, package_budget,
-                          components, result);
-    }
-  }
-
-  // After every file is read, so a lock in one directory can shadow a
-  // lockless manifest in another; before the merge, so the survivors still
-  // dedupe and order by purl as before.
-  drop_versionless_shadowed_by_versioned(components);
-  result.value = core::merge_all(std::move(components));
-  return result;
+core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                       std::string_view bytes,
+                                                       const ParseOptions& options)
+{
+  core::Result<std::vector<core::Component>> result;
+  ParseState state;
+  state.package_budget = options.max_total_packages;
+  core::for_manifest_bytes(
+      file_name, bytes, options.max_file_bytes, kProducerName, result.warnings,
+      [](const fs::path& path) { return manifest_kind(path, {}); },
+      [&](ManifestKind kind, core::WalkedManifestFile&& file)
+      { parse_manifest(kind, file, options, state, result); });
+  return finish(std::move(state), std::move(result));
 }
 
 core::Result<std::vector<core::Component>> parse(const fs::path& root, const ParseOptions& options)

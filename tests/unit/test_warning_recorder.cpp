@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -73,5 +74,6 @@ int main()
                        1);  // suppression hides degrade, not the record
   }
 
+  std::puts("test_warning_recorder: OK");
   return 0;
 }

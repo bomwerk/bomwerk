@@ -430,20 +430,15 @@ std::span<const std::uint32_t> releases_for_digest(const Index& index,
                                         found->release_ref_count);
 }
 
-core::Result<Index> load_index(const fs::path& index_path, LoadLimits limits)
+namespace
+{
+
+/// Everything `load_index` does once the bytes are in hand; `truncated` says
+/// they are only a capped prefix of a larger index.
+core::Result<Index> index_from_bytes(std::string_view bytes, bool truncated, LoadLimits limits)
 {
   core::Result<Index> result;
-
-  const core::BoundedFileRead file_read =
-      core::read_file_bounded(index_path, limits.max_index_bytes);
-  if (!file_read.readable)
-  {
-    result.warn(core::WarningCode::kFingerprintIndexUnreadable,
-                "fingerprint: corpus index could not be opened, scanning without a corpus",
-                std::string(kEcosystem));
-    return result;
-  }
-  if (file_read.truncated)
+  if (truncated)
   {
     result.warn(core::WarningCode::kFingerprintIndexUnreadable,
                 "fingerprint: corpus index exceeds the " + mebibytes(limits.max_index_bytes) +
@@ -452,7 +447,7 @@ core::Result<Index> load_index(const fs::path& index_path, LoadLimits limits)
     return result;
   }
 
-  const std::string_view json_bytes = core::json_utils::without_utf8_bom(file_read.bytes);
+  const std::string_view json_bytes = core::json_utils::without_utf8_bom(bytes);
   if (core::json_utils::exceeds_json_nesting_depth(json_bytes, limits.max_json_nesting_depth))
   {
     result.warn(core::WarningCode::kFingerprintIndexUnreadable,
@@ -517,6 +512,29 @@ core::Result<Index> load_index(const fs::path& index_path, LoadLimits limits)
                 index.corpus_revision.empty() ? "unknown" : index.corpus_revision);
   result.value = std::move(index);
   return result;
+}
+
+}  // namespace
+
+core::Result<Index> load_index(const fs::path& index_path, LoadLimits limits)
+{
+  const core::BoundedFileRead file_read =
+      core::read_file_bounded(index_path, limits.max_index_bytes);
+  if (!file_read.readable)
+  {
+    core::Result<Index> result;
+    result.warn(core::WarningCode::kFingerprintIndexUnreadable,
+                "fingerprint: corpus index could not be opened, scanning without a corpus",
+                std::string(kEcosystem));
+    return result;
+  }
+  return index_from_bytes(file_read.bytes, file_read.truncated, limits);
+}
+
+core::Result<Index> load_index_bytes(std::string_view bytes, LoadLimits limits)
+{
+  return index_from_bytes(bytes.substr(0, limits.max_index_bytes),
+                          bytes.size() > limits.max_index_bytes, limits);
 }
 
 core::Result<std::vector<RootMatch>> match_vendored_files(const core::FileIndex& file_index,

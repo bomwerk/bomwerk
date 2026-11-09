@@ -1,0 +1,92 @@
+name: fuzz-nightly
+# Two hours of libFuzzer every night over every harness in tests/fuzz/ (T40,
+# docs/fuzzing.md). Four shards run in parallel; scripts/run_fuzz.py assigns
+# each target to a shard by a stable hash of its name, so each shard keeps
+# fuzzing the same targets and its cached corpus stays theirs. A clean night
+# is all four shards green with no crash, leak, timeout or out-of-memory input.
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  # Started by hand once this file is on the default branch (GitHub offers
+  # workflow_dispatch only there), and whenever a fix should be re-checked.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-nightly
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    runs-on: ubuntu-24.04
+    # 120 minutes of fuzzing, the merge, the build and the cache round trip.
+    timeout-minutes: 170
+    env:
+      VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg-binary-cache,readwrite"
+    steps:
+      - uses: actions/checkout@v4.1.0
+        with:
+          submodules: true
+      - name: Resolve vcpkg baseline commit (cache key input)
+        id: vcpkg_baseline
+        run: echo "sha=$(git -C vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Cache vcpkg binary artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.vcpkg-binary-cache
+          key: vcpkg-bincache-ubuntu-24.04-${{ steps.vcpkg_baseline.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-bincache-ubuntu-24.04-${{ steps.vcpkg_baseline.outputs.sha }}-
+            vcpkg-bincache-ubuntu-24.04-
+      - name: Bootstrap vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+      - name: Install LLVM Clang and its libFuzzer runtime
+        run: sudo apt-get update && sudo apt-get install -y clang-18 libclang-rt-18-dev
+      - name: Configure (libFuzzer)
+        run: >
+          cmake -B build-fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DBOMWERK_PRO=OFF
+          -DBOMWERK_FUZZ=ON
+          -DCMAKE_CXX_COMPILER=clang++-18
+      - name: Build the harnesses
+        run: cmake --build build-fuzz --target fuzzers --parallel
+      # A run-specific key never matches, so the newest corpus saved under
+      # this shard's prefix is restored; the save below adds a newer one.
+      - name: Restore this shard's corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: .fuzz-corpus
+          key: fuzz-corpus-shard${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-shard${{ matrix.shard }}-
+      - name: Fuzz this shard for two hours
+        run: >
+          python3 scripts/run_fuzz.py --build-dir build-fuzz
+          --corpus-root .fuzz-corpus --artifacts-dir fuzz-artifacts
+          --shard ${{ matrix.shard }}/4 --budget-seconds 7200 --jobs 4
+      # Minimized even after a finding, so the saved corpus stays small and
+      # the next night starts from everything this one learned.
+      - name: Minimize the corpus
+        if: always()
+        run: >
+          python3 scripts/run_fuzz.py --build-dir build-fuzz
+          --corpus-root .fuzz-corpus --artifacts-dir fuzz-merge-logs
+          --shard ${{ matrix.shard }}/4 --merge --jobs 4
+      - name: Save this shard's corpus
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: .fuzz-corpus
+          key: fuzz-corpus-shard${{ matrix.shard }}-${{ github.run_id }}
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-nightly-findings-shard${{ matrix.shard }}
+          path: fuzz-artifacts/
+          retention-days: 30

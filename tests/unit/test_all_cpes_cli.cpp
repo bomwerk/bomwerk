@@ -5,6 +5,7 @@
 // direct command-source CLI tests) since CLI command implementations are
 // intentionally not a production library.
 #include <CLI/CLI.hpp>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -142,5 +143,6 @@ int main()
     BOMWERK_TEST_CHECK(exit_code == core::kExitIncomplete);
   }
 
+  std::puts("test_all_cpes_cli: OK");
   return 0;
 }

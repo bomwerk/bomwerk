@@ -1,0 +1,1 @@
+pkg:conan/openssl@3.2.0?channel=stable&rrev=abc&user=acme

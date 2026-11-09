@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "core/file_index.hpp"
@@ -86,5 +87,16 @@ struct ParseOptions
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                                const std::filesystem::path& root,
                                                                const ParseOptions& options);
+
+/// Parse one file held in memory exactly as `parse` parses the file
+/// `file_name` (root-relative, e.g. `app/pnpm-lock.yaml`): its last segment
+/// must be `pnpm-lock.yaml`, or the result is empty with no warning.
+/// `file_name` is the label in warnings and evidence, and
+/// `options.max_file_bytes` bounds `bytes` the way it bounds a file read.
+/// Never touches the filesystem: this is the entry point of the `fuzz_pnpm`
+/// harness.
+[[nodiscard]] core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                                     std::string_view bytes,
+                                                                     const ParseOptions& options);
 
 }  // namespace bomwerk::parsers::lockfiles::pnpm

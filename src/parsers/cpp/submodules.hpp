@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <string_view>
 #include <vector>
 
 #include "core/model.hpp"
@@ -21,5 +22,14 @@ namespace bomwerk::parsers::cpp::submodules
 /// `root`; `scan` uses it to skip that subtree during its file walk. A repo
 /// with no `.gitmodules` is not an error: the result is simply empty.
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const std::filesystem::path& root);
+
+/// Parse a `.gitmodules` held in memory exactly as `parse` parses `root`'s
+/// own, with nothing outside that text: no superproject origin (relative URLs
+/// stay relative and warn) and no checkout (every submodule is reported
+/// uninitialized). Bounded as `core::parse_git_config` bounds any git config,
+/// and never touches the filesystem: this is the entry point of the
+/// `fuzz_submodules` harness.
+[[nodiscard]] core::Result<std::vector<core::Component>> parse_bytes(
+    std::string_view gitmodules_bytes);
 
 }  // namespace bomwerk::parsers::cpp::submodules

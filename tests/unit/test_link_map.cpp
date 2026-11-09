@@ -11,6 +11,7 @@
 // anywhere else in this codebase either.
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <optional>
 #include <set>
@@ -491,5 +492,6 @@ int main()
     BOMWERK_TEST_CHECK(!artifacts.warnings.empty());
   }
 
+  std::puts("test_link_map: OK");
   return 0;
 }

@@ -2,6 +2,7 @@
 // output::write_cyclonedx, so a consumer can load a product's
 // already-generated SBOM back into core::Component form.
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -460,5 +461,6 @@ int main()
     BOMWERK_TEST_CHECK(warnings_mention(read_missing.warnings, "cannot read SBOM file"));
   }
 
+  std::puts("test_sbom_read: OK");
   return 0;
 }

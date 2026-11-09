@@ -9,6 +9,7 @@
 // was reached through a symlink.
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <set>
 #include <string>
@@ -581,5 +582,6 @@ int main()
                        UsageSignal::CompiledSource);
   }
 
+  std::puts("test_compile_map: OK");
   return 0;
 }

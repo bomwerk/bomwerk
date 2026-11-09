@@ -61,12 +61,7 @@ constexpr std::chrono::milliseconds kMaxRateLimitBackoff(30000);
 /// when a pass looks most stuck.
 constexpr std::chrono::seconds kLicenseFallbackHeartbeatInterval(30);
 
-enum class RegistryKind
-{
-  CratesIo,
-  PyPi,
-  RubyGems
-};
+using RegistryKind = LicenseRegistry;
 
 struct Lookup
 {
@@ -80,11 +75,7 @@ struct Lookup
   bool resolved = false;
 };
 
-struct ExtractedLicense
-{
-  std::string text;
-  bool usable_shape = false;
-};
+using ExtractedLicense = RegistryLicense;
 
 template <typename RunOne>
 void run_bounded_concurrent(std::size_t task_count, std::size_t concurrency_limit, RunOne&& run_one)
@@ -216,12 +207,14 @@ std::optional<std::string> bounded_string(const json& value)
   {
     return std::nullopt;
   }
-  std::string text = core::trimmed(value.get<std::string>());
+  // Trimmed and size-checked as a view: only a value that fits is copied, so
+  // an oversized field (up to the whole response) is never copied at all.
+  const std::string_view text = core::trimmed_view(value.get_ref<const std::string&>());
   if (text.size() > kMaxLicenseTextBytes)
   {
     return std::nullopt;
   }
-  return text;
+  return std::string(text);
 }
 
 std::optional<std::string> join_license_values(const json& values)
@@ -467,6 +460,16 @@ ExtractedLicense extract_cached_license(const std::string& payload)
 }
 
 }  // namespace
+
+RegistryLicense parse_registry_license_payload(LicenseRegistry registry, const std::string& payload)
+{
+  return extract_license(registry, payload);
+}
+
+RegistryLicense parse_cached_license_payload(const std::string& payload)
+{
+  return extract_cached_license(payload);
+}
 
 core::Result<LicenseEnrichmentSummary> enrich_component_licenses(
     std::vector<core::Component>& components, const LicenseEnrichmentOptions& options,

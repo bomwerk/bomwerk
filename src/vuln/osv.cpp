@@ -118,12 +118,7 @@ json parse_bounded_json(const std::string& text)
 /// object, `{"vulns":[{"id":…,"modified":…},…]}`, `{}` for "no known
 /// vulnerabilities", or carrying a `next_page_token` when OSV has more than
 /// one page) contains.
-struct ExtractedPayload
-{
-  std::vector<AdvisoryRevision> advisory_revisions;
-  bool truncated = false;  ///< a next_page_token was present: ids may be incomplete
-  bool malformed = false;  ///< payload was not the expected JSON shape
-};
+using ExtractedPayload = OsvDetectionPayload;
 
 ExtractedPayload extract_advisory_revisions(const std::string& payload)
 {
@@ -231,19 +226,14 @@ core::CvssScore best_severity(const json& severity_array)
 /// CVE-keyed bulk feed: verified live: EVERY advisory OSV
 /// returns for `pkg:npm/lodash@4.17.15` is GHSA-keyed with its CVE only in
 /// `aliases[]` (2026-08-23).
-struct AdvisoryRecord
-{
-  core::CvssScore severity;
-  std::vector<std::string> cve_aliases;  ///< sorted, deduplicated (rule 3)
-};
+using AdvisoryRecord = OsvAdvisoryRecord;
 
 /// Map every advisory id in a FULL `/v1/query` payload (potentially several :
 /// one purl can be named by several advisories) to its severity and CVE
 /// aliases.
-std::map<std::string, AdvisoryRecord> extract_full_records(const std::string& payload)
+std::map<std::string, AdvisoryRecord> extract_full_records(const json& document)
 {
   std::map<std::string, AdvisoryRecord> record_by_id;
-  const json document = parse_bounded_json(payload);
   if (document.is_discarded() || !document.is_object())
   {
     return record_by_id;
@@ -290,6 +280,12 @@ std::map<std::string, AdvisoryRecord> extract_full_records(const std::string& pa
     record_by_id.insert_or_assign(id_field->get<std::string>(), std::move(record));
   }
   return record_by_id;
+}
+
+/// `extract_full_records` for cached payload text.
+std::map<std::string, AdvisoryRecord> extract_full_records(const std::string& payload)
+{
+  return extract_full_records(parse_bounded_json(payload));
 }
 
 /// Resolve id->(severity, aliases) for one already-known-vulnerable purl by
@@ -372,9 +368,12 @@ std::map<std::string, AdvisoryRecord> finish_hydration_fetch(const std::string& 
     const json parsed = parse_bounded_json(response.value.body);
     if (!parsed.is_discarded() && parsed.is_object())
     {
-      const std::string payload = parsed.dump();  // canonical (sorted keys), rule 3
-      cache.store(cache_key, now, payload);
-      return extract_full_records(payload);
+      // dump() is canonical (sorted keys, rule 3) and is what the cache keeps;
+      // the records come from the document already parsed, not a reparse of
+      // that text. The extractor reads only strings and unsigned integers,
+      // which a dump/parse round trip reproduces exactly.
+      cache.store(cache_key, now, parsed.dump());
+      return extract_full_records(parsed);
     }
     result.warn(core::WarningCode::kVulnResponseMalformed,
                 "OSV severity payload for " + query_purl + " is malformed, severity omitted");
@@ -391,6 +390,16 @@ std::map<std::string, AdvisoryRecord> finish_hydration_fetch(const std::string& 
 }
 
 }  // namespace
+
+OsvDetectionPayload parse_osv_detection_payload(const std::string& payload)
+{
+  return extract_advisory_revisions(payload);
+}
+
+std::map<std::string, OsvAdvisoryRecord> parse_osv_full_payload(const std::string& payload)
+{
+  return extract_full_records(payload);
+}
 
 bool is_queryable_purl(std::string_view purl)
 {
@@ -830,8 +839,10 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
       {
         continue;  // page 1 itself was unusable; flagged malformed downstream
       }
+      // Moved out, extended, moved back: copying a large first page per purl
+      // was wasted work.
       json vulns_array = (merged_document.contains("vulns") && merged_document["vulns"].is_array())
-                             ? merged_document["vulns"]
+                             ? std::move(merged_document["vulns"])
                              : json::array();
       for (json& advisory : extra_advisories)
       {

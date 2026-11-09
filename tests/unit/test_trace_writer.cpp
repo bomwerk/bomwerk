@@ -7,6 +7,7 @@
 // larger than that: without the lock it interleaves and the JSON stops
 // parsing, which is precisely the corruption the compile scan must never inherit.
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -146,5 +147,6 @@ int main()
     BOMWERK_TEST_CHECK(!append_trace_line("", "{}\n"));
   }
 
+  std::puts("test_trace_writer: OK");
   return 0;
 }

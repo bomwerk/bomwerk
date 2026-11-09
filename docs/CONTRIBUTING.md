@@ -176,6 +176,35 @@ producer's `FileIndex`-taking `parse` overload directly (see
 `tests/unit/test_manifest_walk.cpp` and `tests/unit/test_pub.cpp`), or use a
 real permission-denied file when the producer has no such overload.
 
+Checks use `BOMWERK_TEST_CHECK` (`tests/support/check.hpp`), never `assert`:
+`-DNDEBUG` compiles an `assert` away, and the check with it. Every test ends by
+printing `test_<name>: OK`.
+
+Every manifest producer reads through `core::for_each_manifest_file` and has a
+`parse_bytes` entry point that runs the same per-file code from memory. Two
+tables hold all of them to one pattern, so a new producer adds one adapter to
+each rather than copying test blocks:
+
+- `tests/unit/test_parse_bytes.cpp`: `parse_bytes` answers exactly what `parse`
+  answers for the same file, on real, nested, oversized, budget-capped and
+  degenerate input.
+- `tests/unit/test_producer_contract.cpp`: hostile input degrades to warnings
+  (hard rule 1). Every file in the producer's `fixtures/<name>/hostile/`
+  directory parses with `complete` kept and only valid purls; an empty file
+  yields nothing; a UTF-8 BOM or CRLF line endings change nothing; an embedded
+  NUL degrades; an oversized, unreadable or over-the-file-cap input warns once
+  with its own code.
+
+The producer's own `test_<name>.cpp` then covers what is specific to its
+format.
+
+Every parser of untrusted input also has a libFuzzer harness in `tests/fuzz/`,
+listed in `scripts/fuzz_targets.json`; in a normal build each one is the ctest
+`<target>_seeds`. A crash the fuzzer finds is fixed on the same branch, and its
+input is kept as `fixtures/<parser>/hostile/<what-it-probes>.<file name>` with
+a row in that directory's README. [Fuzzing](fuzzing.md) covers building,
+running and triage.
+
 ## Documentation
 
 Public headers use clean Markdown inside `///` comments; avoid heavy Doxygen

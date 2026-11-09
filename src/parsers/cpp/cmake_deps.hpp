@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "core/file_index.hpp"
@@ -28,7 +29,8 @@ struct ParseLimits
   std::size_t max_file_bytes = kMaxCmakeFileBytes;  ///< per-file read cap (8 MiB)
   std::size_t max_scanned_files =
       core::kDefaultMaxScannedFilesPerEcosystem;  ///< CMake files parsed per scan
-  std::size_t max_total_declarations = 10000;     ///< declarations across all files
+  std::size_t max_total_declarations =
+      core::kDefaultMaxPackagesPerEcosystem;  ///< declarations across all files
 
   /// Subtree roots to skip entirely, given as `root`-relative, already
   /// lexically-normal paths (e.g. `parsers::cpp::submodules::parse`'s
@@ -99,5 +101,17 @@ struct ParseLimits
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                                const std::filesystem::path& root,
                                                                const ParseLimits& limits);
+
+/// Parse one CMake file held in memory exactly as `parse` parses the file
+/// `file_name` (root-relative): its last segment must be `CMakeLists.txt` or
+/// end in `.cmake`, or the result is empty with no warning. Only that one
+/// file is in scope, so `${VAR}` references resolve only against variables it
+/// sets itself. `file_name` is the label in warnings and evidence, and
+/// `limits.max_file_bytes` bounds `bytes` the way it bounds a file read.
+/// Never touches the filesystem: this is the entry point of the
+/// `fuzz_cmake_deps` harness.
+[[nodiscard]] core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                                     std::string_view bytes,
+                                                                     const ParseLimits& limits);
 
 }  // namespace bomwerk::parsers::cpp::cmake_deps

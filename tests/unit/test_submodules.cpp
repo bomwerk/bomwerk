@@ -1,5 +1,4 @@
 // ctest unit test for the git submodules producer
-#include <cassert>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -67,16 +66,16 @@ int main()
     tree.write("libs/c/.git/HEAD", kSha + "\n");
 
     const auto result = submodules::parse(tree.root());
-    assert(result.complete);
-    assert(result.warnings.empty());
-    assert(result.value.size() == 3);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 3);
     // Output is purl-sorted (rule 3), so 'a' comes first, resolved to High.
-    assert(result.value[0].purl == "pkg:github/acme/a@" + kSha);
-    assert(result.value[0].version == kSha);
-    assert(result.value[0].root == fs::path("libs/a"));
-    assert(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/a@" + kSha);
+    BOMWERK_TEST_CHECK(result.value[0].version == kSha);
+    BOMWERK_TEST_CHECK(result.value[0].root == fs::path("libs/a"));
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
     // The origin's owner segment doubles as NTIA/CRA supplier evidence.
-    assert(result.value[0].supplier == "acme");
+    BOMWERK_TEST_CHECK(result.value[0].supplier == "acme");
   }
 
   // Given a submodule declared but never checked out, when parsed, then it is
@@ -87,12 +86,12 @@ int main()
     tree.write(".gitmodules",
                "[submodule \"libs/u\"]\n\tpath = libs/u\n\turl = https://github.com/acme/u.git\n");
     const auto result = submodules::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].version.empty());
-    assert(result.value[0].purl == "pkg:github/acme/u");  // no @commit
-    assert(highest_confidence(result.value[0]) == Confidence::Low);
-    assert(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/u");  // no @commit
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
   }
 
   // Given a relative submodule URL and a superproject origin, when parsed, then
@@ -107,11 +106,11 @@ int main()
     tree.write("c/micro-ecc/.git/HEAD", kSha + "\n");
 
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/kmackay/micro-ecc@" + kSha);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/kmackay/micro-ecc@" + kSha);
     // Resolved through the superproject origin, the owner is still real
     // supplier evidence even though the .gitmodules URL itself was relative.
-    assert(result.value[0].supplier == "kmackay");
+    BOMWERK_TEST_CHECK(result.value[0].supplier == "kmackay");
   }
 
   // Given a HEAD that points at a loose ref, when parsed, then the ref is
@@ -123,9 +122,9 @@ int main()
     tree.write("libs/r/.git/HEAD", "ref: refs/heads/main\n");
     tree.write("libs/r/.git/refs/heads/main", kSha + "\n");
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].version == kSha);
-    assert(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == kSha);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
   }
 
   // Given a HEAD ref that lives only in packed-refs, when parsed, then the
@@ -138,8 +137,8 @@ int main()
     tree.write("libs/p/.git/packed-refs",
                "# pack-refs with: peeled fully-peeled sorted\n" + kSha + " refs/heads/main\n");
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].version == kSha);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == kSha);
   }
 
   // Given a submodule whose path escapes the repo, when parsed, then it is
@@ -150,8 +149,8 @@ int main()
         ".gitmodules",
         "[submodule \"evil\"]\n\tpath = ../../evil\n\turl = https://github.com/acme/evil.git\n");
     const auto result = submodules::parse(tree.root());
-    assert(result.value.empty());
-    assert(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.empty());
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
   }
 
   // Given a submodule's `.git` file whose `gitdir:` pointer escapes the whole
@@ -173,9 +172,9 @@ int main()
     tree.write("libs/x/.git", "gitdir: " + escape_target + "\n");
 
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].version.empty());         // never resolved from outside root
-    assert(result.value[0].version != kOutsideSha);  // the outside commit never leaks
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());         // never resolved from outside root
+    BOMWERK_TEST_CHECK(result.value[0].version != kOutsideSha);  // the outside commit never leaks
   }
 
   // Given a submodule's checked-out HEAD containing a `ref:` line that itself
@@ -187,8 +186,8 @@ int main()
                "[submodule \"libs/y\"]\n\tpath = libs/y\n\turl = https://github.com/acme/y.git\n");
     tree.write("libs/y/.git/HEAD", "ref: ../../../../../etc/passwd\n");
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
   }
 
   // Given a submodule that declares a `path` but no `url` key, when parsed,
@@ -198,12 +197,12 @@ int main()
     TempTree tree;
     tree.write(".gitmodules", "[submodule \"libs/nourl\"]\n\tpath = libs/nourl\n");
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:generic/nourl");
-    assert(result.value[0].name == "nourl");
-    assert(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/nourl");
+    BOMWERK_TEST_CHECK(result.value[0].name == "nourl");
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
     // No url, no remote, no owner to attribute: supplier stays honest.
-    assert(result.value[0].supplier.empty());
+    BOMWERK_TEST_CHECK(result.value[0].supplier.empty());
   }
 
   // Given checked-out HEADs written in upper-case hex: git writes lower-case,
@@ -237,9 +236,9 @@ int main()
   {
     TempTree tree;
     const auto result = submodules::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.empty());
-    assert(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
   }
 
   // Given a real vendored .gitmodules (pico-sdk), when parsed with no checkouts,
@@ -250,7 +249,7 @@ int main()
     tree.write(".gitmodules",
                read_file(fs::path(BOMWERK_FIXTURES_DIR) / "gitmodules" / "pico-sdk.gitmodules"));
     const auto result = submodules::parse(tree.root());
-    assert(result.value.size() == 5);
+    BOMWERK_TEST_CHECK(result.value.size() == 5);
     BOMWERK_TEST_CHECK(find_by_purl_prefix(result.value, "pkg:github/lwip-tcpip/lwip") != nullptr);
   }
 
@@ -269,7 +268,7 @@ int main()
       TempTree tree;
       tree.write(".gitmodules", read_file(entry.path()));
       const auto result = submodules::parse(tree.root());
-      assert(result.complete);  // malformed => warnings, never exit-2
+      BOMWERK_TEST_CHECK(result.complete);  // malformed => warnings, never exit-2
     }
   }
 

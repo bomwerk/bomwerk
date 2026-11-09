@@ -1,5 +1,4 @@
 // ctest unit test for the CMake FetchContent/CPM producer.
-#include <cassert>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +10,7 @@
 #include "core/file_index.hpp"
 #include "core/model.hpp"
 #include "core/warning.hpp"
+#include "core/warning_code.hpp"
 #include "parsers/cpp/cmake_deps.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
@@ -94,13 +94,13 @@ int main()
                    ")\n"
                    "FetchContent_MakeAvailable(googletest)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/google/googletest@" + kSha);
-    assert(result.value[0].version == kSha);
-    assert(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/google/googletest@" + kSha);
+    BOMWERK_TEST_CHECK(result.value[0].version == kSha);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
     // GIT_REPOSITORY's owner segment doubles as NTIA/CRA supplier evidence.
-    assert(result.value[0].supplier == "google");
+    BOMWERK_TEST_CHECK(result.value[0].supplier == "google");
   }
 
   // Given a FetchContent_Declare using CMake's first-seen capitalization
@@ -120,11 +120,11 @@ int main()
                    ")\n"
                    "FetchContent_MakeAvailable(googletest)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(highest_confidence(result.value[0]) == Confidence::High);
-    assert(result.value[0].evidence[0].detail.find("declared, not confirmed built") ==
-           std::string::npos);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.value[0].evidence[0].detail.find("declared, not confirmed built") ==
+                       std::string::npos);
   }
 
   // Given a git declaration pinned to a mutable branch, when parsed, then it is
@@ -135,9 +135,9 @@ int main()
                "FetchContent_Declare(dep GIT_REPOSITORY https://github.com/acme/dep.git "
                "GIT_TAG main)\nFetchContent_MakeAvailable(dep)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/acme/dep@main");
-    assert(highest_confidence(result.value[0]) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/dep@main");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
   }
 
   // Given a declaration that is never made available, when parsed, then its
@@ -148,10 +148,10 @@ int main()
                "FetchContent_Declare(orphan GIT_REPOSITORY https://github.com/acme/orphan.git "
                "GIT_TAG main)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(highest_confidence(result.value[0]) == Confidence::Low);  // Medium -> Low
-    assert(result.value[0].evidence[0].detail.find("declared, not confirmed built") !=
-           std::string::npos);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);  // Medium -> Low
+    BOMWERK_TEST_CHECK(result.value[0].evidence[0].detail.find("declared, not confirmed built") !=
+                       std::string::npos);
   }
 
   // Given a CPM keyword form with GITHUB_REPOSITORY + VERSION, when parsed, then
@@ -161,9 +161,9 @@ int main()
     tree.write("CMakeLists.txt",
                "CPMAddPackage(NAME fmt GITHUB_REPOSITORY fmtlib/fmt VERSION 10.2.1)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/fmtlib/fmt@10.2.1");
-    assert(highest_confidence(result.value[0]) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/fmtlib/fmt@10.2.1");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
   }
 
   // Given the CPM single-arg shorthand with a '#ref', when parsed, then the host
@@ -172,8 +172,8 @@ int main()
     TempTree tree;
     tree.write("CMakeLists.txt", "CPMAddPackage(\"gh:fmtlib/fmt#10.2.1\")\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/fmtlib/fmt@10.2.1");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/fmtlib/fmt@10.2.1");
   }
 
   // Given a GitLab subgroup shorthand, when parsed, then subgroups are preserved
@@ -182,8 +182,8 @@ int main()
     TempTree tree;
     tree.write("CMakeLists.txt", "CPMAddPackage(\"gl:group/sub/proj@1.0.0\")\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:gitlab/group/sub/proj@1.0.0");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:gitlab/group/sub/proj@1.0.0");
   }
 
   // Given a raw GIT_REPOSITORY on an unmapped host, when parsed, then it falls
@@ -194,8 +194,8 @@ int main()
                "FetchContent_Declare(x GIT_REPOSITORY https://example.com/a/y.git GIT_TAG v1.0)\n"
                "FetchContent_MakeAvailable(x)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl.rfind("pkg:generic/y@v1.0?vcs_url=", 0) == 0);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl.rfind("pkg:generic/y@v1.0?vcs_url=", 0) == 0);
   }
 
   // Given a GIT_REPOSITORY that is entirely an unresolved variable (HDF5's
@@ -233,7 +233,7 @@ int main()
                    ")\n"
                    "FetchContent_MakeAvailable(zlib)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const Component& component = result.value[0];
     BOMWERK_TEST_CHECK(component.version == "1.3.1");
     BOMWERK_TEST_CHECK(component.sha256 == kSha256);
@@ -325,9 +325,9 @@ int main()
                "FetchContent_Declare(zstd URL https://example.com/zstd-1.5.6.tzst)\n"
                "FetchContent_MakeAvailable(zstd)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 2);
-    assert(purl_contains(result.value[0], "pkg:generic/seven@2.4"));
-    assert(purl_contains(result.value[1], "pkg:generic/zstd@1.5.6"));
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(purl_contains(result.value[0], "pkg:generic/seven@2.4"));
+    BOMWERK_TEST_CHECK(purl_contains(result.value[1], "pkg:generic/zstd@1.5.6"));
   }
 
   // Given a URL_HASH value that is not valid hex (e.g. crafted to look like it
@@ -343,8 +343,8 @@ int main()
                "  URL_HASH SHA256=deadbeef&download_url=https://evil.example/payload.tgz)\n"
                "FetchContent_MakeAvailable(zlib)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const Component& component = result.value[0];
     BOMWERK_TEST_CHECK(component.sha256.empty());
     BOMWERK_TEST_CHECK(!purl_contains(component, "evil.example"));
@@ -364,11 +364,11 @@ int main()
                "GIT_TAG main)\n"
                "FetchContent_MakeAvailable(evil \"unterminated\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     // Medium (resolvable git tag) lowered one tier by declare_only, since the
     // malformed MakeAvailable call must not count as confirming it was built.
-    assert(highest_confidence(result.value[0]) == Confidence::Low);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Low);
     bool malformed_make_available_warned = false;
     for (const bomwerk::core::Warning& warning : result.warnings)
     {
@@ -522,8 +522,8 @@ int main()
                "FetchContent_Declare(dep GIT_REPOSITORY https://github.com/acme/dep.git "
                "GIT_TAG v2.0)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/acme/dep@v2.0");
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/dep@v2.0");
     BOMWERK_TEST_CHECK(find_by_purl_prefix(result.value, "pkg:github/acme/dep") != nullptr);
   }
 
@@ -533,9 +533,9 @@ int main()
     TempTree tree;
     tree.write("README.md", "no cmake here\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.empty());
-    assert(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
   }
 
   // Given an ExternalProject SVN dependency pinned to a numeric revision, when
@@ -548,11 +548,12 @@ int main()
                "  SVN_REPOSITORY https://svn.example.com/legacy/trunk\n"
                "  SVN_REVISION -r1234)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].version == "1234");
-    assert(result.value[0].purl.rfind("pkg:generic/legacy_lib@1234?vcs_url=svn%2B", 0) == 0);
-    assert(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == "1234");
+    BOMWERK_TEST_CHECK(
+        result.value[0].purl.rfind("pkg:generic/legacy_lib@1234?vcs_url=svn%2B", 0) == 0);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
   }
 
   // Given a CPM shorthand with a prefix CPM does not define (e.g. a Perforce
@@ -563,8 +564,8 @@ int main()
     TempTree tree;
     tree.write("CMakeLists.txt", "CPMAddPackage(\"p4:depot/lib@2.0\")\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     bool prefix_was_reported = false;
     for (const bomwerk::core::Warning& warning : result.warnings)
     {
@@ -588,11 +589,11 @@ int main()
     cmake_deps::ParseLimits limits;
     limits.max_scanned_files = 1;
     const auto result = cmake_deps::parse(tree.root(), limits);
-    assert(result.complete);
-    assert(!result.warnings.empty());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(!result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     // "CMakeLists.txt" sorts before "cmake/…", so aaa is the deterministic pick.
-    assert(result.value[0].purl == "pkg:github/acme/aaa@1.0");
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/aaa@1.0");
   }
 
   // Given a malformed declaration (an unterminated quote) that leaks a stray
@@ -604,8 +605,8 @@ int main()
     TempTree tree;
     tree.write("CMakeLists.txt", "CPMAddPackage(NAME broken GITHUB_REPOSITORY \"acme/broken)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.complete);
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const Component& component = result.value[0];
     BOMWERK_TEST_CHECK(component.purl.find(')') == std::string::npos);  // no raw structural byte
     BOMWERK_TEST_CHECK(purl_contains(component, "pkg:github/acme/broken%29"));
@@ -621,7 +622,7 @@ int main()
                "FetchContent_Declare(gx GIT_REPOSITORY https://github.com/acme/gx.git "
                "GIT_TAG $<CONFIG:Debug>)\nFetchContent_MakeAvailable(gx)\n");
     const auto result = cmake_deps::parse(tree.root());
-    assert(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
     const Component& component = result.value[0];
     BOMWERK_TEST_CHECK(component.purl.find('<') == std::string::npos);
     BOMWERK_TEST_CHECK(component.purl.find('>') == std::string::npos);
@@ -643,9 +644,9 @@ int main()
     cmake_deps::ParseLimits limits;
     limits.excluded_subtrees.insert(fs::path("vendored"));
     const auto result = cmake_deps::parse(tree.root(), limits);
-    assert(result.complete);
-    assert(result.value.size() == 1);
-    assert(result.value[0].purl == "pkg:github/acme/real@1.0");
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/acme/real@1.0");
   }
 
   // Given every hostile fixture as a lone CMakeLists.txt, when parsed, then the
@@ -663,7 +664,7 @@ int main()
         TempTree tree;
         tree.write("CMakeLists.txt", read_file(entry.path()));
         const auto result = cmake_deps::parse(tree.root());
-        assert(result.complete);
+        BOMWERK_TEST_CHECK(result.complete);
       }
     }
   }
@@ -675,7 +676,7 @@ int main()
     if (fs::exists(cmake_fixtures))
     {
       const auto result = cmake_deps::parse(cmake_fixtures);
-      assert(result.complete);
+      BOMWERK_TEST_CHECK(result.complete);
     }
   }
 
@@ -694,8 +695,8 @@ int main()
                    "FetchContent_MakeAvailable(googletest)\n");
     const auto file_index = build_file_index(tree.root(), {}, {});
     const auto result = cmake_deps::parse(file_index.value, tree.root(), cmake_deps::ParseLimits{});
-    assert(result.value.size() == 1);
-    assert(purl_contains(result.value[0], "pkg:github/google/googletest@" + kSha));
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(purl_contains(result.value[0], "pkg:github/google/googletest@" + kSha));
   }
 
   // Given ParseLimits' default max_file_bytes, when checked, then it is sized
@@ -709,7 +710,7 @@ int main()
 
   // Given a CMakeLists.txt larger than max_file_bytes, when parsed, then the
   // read is truncated mid-command and only ONE warning is reported for it :
-  // the byte-cap warning: not also a redundant "unterminated command"
+  // the size-limit warning: not also a redundant "unterminated command"
   // warning from the scanner hitting the same truncated EOF.
   {
     TempTree tree;
@@ -727,12 +728,58 @@ int main()
     cmake_deps::ParseLimits limits;
     limits.max_file_bytes = content.size() - 10;
     const auto result = cmake_deps::parse(tree.root(), limits);
-    assert(result.complete);
+    BOMWERK_TEST_CHECK(result.complete);
     BOMWERK_TEST_CHECK(result.warnings.size() == 1);
-    BOMWERK_TEST_CHECK(result.warnings[0].message.find("byte cap") != std::string::npos);
+    BOMWERK_TEST_CHECK(result.warnings[0].code ==
+                       bomwerk::core::WarningCode::kFileSizeLimitExceeded);
+    BOMWERK_TEST_CHECK(result.warnings[0].message ==
+                       "cmake: file exceeds size limit, parsing first part only: CMakeLists.txt");
     for (const bomwerk::core::Warning& warning : result.warnings)
     {
       BOMWERK_TEST_CHECK(warning.message.find("unterminated command") == std::string::npos);
+    }
+  }
+
+  // Given a CMakeLists.txt the cap cuts inside a GIT_TAG value, when parsed,
+  // then only complete lines count: the cut-off tag never becomes a version.
+  {
+    TempTree tree;
+    const std::string cmakelists =
+        "include(FetchContent)\nFetchContent_Declare(fmt\n"
+        "  GIT_REPOSITORY https://github.com/fmtlib/fmt.git\n  GIT_TAG 10.2.1\n)\n";
+    tree.write("CMakeLists.txt", cmakelists);
+    cmake_deps::ParseLimits limits;
+    limits.max_file_bytes = cmakelists.find("10.2.1") + 4;
+    const auto result = cmake_deps::parse(tree.root(), limits);
+    for (const Component& component : result.value)
+    {
+      BOMWERK_TEST_CHECK(!purl_contains(component, "10.2"));
+    }
+  }
+
+  // Given a URL_HASH whose algorithm holds a NUL byte, or a '&', in front of a
+  // valid hex digest (found by fuzzing, T40), when parsed, then the component
+  // is still reported, but without a checksum: the algorithm is written into
+  // the purl verbatim, so accepting it would make the purl unparsable.
+  {
+    for (const std::string& algorithm : {std::string("S\0HA256", 7), std::string("SHA256&x")})
+    {
+      TempTree tree;
+      tree.write("CMakeLists.txt",
+                 "include(FetchContent)\nFetchContent_Declare(\n  zlib\n"
+                 "  URL https://zlib.net/zlib-1.3.1.tar.gz\n  URL_HASH " +
+                     algorithm + "=3a1b5c7d9e2f4061\n)\n");
+      const auto result = cmake_deps::parse(tree.root());
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(!purl_contains(result.value[0], "checksum"));
+      BOMWERK_TEST_CHECK(result.value[0].sha256.empty());
+      bool warned_malformed = false;
+      for (const auto& warning : result.warnings)
+      {
+        BOMWERK_TEST_CHECK(warning.code != bomwerk::core::WarningCode::kPurlValidationFailed);
+        warned_malformed |= warning.code == bomwerk::core::WarningCode::kMalformedEntrySkipped;
+      }
+      BOMWERK_TEST_CHECK(warned_malformed);
     }
   }
 

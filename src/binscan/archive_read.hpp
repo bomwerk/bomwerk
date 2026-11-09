@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "binscan/bounds.hpp"
@@ -51,5 +52,12 @@ struct ArchiveContents
 /// and whatever was read so far: a partly readable archive still names the
 /// members it got through, and partial output beats none.
 [[nodiscard]] core::Result<ArchiveContents> read_archive(const std::filesystem::path& path);
+
+/// `read_archive` for an archive already in memory: the same reader and the
+/// same answer a file holding `bytes` would get, with `label` naming it in
+/// warnings where `read_archive` names the path. Never touches the
+/// filesystem: this is the entry point of the `fuzz_archive` harness.
+[[nodiscard]] core::Result<ArchiveContents> read_archive_bytes(std::string_view label,
+                                                               std::string_view bytes);
 
 }  // namespace bomwerk::binscan

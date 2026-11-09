@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <optional>
 #include <string>
 
@@ -220,5 +221,6 @@ int main()
     BOMWERK_TEST_CHECK(components[6].cpe_provenance == bomwerk::core::CpeProvenance::Unspecified);
   }
 
+  std::puts("test_cpe: OK");
   return 0;
 }

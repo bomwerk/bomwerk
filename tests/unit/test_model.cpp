@@ -1,9 +1,12 @@
 // ctest unit test for core model (framework-free on purpose; Catch2 optional later)
-#include <cassert>
+#include <chrono>
 #include <cstdio>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "core/model.hpp"
+#include "support/check.hpp"
 
 using bomwerk::core::Component;
 using bomwerk::core::component_identity;
@@ -33,13 +36,14 @@ int main()
   zlib_from_heuristic.used_in_build = false;
 
   auto merged_components = merge_all({zlib_from_manifest, zlib_from_heuristic});
-  assert(merged_components.size() == 1);
-  assert(merged_components[0].name == "zlib");
-  assert(merged_components[0].cpe == "cpe:2.3:a:*:zlib:1.2.11:*:*:*:*:*:*:*");
-  assert(merged_components[0].license == "Zlib");      // field filled from the heuristic finding
-  assert(merged_components[0].evidence.size() == 2);   // evidence unioned
-  assert(merged_components[0].used_in_build == true);  // any-true wins
-  assert(highest_confidence(merged_components[0]) == Confidence::High);
+  BOMWERK_TEST_CHECK(merged_components.size() == 1);
+  BOMWERK_TEST_CHECK(merged_components[0].name == "zlib");
+  BOMWERK_TEST_CHECK(merged_components[0].cpe == "cpe:2.3:a:*:zlib:1.2.11:*:*:*:*:*:*:*");
+  BOMWERK_TEST_CHECK(merged_components[0].license ==
+                     "Zlib");  // field filled from the heuristic finding
+  BOMWERK_TEST_CHECK(merged_components[0].evidence.size() == 2);   // evidence unioned
+  BOMWERK_TEST_CHECK(merged_components[0].used_in_build == true);  // any-true wins
+  BOMWERK_TEST_CHECK(highest_confidence(merged_components[0]) == Confidence::High);
 
   // Given duplicate evidence for one component, when it is merged, then the
   // duplicate collapses to the highest confidence observation.
@@ -52,9 +56,9 @@ int main()
   openssl_from_lock_refresh.evidence.push_back({Source::Manifest, "conan.lock", Confidence::High});
 
   auto merged_openssl_components = merge_all({openssl_from_manifest, openssl_from_lock_refresh});
-  assert(merged_openssl_components.size() == 1);
-  assert(merged_openssl_components[0].evidence.size() == 1);
-  assert(merged_openssl_components[0].evidence[0].confidence == Confidence::High);
+  BOMWERK_TEST_CHECK(merged_openssl_components.size() == 1);
+  BOMWERK_TEST_CHECK(merged_openssl_components[0].evidence.size() == 1);
+  BOMWERK_TEST_CHECK(merged_openssl_components[0].evidence[0].confidence == Confidence::High);
 
   // Given the same purl marked dev-only by one lockfile and runtime by
   // another, when merged in either order, then the least restrictive scope
@@ -68,12 +72,12 @@ int main()
     runtime_finding.purl = "pkg:npm/typescript@5.4.5";
 
     auto runtime_wins_forward = merge_all({dev_only_finding, runtime_finding});
-    assert(runtime_wins_forward.size() == 1);
-    assert(runtime_wins_forward[0].scope == Scope::Required);
+    BOMWERK_TEST_CHECK(runtime_wins_forward.size() == 1);
+    BOMWERK_TEST_CHECK(runtime_wins_forward[0].scope == Scope::Required);
 
     auto runtime_wins_reversed = merge_all({runtime_finding, dev_only_finding});
-    assert(runtime_wins_reversed.size() == 1);
-    assert(runtime_wins_reversed[0].scope == Scope::Required);
+    BOMWERK_TEST_CHECK(runtime_wins_reversed.size() == 1);
+    BOMWERK_TEST_CHECK(runtime_wins_reversed[0].scope == Scope::Required);
   }
 
   // Given the same purl marked Excluded by one finding and Optional by
@@ -88,12 +92,12 @@ int main()
     optional_finding.scope = Scope::Optional;
 
     auto optional_wins_forward = merge_all({excluded_finding, optional_finding});
-    assert(optional_wins_forward.size() == 1);
-    assert(optional_wins_forward[0].scope == Scope::Optional);
+    BOMWERK_TEST_CHECK(optional_wins_forward.size() == 1);
+    BOMWERK_TEST_CHECK(optional_wins_forward[0].scope == Scope::Optional);
 
     auto optional_wins_reversed = merge_all({optional_finding, excluded_finding});
-    assert(optional_wins_reversed.size() == 1);
-    assert(optional_wins_reversed[0].scope == Scope::Optional);
+    BOMWERK_TEST_CHECK(optional_wins_reversed.size() == 1);
+    BOMWERK_TEST_CHECK(optional_wins_reversed[0].scope == Scope::Optional);
   }
 
   // Given two findings that agree the purl is dev-only, when merged, then the
@@ -107,8 +111,8 @@ int main()
     second_dev_finding.scope = Scope::Excluded;
 
     auto still_excluded = merge_all({first_dev_finding, second_dev_finding});
-    assert(still_excluded.size() == 1);
-    assert(still_excluded[0].scope == Scope::Excluded);
+    BOMWERK_TEST_CHECK(still_excluded.size() == 1);
+    BOMWERK_TEST_CHECK(still_excluded[0].scope == Scope::Excluded);
   }
 
   // Given equivalent PURLs with different scheme/type case, when they are
@@ -118,7 +122,7 @@ int main()
   Component lowercase_purl_component;
   lowercase_purl_component.purl = "pkg:conan/openssl@3.2.0";
   auto canonical_purl_components = merge_all({uppercase_purl_component, lowercase_purl_component});
-  assert(canonical_purl_components.size() == 1);
+  BOMWERK_TEST_CHECK(canonical_purl_components.size() == 1);
 
   // Given similar but different versions, when they are merged, then core does
   // not guess ecosystem-specific version equivalence.
@@ -127,7 +131,7 @@ int main()
   Component patch_version_component;
   patch_version_component.purl = "pkg:conan/openssl@1.2.0";
   auto distinct_version_components = merge_all({short_version_component, patch_version_component});
-  assert(distinct_version_components.size() == 2);
+  BOMWERK_TEST_CHECK(distinct_version_components.size() == 2);
 
   // Given multiple components, when they are merged, then output is purl-sorted
   // for deterministic SBOM generation.
@@ -136,8 +140,8 @@ int main()
   Component conan_component;
   conan_component.purl = "pkg:conan/b@2";
   auto sorted_components = merge_all({npm_component, conan_component});
-  assert(sorted_components[0].purl == "pkg:conan/b@2");
-  assert(sorted_components[1].purl == "pkg:npm/a@1");
+  BOMWERK_TEST_CHECK(sorted_components[0].purl == "pkg:conan/b@2");
+  BOMWERK_TEST_CHECK(sorted_components[1].purl == "pkg:npm/a@1");
 
   // Given a component with a well-formed, already-canonical purl, when its
   // identity is computed, then the identity equals that purl.
@@ -145,7 +149,7 @@ int main()
   canonical_purl_component.name = "openssl";
   canonical_purl_component.version = "3.2.0";
   canonical_purl_component.purl = "pkg:conan/openssl@3.2.0";
-  assert(component_identity(canonical_purl_component) == "pkg:conan/openssl@3.2.0");
+  BOMWERK_TEST_CHECK(component_identity(canonical_purl_component) == "pkg:conan/openssl@3.2.0");
 
   // Given a component whose purl uses non-canonical scheme/type casing, when
   // its identity is computed, then the identity is the canonicalized
@@ -155,23 +159,23 @@ int main()
   uppercase_scheme_component.name = "openssl";
   uppercase_scheme_component.version = "3.2.0";
   uppercase_scheme_component.purl = "PKG:CONAN/openssl@3.2.0";
-  assert(component_identity(uppercase_scheme_component) == "pkg:conan/openssl@3.2.0");
+  BOMWERK_TEST_CHECK(component_identity(uppercase_scheme_component) == "pkg:conan/openssl@3.2.0");
 
   // Given a component with no purl, when its identity is computed, then it
   // falls back to `name@version`.
   Component purl_less_component;
   purl_less_component.name = "vendored-thing";
   purl_less_component.version = "2.0";
-  assert(component_identity(purl_less_component) == "vendored-thing@2.0");
+  BOMWERK_TEST_CHECK(component_identity(purl_less_component) == "vendored-thing@2.0");
 
   // Given a default-constructed ReleaseMeta, when inspected, then every field
   // starts empty: "not supplied" is the documented meaning callers rely on
   // (cli/scan_command.cpp omits metadata.component on an empty product_id).
   {
     ReleaseMeta empty_release_meta;
-    assert(empty_release_meta.product_id.empty());
-    assert(empty_release_meta.version.empty());
-    assert(empty_release_meta.support_until.empty());
+    BOMWERK_TEST_CHECK(empty_release_meta.product_id.empty());
+    BOMWERK_TEST_CHECK(empty_release_meta.version.empty());
+    BOMWERK_TEST_CHECK(empty_release_meta.support_until.empty());
   }
 
   // Given a ReleaseMeta with values assigned, when read back, then each field
@@ -181,26 +185,70 @@ int main()
     populated_release_meta.product_id = "widget-firmware";
     populated_release_meta.version = "2.4.1";
     populated_release_meta.support_until = "2028-01-01";
-    assert(populated_release_meta.product_id == "widget-firmware");
-    assert(populated_release_meta.version == "2.4.1");
-    assert(populated_release_meta.support_until == "2028-01-01");
+    BOMWERK_TEST_CHECK(populated_release_meta.product_id == "widget-firmware");
+    BOMWERK_TEST_CHECK(populated_release_meta.version == "2.4.1");
+    BOMWERK_TEST_CHECK(populated_release_meta.support_until == "2028-01-01");
   }
 
   // Given each confidence level, when rendered as its display label, then the
   // lower-case string table shared by the CLI listing and the HTML report
   // is returned.
   {
-    assert(std::string_view(to_string(Confidence::High)) == "high");
-    assert(std::string_view(to_string(Confidence::Medium)) == "medium");
-    assert(std::string_view(to_string(Confidence::Low)) == "low");
+    BOMWERK_TEST_CHECK(std::string_view(to_string(Confidence::High)) == "high");
+    BOMWERK_TEST_CHECK(std::string_view(to_string(Confidence::Medium)) == "medium");
+    BOMWERK_TEST_CHECK(std::string_view(to_string(Confidence::Low)) == "low");
   }
 
   // Given each scope, when rendered as its CycloneDX token, then the exact
   // schema enum spelling is returned (protocol strings, never localized).
   {
-    assert(std::string_view(to_string(Scope::Required)) == "required");
-    assert(std::string_view(to_string(Scope::Optional)) == "optional");
-    assert(std::string_view(to_string(Scope::Excluded)) == "excluded");
+    BOMWERK_TEST_CHECK(std::string_view(to_string(Scope::Required)) == "required");
+    BOMWERK_TEST_CHECK(std::string_view(to_string(Scope::Optional)) == "optional");
+    BOMWERK_TEST_CHECK(std::string_view(to_string(Scope::Excluded)) == "excluded");
+  }
+
+  // Given many duplicates of one purl, each with distinct evidence plus
+  // repeats at lower confidence, when merged, then the evidence equals what
+  // folding them one at a time with merge_into gives (sorted, one entry per
+  // source and detail, highest confidence kept), and merging stays fast.
+  {
+    std::vector<Component> duplicates;
+    for (int index = 0; index < 20000; ++index)
+    {
+      Component duplicate;
+      duplicate.name = "zlib";
+      duplicate.version = "1.3.1";
+      duplicate.purl = "pkg:generic/zlib@1.3.1";
+      const std::string detail = "lock " + std::to_string(index % 5000);
+      duplicate.evidence.push_back(
+          {Source::Manifest, detail, index < 5000 ? Confidence::Low : Confidence::High});
+      duplicates.push_back(duplicate);
+    }
+    Component folded = duplicates.front();
+    for (std::size_t index = 1; index < 300; ++index)
+    {
+      bomwerk::core::merge_into(folded, duplicates[index]);
+    }
+    const std::vector<Component> small_merge =
+        merge_all(std::vector<Component>(duplicates.begin(), duplicates.begin() + 300));
+    BOMWERK_TEST_CHECK(small_merge.size() == 1);
+    BOMWERK_TEST_CHECK(small_merge[0].evidence.size() == folded.evidence.size());
+    for (std::size_t index = 0; index < folded.evidence.size(); ++index)
+    {
+      BOMWERK_TEST_CHECK(small_merge[0].evidence[index].detail == folded.evidence[index].detail);
+      BOMWERK_TEST_CHECK(small_merge[0].evidence[index].confidence ==
+                         folded.evidence[index].confidence);
+    }
+
+    const auto started = std::chrono::steady_clock::now();
+    const std::vector<Component> merged = merge_all(duplicates);
+    BOMWERK_TEST_CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(5));
+    BOMWERK_TEST_CHECK(merged.size() == 1);
+    BOMWERK_TEST_CHECK(merged[0].evidence.size() == 5000);
+    for (const auto& evidence : merged[0].evidence)
+    {
+      BOMWERK_TEST_CHECK(evidence.confidence == Confidence::High);
+    }
   }
 
   std::puts("test_model: OK");

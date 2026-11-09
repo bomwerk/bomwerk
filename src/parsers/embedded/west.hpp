@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "core/file_index.hpp"
@@ -56,7 +57,6 @@ struct ParseOptions
 /// Reads files only, never runs `west` (Hard Rule 9). Never throws: hostile
 /// input degrades to warnings (Hard Rule 1). Output is merged and ordered by
 /// purl.
-// TODO(T40): register a fuzz target for this parser once the harness exists.
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const std::filesystem::path& root);
 
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const std::filesystem::path& root,
@@ -65,5 +65,18 @@ struct ParseOptions
 [[nodiscard]] core::Result<std::vector<core::Component>> parse(const core::FileIndex& file_index,
                                                                const std::filesystem::path& root,
                                                                const ParseOptions& options);
+
+/// Parse one file held in memory exactly as `parse` parses the file
+/// `file_name` (root-relative, e.g. `app/west.yml`): its last segment must
+/// name `west.yml` or `west.yaml`, or the result is empty with no warning. Only that one
+/// file is in scope, and `Component::root` follows from `file_name` exactly
+/// as it would from a scanned path (empty for a root-level `west.yml`, whose
+/// workspace top lies above the scan). `file_name` is the label in warnings and
+/// evidence, and `options.max_file_bytes` bounds `bytes` the way it bounds a
+/// file read. Never touches the filesystem: this is the entry point of the
+/// `fuzz_west` harnesses.
+[[nodiscard]] core::Result<std::vector<core::Component>> parse_bytes(std::string_view file_name,
+                                                                     std::string_view bytes,
+                                                                     const ParseOptions& options);
 
 }  // namespace bomwerk::parsers::embedded::west

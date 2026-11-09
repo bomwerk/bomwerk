@@ -328,34 +328,49 @@ void ArchiveReader::read(ArchiveContents& out)
   }
 }
 
+/// Everything `read_archive` does once the bytes are in hand: `label` names
+/// the archive in warnings, `truncated` says the bytes are only a capped
+/// prefix.
+void read_archive_image(const std::string& label, std::string_view bytes, bool truncated,
+                        core::Result<ArchiveContents>& outcome)
+{
+  if (truncated)
+  {
+    outcome.warn(core::WarningCode::kBinaryTooLarge,
+                 label + ": larger than " + std::to_string(kMaxBinaryBytes) +
+                     " bytes; refused rather than parsed from a partial image");
+    return;
+  }
+  if (bytes.size() < kArchiveMagic.size() || bytes.substr(0, kArchiveMagic.size()) != kArchiveMagic)
+  {
+    return;  // not an archive; the caller decides what that means
+  }
+
+  outcome.value.is_archive = true;
+  ArchiveReader reader(bytes, label, outcome);
+  reader.read(outcome.value);
+}
+
 }  // namespace
 
 core::Result<ArchiveContents> read_archive(const fs::path& path)
 {
   core::Result<ArchiveContents> outcome;
-
   const core::BoundedFileRead file = core::read_file_bounded(path, kMaxBinaryBytes);
   if (!file.readable)
   {
     outcome.warn(core::WarningCode::kBinaryUnreadable, path.string() + ": cannot be read; skipped");
     return outcome;
   }
-  if (file.truncated)
-  {
-    outcome.warn(core::WarningCode::kBinaryTooLarge,
-                 path.string() + ": larger than " + std::to_string(kMaxBinaryBytes) +
-                     " bytes; refused rather than parsed from a partial image");
-    return outcome;
-  }
-  if (file.bytes.size() < kArchiveMagic.size() ||
-      std::string_view(file.bytes).substr(0, kArchiveMagic.size()) != kArchiveMagic)
-  {
-    return outcome;  // not an archive; the caller decides what that means
-  }
+  read_archive_image(path.string(), file.bytes, file.truncated, outcome);
+  return outcome;
+}
 
-  outcome.value.is_archive = true;
-  ArchiveReader reader(file.bytes, path.string(), outcome);
-  reader.read(outcome.value);
+core::Result<ArchiveContents> read_archive_bytes(std::string_view label, std::string_view bytes)
+{
+  core::Result<ArchiveContents> outcome;
+  read_archive_image(std::string(label), bytes.substr(0, kMaxBinaryBytes),
+                     bytes.size() > kMaxBinaryBytes, outcome);
   return outcome;
 }
 

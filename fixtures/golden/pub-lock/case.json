@@ -1,0 +1,5 @@
+{
+  "description": "pub: pubspec.lock with hosted and git entries becomes pkg:pub components; a path entry is first-party and skipped silently",
+  "args": [],
+  "expect_exit": 0
+}

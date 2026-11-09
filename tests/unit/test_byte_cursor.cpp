@@ -8,6 +8,7 @@
 // safety argument for the module rests on that ask being answered correctly.
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -154,5 +155,6 @@ int main()
     BOMWERK_TEST_CHECK(big.uint_at(0, IntegerWidth::TwoBytes) == 0x0102u);
   }
 
+  std::puts("test_byte_cursor: OK");
   return 0;
 }

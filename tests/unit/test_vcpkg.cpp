@@ -1,4 +1,6 @@
+// ctest unit test for the vcpkg producer (framework-free).
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -7,6 +9,7 @@
 #include <vector>
 
 #include "core/model.hpp"
+#include "core/warning_code.hpp"
 #include "parsers/cpp/vcpkg.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
@@ -494,5 +497,56 @@ int main()
     BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:vcpkg/fmt") != nullptr);
   }
 
+  // Given two vcpkg.json whose dependencies together exceed the budget, when
+  // parsed, then the limit is warned exactly once, however many files are
+  // left, and no dependency past the budget is reported.
+  {
+    TempTree tree;
+    tree.write("a/vcpkg.json", R"({"dependencies":["a","b","c"]})");
+    tree.write("b/vcpkg.json", R"({"dependencies":["d"]})");
+    vcpkg::ParseOptions options;
+    options.max_total_requirements = 2;
+    const auto result = vcpkg::parse(tree.root(), options);
+    std::size_t limit_warnings = 0;
+    for (const auto& warning : result.warnings)
+    {
+      if (warning.code == bomwerk::core::WarningCode::kEntryLimitReached)
+      {
+        ++limit_warnings;
+      }
+    }
+    BOMWERK_TEST_CHECK(limit_warnings == 1);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+  }
+
+  // Given port definitions after the dependency budget is spent, when parsed,
+  // then every port is still reported: a port's own identity costs no budget,
+  // so a registry with more dependencies than the budget (the vcpkg ports
+  // tree itself) must not lose the ports that sort after the cutoff. Found by
+  // comparing a real scan of that tree before and after T40.
+  {
+    TempTree tree;
+    tree.write("ports/aaa/vcpkg.json",
+               R"({"name":"aaa","version":"1.0","dependencies":["x","y","z"]})");
+    tree.write("ports/bbb/vcpkg.json", R"({"name":"bbb","version":"2.0","dependencies":["w"]})");
+    tree.write("ports/ccc/vcpkg.json", R"({"name":"ccc","version":"3.0"})");
+    vcpkg::ParseOptions options;
+    options.max_total_requirements = 1;
+    const auto result = vcpkg::parse(tree.root(), options);
+    BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:vcpkg/aaa@1.0") != nullptr);
+    BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:vcpkg/bbb@2.0") != nullptr);
+    BOMWERK_TEST_CHECK(find_by_purl(result.value, "pkg:vcpkg/ccc@3.0") != nullptr);
+    std::size_t limit_warnings = 0;
+    for (const auto& warning : result.warnings)
+    {
+      if (warning.code == bomwerk::core::WarningCode::kEntryLimitReached)
+      {
+        ++limit_warnings;
+      }
+    }
+    BOMWERK_TEST_CHECK(limit_warnings == 1);
+  }
+
+  std::puts("test_vcpkg: OK");
   return 0;
 }
