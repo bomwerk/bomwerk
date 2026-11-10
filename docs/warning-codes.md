@@ -120,6 +120,8 @@ cannot fix.
 | `BW-GIT-003` | A submodule entry has an unsafe path |
 | `BW-GIT-004` | A submodule is not initialized |
 | `BW-GIT-005` | A submodule's url is missing or cannot be resolved |
+| `BW-GIT-006` | A submodule's commit was read from the superproject index |
+| `BW-GIT-007` | The git index could not be read |
 
 ### `observe` (build-trace capture)
 
@@ -194,6 +196,29 @@ source.
 | `BW-VULN-005` | A feed response was malformed |
 | `BW-VULN-006` | Vulnerability match coverage is incomplete for this run |
 | `BW-VULN-008` | License-fallback enrichment is incomplete for this run |
+
+## Informational codes (`BW-GIT-006`)
+
+Almost every code means the run is degraded: it counts toward exit code 1 unless you
+suppress it. An informational code does not. It describes a result that is complete and
+exact, and tells you how it was obtained. It is still printed (at info level), written to
+`--warnings` and shown in the HTML report, so nothing about it is hidden; it simply never
+fails a build on its own. Which codes are informational is a maintainer decision, recorded
+in `src/core/warning_code.cpp`, and today there is one.
+
+`BW-GIT-006` fires for a submodule that was never checked out, the shape every default CI
+clone has (`actions/checkout` does not fetch submodules unless asked). bomwerk reads the
+commit the superproject pins for it from `.git/index`, where git records it as a gitlink
+entry: the exact commit `git submodule update` would check out. The purl carries that
+commit (`pkg:github/openssl/openssl@<commit>`) at High confidence, the same as a
+checked-out HEAD, because the identity is exact; only the submodule's own files are
+absent, which matters only if you meant to scan inside it with
+`--include-submodule-contents`. Without a readable index (an exported tree with no `.git`,
+or an index bomwerk refuses), the submodule stays unversioned and `BW-GIT-004` fires as
+before; `BW-GIT-007` then says why the index did not help. bomwerk refuses an index
+rather than guess when it is a split index (`core.splitIndex`), a sparse index (`index.sparse`), an unknown version, over
+128 MiB, or structurally inconsistent. Index versions 2, 3 and 4, and SHA-1 and SHA-256
+repositories, are read.
 
 ## Unresolved build variables (`BW-CORE-015`)
 

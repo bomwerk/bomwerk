@@ -573,6 +573,34 @@
       "dictionary": "fixtures/fuzz/dicts/ini.dict"
     },
     {
+      "name": "fuzz_git_index_sha1",
+      "source": "fuzz_git_index.cpp",
+      "variant": "sha1",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/gitindex",
+        "fixtures/golden/nightmare-shallow-clone/tree/_git"
+      ],
+      "seed_suffixes": [
+        "index"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/gitindex.dict"
+    },
+    {
+      "name": "fuzz_git_index_sha256",
+      "source": "fuzz_git_index.cpp",
+      "variant": "sha256",
+      "libraries": [],
+      "seed_paths": [
+        "fixtures/gitindex",
+        "fixtures/golden/nightmare-shallow-clone/tree/_git"
+      ],
+      "seed_suffixes": [
+        "index"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/gitindex.dict"
+    },
+    {
       "name": "fuzz_scan_config",
       "source": "fuzz_scan_config.cpp",
       "libraries": [],

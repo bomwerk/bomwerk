@@ -1,8 +1,9 @@
 # Fuzzing
 
 Bomwerk reads files it does not control: lockfiles and manifests, CI workflows,
-`.gitmodules`, ELF binaries and `ar` archives, CycloneDX documents, build traces,
-`bomwerk.toml`, and OSV, NVD and package registry responses. Hard rule 1 in
+`.gitmodules` and the superproject's `.git/index`, ELF binaries and `ar`
+archives, CycloneDX documents, build traces, `bomwerk.toml`, and OSV, NVD and
+package registry responses. Hard rule 1 in
 [CONTRIBUTING](CONTRIBUTING.md) says hostile input degrades to warnings and never
 crashes. Every one of those parsers has a [libFuzzer](https://llvm.org/docs/LibFuzzer.html)
 harness that checks the rule continuously, alongside the hand-written hostile

@@ -63,6 +63,7 @@ hard-wired into the harness). The live OSV demo with a real commit is
 | `spdx30-mixed` | the SPDX 3.0.1 (JSON-LD) writer over the `mixed-product` tree: `fmt` vendored as a submodule AND declared via FetchContent at the same commit => one `software_Package`; `--product`/`--product-version` name the `SpdxDocument` | 0 |
 | `nightmare-corpus` | a miniature of every static shape the public `bomwerk/nightmare` results table depends on: three vendored identity tiers (zlib and freertos by version header at Medium, uthash and stb by folder name at Low), a `conanfile.txt` declaring a DIFFERENT zlib (1.3.1) than the vendored copy (1.2.11), stb's dual MIT-or-Unlicense LICENSE flattened to `MIT`, uthash's unrecognized LICENSE left unset, freertos's CPE carrying a `v11.1.0` version NVD will not match (a known gap, pinned so its fix shows up as a diff), two prebuilt-library roots identified from headers alone (sqlite3@3.41.2 at Medium from a quoted macro; cjson@1.7.15 at Medium, assembled from cJSON.h's three integer version macros), and a `FetchContent_Declare` of tinyxml2 pinned to a synthetic commit. The openssl submodule is declared but never checked out: exit 1 | 1 |
 | `nightmare-submodule-pinned` | the same tree with the openssl submodule's HEAD checked out => a versioned `pkg:github/openssl/openssl` and a clean run. Read as a pair with the case above: the diff between the two snapshots is the shallow-clone row of the public README | 0 |
+| `nightmare-shallow-clone` | T110: the same tree as `nightmare-corpus` as a default CI clone leaves it: the superproject's `.git` is present and the openssl submodule was never checked out. Its `_git/index` (real git output, built by `scripts/make_gitindex_fixtures.py`; see `fixtures/gitindex/SOURCES.md`) records the openssl gitlink at the commit `nightmare-submodule-pinned` checks out, so the two snapshots are byte-identical: only where the pin is read from differs. The informational `BW-GIT-006` it raises does not degrade the run | 0 |
 | `nightmare-corpus-fingerprint` | `scan --fingerprint-index`: a vendored directory whose version no header can state. This tree's `cJSON.h` has upstream's `CJSON_VERSION_*` macros removed on purpose, since the heuristic now reads them and would version the directory before the index is consulted. Three of the four hashed files under `third_party/cjson-prebuilt` are byte-identical to the pinned release in `fingerprint-index.json`, so the folder-derived `pkg:generic/cjson-prebuilt` becomes `pkg:generic/cjson@1.7.15` and gains a `bomwerk:fingerprint` property naming the count; `local_patch.c` is the fourth file and is not upstream, which is what makes the match partial. Read as a pair with `nightmare-corpus`, which pins the same directory with NO index: no `bomwerk:fingerprint` property appearing there is the regression test for the option being off by default | 0 |
 
 `gitmodules-pinned`, `nightmare-corpus`, `yarn-berry-lock`, `pnpm-lock-v9`,
@@ -118,6 +119,12 @@ pointer, resolved by a separate branch (with its own path-escape containment
 check) that these fixtures don't reach. That branch, containment check
 included, already has direct C++ unit coverage in `test_submodules.cpp`: it
 just isn't exercised at this end-to-end, snapshot-diffed layer.
+
+`nightmare-shallow-clone` is the one case whose `_git/` holds a binary file:
+the superproject's `index`, read for the gitlink of a submodule that has no
+`.git` of its own. Unlike the hand-written `HEAD` and `packed-refs` above, it
+is real git output, rebuilt and compared by the `gitindex_fixtures_reproducible`
+ctest.
 
 ## Anatomy of a case
 

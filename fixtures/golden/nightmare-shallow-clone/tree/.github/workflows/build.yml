@@ -1,0 +1,8 @@
+name: build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0f1e2d3c4b5a69788796a5b4c3d2e1f009182736
+      - uses: actions/setup-node@v4.1.0

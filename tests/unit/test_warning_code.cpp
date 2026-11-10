@@ -59,6 +59,8 @@ constexpr WarningCode kAllCodes[] = {
     WarningCode::kSubmoduleUnsafePath,
     WarningCode::kSubmoduleNotInitialized,
     WarningCode::kSubmoduleNoUrl,
+    WarningCode::kSubmoduleCommitFromIndex,
+    WarningCode::kGitIndexUnreadable,
     WarningCode::kObserveTraceNotWritten,
     WarningCode::kObserveTraceMalformedLines,
     WarningCode::kObserveTraceExceedsLimit,
@@ -105,6 +107,16 @@ int main()
     BOMWERK_TEST_CHECK(!info.title.empty());
     BOMWERK_TEST_CHECK(info.id.substr(0, 3) == "BW-");
     BOMWERK_TEST_CHECK(seen_ids.insert(std::string(info.id)).second);
+  }
+
+  // Given the codes a scan raises, when their exit weight is looked up, then exactly the
+  // codes a maintainer declared informational leave the run clean: today only BW-GIT-006
+  // (a submodule versioned from the superproject index). A new informational code must be
+  // added here on purpose, never by accident.
+  for (const WarningCode code : kAllCodes)
+  {
+    const bool is_informational = code == WarningCode::kSubmoduleCommitFromIndex;
+    BOMWERK_TEST_CHECK(warning_code_info(code).counts_toward_exit != is_informational);
   }
 
   std::puts("test_warning_code: OK");

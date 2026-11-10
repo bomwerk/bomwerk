@@ -13,6 +13,16 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- `scan` versions a submodule that was never checked out, the shape of every
+  default CI clone (`actions/checkout` without `submodules:`). The commit the
+  superproject pins for it is read from the gitlink in `.git/index`, as a
+  file and never through `git`, so `pkg:github/openssl/openssl` becomes
+  `pkg:github/openssl/openssl@<commit>` and CVE lookups can match it. Index
+  versions 2, 3 and 4 and SHA-1 and SHA-256 repositories are read; a split
+  index, an unknown version, an index over 128 MiB or one that is
+  structurally inconsistent is refused whole with `BW-GIT-007`, never
+  half-read. A checked-out HEAD still wins. New fuzz targets
+  `fuzz_git_index_sha1` and `fuzz_git_index_sha256` (T110).
 - Every parser of untrusted input has a libFuzzer harness: the manifest and
   lockfile producers, GitHub Actions workflows, `.gitmodules`, ELF and `ar`
   binaries, CycloneDX input, build trace lines, vendored version headers, the
@@ -112,6 +122,15 @@ contained the paid extension's source.
   `bomwerk.toml` scope now match the code.
 
 ### Changed
+- Informational warning codes: a code can now describe a complete result
+  without degrading the run. It is still printed (at info level), written to
+  `--warnings` and the HTML report, but never sets exit code 1 on its own.
+  The first is `BW-GIT-006`: a submodule versioned from the superproject's
+  index raises it instead of `BW-GIT-004`, so a default CI clone of a
+  repository whose only gap was uninitialized submodules now exits 0. See
+  `docs/warning-codes.md` (T110).
+- The bounds-checked `ByteCursor` moved from `binscan` to `core`, so the git
+  index reader and the ELF and `ar` readers share one reviewed type (T110).
 - Parsing no longer slows down quadratically on hostile or unusual input, with
   the same output as before. Fixed spots: the XML scanner behind `pom.xml` and
   `.csproj` reading, merging many duplicates of one component, Maven and NuGet

@@ -17,9 +17,10 @@ namespace bomwerk::cli
 /// near-duplicate `record_warning(s)` copies that used to live one per CLI command file.
 /// A warning covered by `suppressed_codes` (bomwerk.toml `[warnings] suppress`, scan-only) is
 /// still logged and collected: suppression never hides a warning from any artifact: it only
-/// stops that warning from marking the run degraded, which is what lets `--fail-on warnings` (the
-/// default) stop failing on a cause the repo owner has reviewed. Entries may be bare codes or
-/// `CODE:ecosystem` pairs.
+/// stops that warning from marking the run degraded, which is what lets `--fail-on warnings`
+/// (the default) stop failing on a cause the repo owner has reviewed. Entries may be bare
+/// codes or `CODE:ecosystem` pairs. An informational code (`counts_toward_exit == false`)
+/// never marks the run degraded, suppressed or not.
 class WarningRecorder
 {
  public:
@@ -32,9 +33,20 @@ class WarningRecorder
   {
     // "{}" so a warning containing braces (paths, purls) is never a fmt pattern.
     // spdlog owns the "warning:" level prefix; the shared formatter supplies the coded payload.
-    spdlog::warn("{}", core::format_for_console(warning));
+    // An informational code (`WarningCodeInfo::counts_toward_exit == false`) describes a
+    // complete result, so it is logged at info level and never degrades the run; it is
+    // still collected, so every artifact carries it.
+    const bool counts_toward_exit = core::code_info_of(warning).counts_toward_exit;
+    if (counts_toward_exit)
+    {
+      spdlog::warn("{}", core::format_for_console(warning));
+    }
+    else
+    {
+      spdlog::info("{}", core::format_for_console(warning));
+    }
     collected_.push_back(warning);
-    if (!core::is_warning_suppressed(warning, suppressed_codes_))
+    if (counts_toward_exit && !core::is_warning_suppressed(warning, suppressed_codes_))
     {
       degraded_ = true;
     }

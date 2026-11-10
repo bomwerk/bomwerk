@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "binscan/bounds.hpp"
-#include "binscan/byte_cursor.hpp"
+#include "core/byte_cursor.hpp"
 #include "core/file_io.hpp"
 #include "core/warning_code.hpp"
 
@@ -21,6 +21,12 @@ namespace bomwerk::binscan
 {
 namespace
 {
+
+// The bounds-checked cursor lives in core, shared with the git index reader.
+using core::as_image;
+using core::ByteCursor;
+using core::ByteOrder;
+using core::IntegerWidth;
 
 // --- Format constants (ELF gABI) --------------------------------------------
 

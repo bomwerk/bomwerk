@@ -227,7 +227,7 @@ cannot be requested. There are no inbound ports.
 | Code | Meaning |
 | --- | --- |
 | `0` | Clean run |
-| `1` | Completed with warnings (an SBOM was written) |
+| `1` | Completed with warnings (an SBOM was written); informational codes such as `BW-GIT-006` do not count |
 | `2` | Incomplete (the run could not do what was asked) |
 
 `scan --fail-on none|warnings|incomplete` decides which of those fail your

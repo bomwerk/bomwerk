@@ -19,7 +19,7 @@ DOC_PATH = REPOSITORY_ROOT / "docs" / "warning-codes.md"
 
 CASE_PATTERN = re.compile(
     r'case WarningCode::\w+:\s*\{\s*static constexpr WarningCodeInfo kInfo\{\s*'
-    r'"([^"]+)",\s*"([^"]+)"\s*\};',
+    r'"([^"]+)",\s*"([^"]+)"\s*(?:,\s*(?:true|false)\s*)?\};',
     re.DOTALL,
 )
 DOC_ROW_PATTERN = re.compile(r"^\| `(BW-[A-Z]+-\d+)` \| (.+) \|$", re.MULTILINE)
