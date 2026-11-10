@@ -750,7 +750,12 @@ void append_summary_section(std::string& document, const ReportContext& context,
     append_metric_tile(document, "warn", std::string(kEmptyPlaceholder),
                        "advisories (not checked)");
   }
-  append_metric_tile(document, context.warnings.empty() ? "" : "warn",
+  // The tile turns amber only for a warning that degrades the run: an informational one
+  // (BW-GIT-006) is still counted, but must not look like a problem when the run exits 0.
+  const bool has_degrading_warning =
+      std::any_of(context.warnings.begin(), context.warnings.end(), [](const core::Warning& warning)
+                  { return core::code_info_of(warning).counts_toward_exit; });
+  append_metric_tile(document, has_degrading_warning ? "warn" : "",
                      std::to_string(context.warnings.size()), "warnings");
   document += "    </section>\n";
 }

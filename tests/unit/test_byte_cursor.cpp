@@ -1,4 +1,4 @@
-// ctest unit test for the bounds-checked cursor (binscan/byte_cursor.hpp).
+// ctest unit test for the bounds-checked cursor (core/byte_cursor.hpp).
 //
 // Tested on its own rather than only through the ELF and ar readers, because
 // this is the one type those readers TRUST: they contain no bounds arithmetic
@@ -13,13 +13,13 @@
 #include <string>
 #include <string_view>
 
-#include "binscan/byte_cursor.hpp"
+#include "core/byte_cursor.hpp"
 #include "support/check.hpp"
 
-using bomwerk::binscan::as_image;
-using bomwerk::binscan::ByteCursor;
-using bomwerk::binscan::ByteOrder;
-using bomwerk::binscan::IntegerWidth;
+using bomwerk::core::as_image;
+using bomwerk::core::ByteCursor;
+using bomwerk::core::ByteOrder;
+using bomwerk::core::IntegerWidth;
 
 namespace
 {
@@ -153,6 +153,23 @@ int main()
     const ByteCursor big = little.with_byte_order(ByteOrder::Big);
     BOMWERK_TEST_CHECK(little.uint_at(0, IntegerWidth::TwoBytes) == 0x0201u);
     BOMWERK_TEST_CHECK(big.uint_at(0, IntegerWidth::TwoBytes) == 0x0102u);
+  }
+
+  // Given a four-byte image, when raw byte runs are asked for, then a run that
+  // fits comes back with exactly its bytes, an empty run at the very end is
+  // still in range, and anything reaching past the end, including a length
+  // near SIZE_MAX that would overflow an addition, is nothing.
+  {
+    const std::string bytes = "DIRC";
+    const ByteCursor cursor = cursor_over(bytes);
+    const auto signature = cursor.bytes_at(0, 4);
+    BOMWERK_TEST_CHECK(signature.has_value());
+    BOMWERK_TEST_CHECK(signature->size() == 4);
+    BOMWERK_TEST_CHECK(std::to_integer<char>((*signature)[3]) == 'C');
+    BOMWERK_TEST_CHECK(cursor.bytes_at(4, 0).has_value());
+    BOMWERK_TEST_CHECK(!cursor.bytes_at(1, 4).has_value());
+    BOMWERK_TEST_CHECK(!cursor.bytes_at(5, 0).has_value());
+    BOMWERK_TEST_CHECK(!cursor.bytes_at(1, static_cast<std::size_t>(-1)).has_value());
   }
 
   std::puts("test_byte_cursor: OK");

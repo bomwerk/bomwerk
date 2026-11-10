@@ -235,6 +235,20 @@ const WarningCodeInfo& warning_code_info(WarningCode code)
                                              "a submodule's url is missing or cannot be resolved"};
       return kInfo;
     }
+    // Informational (T110): the gitlink in the superproject's index is the exact commit
+    // `git submodule update` would check out, so the purl is complete and exact; only the
+    // submodule's own files are absent. See docs/warning-codes.md.
+    case WarningCode::kSubmoduleCommitFromIndex:
+    {
+      static constexpr WarningCodeInfo kInfo{
+          "BW-GIT-006", "a submodule's commit was read from the superproject index", false};
+      return kInfo;
+    }
+    case WarningCode::kGitIndexUnreadable:
+    {
+      static constexpr WarningCodeInfo kInfo{"BW-GIT-007", "the git index could not be read"};
+      return kInfo;
+    }
     case WarningCode::kObserveTraceNotWritten:
     {
       static constexpr WarningCodeInfo kInfo{"BW-OBSERVE-001", "no build trace file was written"};

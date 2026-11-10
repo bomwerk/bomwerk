@@ -1,0 +1,6 @@
+{
+  "description": "nightmare corpus, default-CI-clone posture (T110): the nightmare-corpus tree as `git clone --depth 1` or `actions/checkout` leaves it, with the superproject's .git present and the openssl submodule never checked out. The index (tree/_git/index, built by real git via scripts/make_gitindex_fixtures.py) records the openssl gitlink at the same synthetic commit nightmare-submodule-pinned checks out, so this snapshot is byte-identical to that case's: the pin is read from the index instead of the submodule's HEAD. BW-GIT-006 is informational, so the run is clean (exit 0). Read as a trio with nightmare-corpus (no .git at all: unversioned, BW-GIT-004, exit 1) and nightmare-submodule-pinned (checked out).",
+  "args": [],
+  "expect_exit": 0,
+  "coverage": true
+}

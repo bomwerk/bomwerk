@@ -133,6 +133,7 @@ add_library(bomwerk_core
   src/core/file_io.cpp
   src/core/git_config.cpp
   src/core/git_dir.cpp
+  src/core/git_index.cpp
   src/core/git_url.cpp
   src/core/json_utils.cpp
   src/core/logging.cpp
@@ -255,7 +256,7 @@ target_link_libraries(bomwerk_observe
 # There is deliberately NO third-party ELF library in this target. bomwerk
 # scans itself (rule 4's own justification), so every dependency is also a
 # component in our SBOM and a standing CVE surface; what this pass needs is a
-# read-only slice of a fixed-width format, which byte_cursor.hpp bounds-checks
+# read-only slice of a fixed-width format, which core/byte_cursor.hpp bounds-checks
 # in one reviewable place. That is also the stronger answer to rule 1 -- no
 # third-party allocation on attacker-controlled sizes, and no try/catch
 # anywhere in the module.
@@ -368,8 +369,9 @@ endif()
 foreach(bomwerk_test_name IN ITEMS model manifest_names sbom_format exclusions name_list percent
                                   purl match_coverage text file_io file_index manifest_walk timestamp
                                   uuid base64 build_variables xml_scan sha256
-                                  cvss git_config git_dir git_url scan_config unparsed_manifests
-                                  yaml_subset warning_code warning_console_format)
+                                  cvss git_config git_dir git_index git_url scan_config
+                                  unparsed_manifests yaml_subset warning_code warning_console_format
+                                  byte_cursor)
   bomwerk_add_test(${bomwerk_test_name})
 endforeach()
 
@@ -470,8 +472,9 @@ bomwerk_add_test(compile_map bomwerk_observe)
 # does.
 bomwerk_add_test(link_map bomwerk_observe)
 
-# The binary pass. byte_cursor is tested on its own because it is the one
-# type the other three trust to be bounds-safe: testing it only through them
+# The binary pass. byte_cursor (core, registered with the core-only tests
+# above) is tested on its own because it is the one type these readers and
+# the git index reader trust to be bounds-safe: testing it only through them
 # would leave its edges checked by accident rather than on purpose. elf_read
 # and archive_read need no repository at all (each takes a file, and every
 # hostile case is written byte by byte into a TempTree), and binary_map needs
@@ -479,7 +482,6 @@ bomwerk_add_test(link_map bomwerk_observe)
 # link_map already follow. None of them parses a real build product: CI runs
 # macOS too, where a build emits Mach-O, so a test that compiled something
 # would assert different things on the two runners.
-bomwerk_add_test(byte_cursor bomwerk_binscan)
 bomwerk_add_test(elf_read bomwerk_binscan)
 bomwerk_add_test(archive_read bomwerk_binscan)
 bomwerk_add_test(binary_map bomwerk_binscan)
@@ -757,6 +759,14 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME fuzz_targets_manifest
     COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_fuzz_targets.py)
+
+  # The committed git index fixtures still match the recipe that builds them
+  # with real git (fixtures/gitindex/SOURCES.md, T110): rebuilt into a temp
+  # dir and compared byte for byte. Skipped (77) where git is absent.
+  add_test(NAME gitindex_fixtures_reproducible
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/make_gitindex_fixtures.py --check)
+  set_tests_properties(gitindex_fixtures_reproducible PROPERTIES SKIP_RETURN_CODE 77)
 
   # The fingerprint corpus manifest's shape, and the builder's agreement with the
   # matcher about which files count as evidence (two constants duplicated across

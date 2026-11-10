@@ -1,12 +1,15 @@
 // ctest unit test for the git submodules producer
+#include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "core/model.hpp"
+#include "core/warning_code.hpp"
 #include "parsers/cpp/submodules.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
@@ -35,6 +38,43 @@ std::string read_file(const fs::path& path)
   buffer << stream.rdbuf();
   return buffer.str();
 }
+
+std::size_t count_code(const bomwerk::core::Result<std::vector<Component>>& result,
+                       bomwerk::core::WarningCode code)
+{
+  std::size_t count = 0;
+  for (const bomwerk::core::Warning& warning : result.warnings)
+  {
+    if (warning.code == code)
+    {
+      ++count;
+    }
+  }
+  return count;
+}
+
+bool has_evidence(const Component& component, const std::string& detail)
+{
+  for (const auto& evidence : component.evidence)
+  {
+    if (evidence.detail == detail)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// A real superproject index (fixtures/gitindex/SOURCES.md) pinning libs/zlib,
+/// libs/mbedtls and third_party/openssl.
+std::string gitindex_fixture(const std::string& name)
+{
+  return read_file(fs::path(BOMWERK_FIXTURES_DIR) / "gitindex" / name);
+}
+
+const std::string kIndexZlibCommit = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c";
+const std::string kZlibGitmodules =
+    "[submodule \"libs/zlib\"]\n\tpath = libs/zlib\n\turl = https://github.com/madler/zlib.git\n";
 
 const Component* find_by_purl_prefix(const std::vector<Component>& components,
                                      const std::string& prefix)
@@ -270,6 +310,121 @@ int main()
       const auto result = submodules::parse(tree.root());
       BOMWERK_TEST_CHECK(result.complete);  // malformed => warnings, never exit-2
     }
+  }
+
+  // --- T110: a submodule that was never checked out, pinned in the index ------
+
+  // Given a default CI clone: the superproject's .git holds an index pinning
+  // libs/zlib, and the submodule was never checked out, when parsed, then the
+  // component carries the pinned commit at High confidence with index
+  // evidence, and raises the informational BW-GIT-006 instead of BW-GIT-004.
+  {
+    TempTree tree;
+    tree.write(".gitmodules", kZlibGitmodules);
+    tree.write(".git/index", gitindex_fixture("v2-sha1.index"));
+    const auto result = submodules::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/madler/zlib@" + kIndexZlibCommit);
+    BOMWERK_TEST_CHECK(result.value[0].version == kIndexZlibCommit);
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::High);
+    BOMWERK_TEST_CHECK(has_evidence(result.value[0], ".git/index -> gitlink libs/zlib"));
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kSubmoduleCommitFromIndex) ==
+                       1);
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kSubmoduleNotInitialized) ==
+                       0);
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+  }
+
+  // Given the same index but the submodule checked out at a different commit,
+  // when parsed, then the checked-out HEAD wins: it is what is on disk.
+  {
+    TempTree tree;
+    tree.write(".gitmodules", kZlibGitmodules);
+    tree.write(".git/index", gitindex_fixture("v2-sha1.index"));
+    tree.write("libs/zlib/.git/HEAD", kSha + "\n");
+    const auto result = submodules::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == kSha);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+  }
+
+  // Given every submodule checked out and an index that is not an index at
+  // all, when parsed, then nothing warns: the index is opened only when a
+  // submodule needs it, so fully initialized repositories never pay for it.
+  {
+    TempTree tree;
+    tree.write(".gitmodules", kZlibGitmodules);
+    tree.write(".git/index", "not an index");
+    tree.write("libs/zlib/.git/HEAD", kSha + "\n");
+    const auto result = submodules::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+  }
+
+  // Given an index the reader refuses (a split index), when parsed, then the
+  // submodule falls back to today's answer, unversioned with BW-GIT-004, and
+  // BW-GIT-007 says why the index did not help.
+  {
+    TempTree tree;
+    tree.write(".gitmodules", kZlibGitmodules);
+    tree.write(".git/index", gitindex_fixture("split.index"));
+    const auto result = submodules::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kGitIndexUnreadable) == 1);
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kSubmoduleNotInitialized) ==
+                       1);
+  }
+
+  // Given two uninitialized submodules, one pinned in the index and one the
+  // index does not mention, when parsed, then the pinned one is versioned and
+  // the other keeps BW-GIT-004; and a trailing '/' in the declared path still
+  // finds the gitlink, which git stores without one.
+  {
+    TempTree tree;
+    tree.write(".gitmodules",
+               "[submodule \"zlib\"]\n\tpath = libs/zlib/\n"
+               "\turl = https://github.com/madler/zlib.git\n"
+               "[submodule \"gone\"]\n\tpath = libs/gone\n"
+               "\turl = https://github.com/acme/gone.git\n");
+    tree.write(".git/index", gitindex_fixture("v4-sha1.index"));
+    const auto result = submodules::parse(tree.root());
+    const Component* zlib = find_by_purl_prefix(result.value, "pkg:github/madler/zlib");
+    const Component* gone = find_by_purl_prefix(result.value, "pkg:github/acme/gone");
+    BOMWERK_TEST_CHECK(zlib != nullptr && zlib->version == kIndexZlibCommit);
+    BOMWERK_TEST_CHECK(gone != nullptr && gone->version.empty());
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kSubmoduleCommitFromIndex) ==
+                       1);
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kSubmoduleNotInitialized) ==
+                       1);
+  }
+
+  // Given a SHA-256 superproject (extensions.objectformat in .git/config), when
+  // parsed, then the index is read with 32-byte ids and the purl carries the
+  // full 64-character pin.
+  {
+    TempTree tree;
+    tree.write(".gitmodules",
+               "[submodule \"third_party/openssl\"]\n\tpath = third_party/openssl\n"
+               "\turl = https://github.com/openssl/openssl.git\n");
+    tree.write(".git/config",
+               "[core]\n\trepositoryformatversion = 1\n[extensions]\n\tobjectformat = sha256\n");
+    tree.write(".git/index", gitindex_fixture("v2-sha256.index"));
+    const auto result = submodules::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.size() == 64);
+    BOMWERK_TEST_CHECK(result.value[0].purl ==
+                       "pkg:github/openssl/openssl@" + result.value[0].version);
+  }
+
+  // Given .gitmodules held in memory (parse_bytes, the fuzz entry point), when
+  // parsed, then no index is ever consulted: there is no checkout to read.
+  {
+    const auto result = submodules::parse_bytes(kZlibGitmodules);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    BOMWERK_TEST_CHECK(count_code(result, bomwerk::core::WarningCode::kSubmoduleNotInitialized) ==
+                       1);
   }
 
   std::puts("test_submodules: OK");

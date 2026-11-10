@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace bomwerk::binscan
+namespace bomwerk::core
 {
 
 /// Bits in a byte, named so the shift assembling a multi-byte field below
@@ -36,13 +36,14 @@ enum class IntegerWidth : std::size_t
 
 /// A read-only cursor over an in-memory image of an untrusted file.
 ///
-/// This is the whole memory-safety story of `binscan`, deliberately confined
-/// to one small type so it can be reviewed once and relied on above. Every
+/// This is the whole memory-safety story of every binary format bomwerk reads
+/// (`binscan`'s ELF and `ar` walks, the git index), deliberately confined to
+/// one small type so it can be reviewed once and relied on above. Every
 /// accessor is bounds-checked and returns `std::nullopt` past the end, so the
-/// ELF and `ar` walks built on it contain no bounds arithmetic of their own :
+/// format readers built on it contain no bounds arithmetic of their own:
 /// there is no operation here that can index out of range, and therefore no
-/// path through the format readers that can (rule 1). Nothing throws, so the
-/// module needs no `try`/`catch` anywhere.
+/// path through those readers that can (rule 1). Nothing throws, so they need
+/// no `try`/`catch` anywhere.
 ///
 /// Defined entirely in the header on purpose: one call happens per field, and
 /// a large binary has millions of fields, so these must inline.
@@ -91,6 +92,19 @@ class ByteCursor
                << (kBitsPerByte * byte_index);
     }
     return value;
+  }
+
+  /// The `length` raw bytes at `offset`, or nothing when they do not fit. For a
+  /// fixed-size field that is not an integer: a magic signature, an object id.
+  /// The returned view points into the image and is only valid while it is.
+  [[nodiscard]] std::optional<std::span<const std::byte>> bytes_at(std::size_t offset,
+                                                                   std::size_t length) const
+  {
+    if (!has_range(offset, length))
+    {
+      return std::nullopt;
+    }
+    return bytes_.subspan(offset, length);
   }
 
   /// The NUL-terminated string starting at `offset`, capped at `max_length`
@@ -154,4 +168,4 @@ class ByteCursor
   return std::span<const std::byte>(reinterpret_cast<const std::byte*>(bytes.data()), bytes.size());
 }
 
-}  // namespace bomwerk::binscan
+}  // namespace bomwerk::core

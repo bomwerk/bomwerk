@@ -33,7 +33,8 @@ merged, however useful it is otherwise.
    on hostile input.** Return `Result<T>` with warnings. Partial output beats no
    output.
 2. **Exit codes are a contract:** `0` clean, `1` completed with warnings, `2`
-   incomplete. Lockfile budget exhaustion writes partial artifacts and then
+   incomplete. An informational warning code (`counts_toward_exit == false`,
+   see `docs/warning-codes.md`) does not count as a warning here. Lockfile budget exhaustion writes partial artifacts and then
    exits 2. Exit codes come from `core/exit_codes.hpp`; never write a literal
    0/1/2.
 3. **Deterministic output.** Sort every collection, emit canonical JSON with
@@ -71,8 +72,9 @@ Result<std::vector<Component>> parse(const fs::path& root);
 include `observe` even by accident: `observe::collect_build_artifacts` turns a
 trace into those paths and `cli` hands them over. It deliberately carries no
 third-party binary-format library: bomwerk scans itself, so every dependency
-is also a component in our own SBOM, and `byte_cursor.hpp` bounds-checks the
-whole surface in one reviewable place.
+is also a component in our own SBOM, and `core/byte_cursor.hpp` bounds-checks
+the whole surface in one reviewable place. The git index reader in `core` uses
+the same cursor, so every binary format bomwerk reads goes through it.
 
 `sbom` (the SBOM readers, the inverse of `output`'s writers) includes only
 `core`, the same as `output` and `vuln`.

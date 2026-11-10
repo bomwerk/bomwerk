@@ -71,6 +71,10 @@ enum class WarningCode
   kSubmoduleUnsafePath,
   kSubmoduleNotInitialized,
   kSubmoduleNoUrl,
+  kSubmoduleCommitFromIndex,  ///< informational: the version is the superproject's gitlink
+                              ///< pin, read from `.git/index`; the contents are not checked out
+  kGitIndexUnreadable,        ///< `.git/index` refused: oversized, unknown version, split
+                              ///< index, or structurally inconsistent
 
   // --- observe (build-trace capture; Hard Rule 6 sign-off given for this migration) --
   kObserveTraceNotWritten,
@@ -137,10 +141,18 @@ enum class WarningCode
 /// `--warnings` manifests (e.g. "BW-CORE-004"), and a short title for documentation. Never
 /// throws; every `WarningCode` value has an entry (enforced by a unit test, not just this
 /// comment).
+///
+/// `counts_toward_exit` is true for almost every code: a warning means the run is degraded
+/// (exit 1, docs/CONTRIBUTING.md hard rule 2). An INFORMATIONAL code sets it to false: the
+/// output is complete and exact, but the operator should still know something about how it
+/// was obtained. Such a warning is still logged and collected into every artifact; it only
+/// never marks the run degraded. Making a code informational is a maintainer decision
+/// (hard rule 5), never a way to quiet a real degradation.
 struct WarningCodeInfo
 {
   std::string_view id;
   std::string_view title;
+  bool counts_toward_exit = true;
 };
 
 [[nodiscard]] const WarningCodeInfo& warning_code_info(WarningCode code);

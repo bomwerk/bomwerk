@@ -13,7 +13,7 @@ matches upstream:
 | Ingredient | In the corpus | What bomwerk reports |
 |---|---|---|
 | Vendored library with a CVE | zlib 1.2.11 under `third_party/zlib`, compiled in `config-a` | `pkg:generic/zlib@1.2.11`, Medium. `conanfile.txt` declares zlib **1.3.1**, so both are reported, and only `trim` can tell which one ships |
-| Pinned, forgotten submodule | openssl 3.0.7 at `third_party/openssl` | shallow clone: `pkg:github/openssl/openssl` with no version, `BW-GIT-004`, exit 1; initialized: versioned, exit 0 |
+| Pinned, forgotten submodule | openssl 3.0.7 at `third_party/openssl` | shallow clone (`.git` present, submodule not checked out): `pkg:github/openssl/openssl@<pin>` read from `.git/index`, informational `BW-GIT-006`, exit 0; initialized: versioned, exit 0; exported tree with no `.git` at all: no version, `BW-GIT-004`, exit 1 |
 | Vendor fork | FreeRTOS V11.1.0 with one modified `list.c` | `pkg:generic/freertos@V11.1.0`. A plain scan cannot see the fork; with `--fingerprint-index` the component also carries a count of how many of that directory's files are byte-identical to the pinned release, and `list.c` is not among them. See below |
 | Unused library | stb, referenced by no target in either build | `pkg:generic/stb`, Low; `trim`: UNUSED in both configurations |
 | `#ifdef` variants | presets `config-a` / `config-b` | plain `scan` gives the same answer for both, and `observe` + `trim` give different used-sets |
@@ -28,8 +28,11 @@ static shape and both used-sets are pinned in this repo's `ctest`, and a regress
 red here before the public README goes stale:
 
 - `golden_nightmare-corpus` / `golden_nightmare-submodule-pinned` pin the scan: every
-  identity tier, the two zlibs, the licenses and the CPEs, as the shallow-clone vs
+  identity tier, the two zlibs, the licenses and the CPEs, as the exported-tree vs
   initialized-submodule pair. The trees are miniatures, not copies.
+  `golden_nightmare-shallow-clone` adds the default CI clone between them: `.git`
+  present, openssl never checked out, its pin read from a real `.git/index`. Its
+  snapshot is byte-identical to `nightmare-submodule-pinned`'s.
 - `trim_nightmare_config_a` / `trim_nightmare_config_b` pin the central claim: **one
   source tree, two different used-sets.** The two trees are byte-identical, and the
   traces are the real `bomwerk observe` traces of the corpus, minimized.

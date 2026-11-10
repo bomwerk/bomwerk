@@ -13,7 +13,10 @@ namespace bomwerk::parsers::cpp::submodules
 /// `.gitmodules`, resolves each submodule's pinned commit by READING git's ref
 /// files: `.git` -> gitdir -> `HEAD` -> `refs/…`/`packed-refs`: and returns one
 /// Component per declared submodule with a `pkg:github|gitlab|bitbucket|generic`
-/// purl. It never runs `git` (a subprocess would honor the scanned repo's own
+/// purl. A submodule that was never checked out (a default CI clone) takes the
+/// commit its superproject pins for it, read from the gitlink in `.git/index`
+/// (`core::read_git_index_gitlinks`), and raises the informational BW-GIT-006
+/// instead of BW-GIT-004. It never runs `git` (a subprocess would honor the scanned repo's own
 /// config and is a remote-code-execution vector on untrusted code: see the
 /// engineering ADR) and never throws (rule 1): a hostile or partial
 /// `.gitmodules` yields warnings plus whatever resolved cleanly.

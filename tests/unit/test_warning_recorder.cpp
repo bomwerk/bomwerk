@@ -74,6 +74,36 @@ int main()
                        1);  // suppression hides degrade, not the record
   }
 
+  // Given an informational code (BW-GIT-006: a submodule versioned from the superproject
+  // index), when it is recorded with no suppression entries, then it is collected like any
+  // warning but the run stays clean: its output is complete, so it never costs exit 1.
+  {
+    cli::WarningRecorder recorder;
+    recorder.record(core::WarningCode::kSubmoduleCommitFromIndex, "versioned from the index");
+    BOMWERK_TEST_CHECK(!recorder.degraded());
+    BOMWERK_TEST_CHECK(recorder.collected().size() == 1);
+  }
+
+  // Given an informational code followed by a degrading one, when both are recorded, then
+  // the run degrades: an informational code never masks a real degradation recorded later.
+  {
+    cli::WarningRecorder recorder;
+    recorder.record(core::WarningCode::kSubmoduleCommitFromIndex, "versioned from the index");
+    recorder.record(core::WarningCode::kGitIndexUnreadable, "index refused");
+    BOMWERK_TEST_CHECK(recorder.degraded());
+    BOMWERK_TEST_CHECK(recorder.collected().size() == 2);
+  }
+
+  // Given an external code a composed module declares informational, when recorded, then
+  // it leaves the run clean too: the weight travels with WarningCodeInfo, not the enum.
+  {
+    static constexpr core::WarningCodeInfo kExternalInformational{
+        "BW-EXT-TEST-002", "External informational cause", false};
+    cli::WarningRecorder recorder;
+    recorder.record(kExternalInformational, "informational from a composed module");
+    BOMWERK_TEST_CHECK(!recorder.degraded());
+  }
+
   std::puts("test_warning_recorder: OK");
   return 0;
 }

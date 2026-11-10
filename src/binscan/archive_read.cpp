@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 
-#include "binscan/byte_cursor.hpp"
+#include "core/byte_cursor.hpp"
 #include "core/file_io.hpp"
 #include "core/text.hpp"
 #include "core/warning_code.hpp"
@@ -16,6 +16,12 @@ namespace bomwerk::binscan
 {
 namespace
 {
+
+// The bounds-checked cursor lives in core, shared with the git index reader.
+using core::as_image;
+using core::ByteCursor;
+using core::ByteOrder;
+using core::IntegerWidth;
 
 // --- Format constants (`ar`, both dialects) ---------------------------------
 
