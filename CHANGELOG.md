@@ -157,6 +157,8 @@ contained the paid extension's source.
   `macos-15`, and Apple links no longer warn about the repeated core library (#6).
 
 ### Fixed
+- A `package-lock.json` entry whose `link` or `dev` field is present but not a boolean (for example `"link": "some-string"`) no longer crashes `scan`: both are now treated as absent instead of throwing `nlohmann::json::type_error`. Found by fuzzing (T40).
+- A `bomwerk.toml` `[scan].max_packages` far outside `int64_t`'s range (a float like `8.9e87`) no longer triggers undefined behavior while being rejected; it is read with `value_exact<int64_t>()`, which only accepts a real TOML integer node, so it lands in the existing "must be an integer" warning instead of toml++'s float-to-int conversion. Found by fuzzing (T40).
 - `scan` now reports an incomplete result when the directory walk stops early on a repository whose only manifests are CMake or Conan files, as it already did for every other ecosystem (T40).
 - A Python requirement or lock entry whose name is only separators (`_`, `._.`, `..-`) is skipped instead of producing a purl with no name (`pkg:pypi/`). Found by fuzzing (T40).
 - A vendored version macro holding an empty string (`#define ZLIB_VERSION ""`) is no longer reported as a match with an empty version; a later real definition of the same macro still counts. Found by fuzzing (T40).

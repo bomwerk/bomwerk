@@ -162,7 +162,21 @@ int main()
   // repository-config ceiling for max_packages, when loaded, then each value
   // warns and is ignored so the caller retains its trusted default.
   {
-    const std::vector<std::string> invalid_max_packages_values{"\"many\"", "0", "-1", "100001"};
+    // "5.0" and the oversized float probe `value<int64_t>()`'s float-to-int
+    // conversion: toml++ 3.4.0 runs `static_cast<int64_t>(double)` before
+    // range-checking a float, undefined behavior once the double is this far
+    // outside int64_t's range (`value.hpp:1141`). `value_exact<int64_t>()`
+    // only accepts a real TOML integer node, so every float here, whole or
+    // not, lands in this same "must be an integer" warning without the UB
+    // cast. Found by fuzzing (T40).
+    const std::vector<std::string> invalid_max_packages_values{
+        "\"many\"",
+        "0",
+        "-1",
+        "100001",
+        "5.0",
+        "88888888888888888888888888888888888888888888888888888888888888888888888888888888888888"
+        "0.551"};
     for (const std::string& configured_value : invalid_max_packages_values)
     {
       TempTree tree;
