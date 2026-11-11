@@ -203,5 +203,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y clang-format
-      - run: ./scripts/check-format.sh clang-format
+      # The ubuntu-24.04 runner image ships clang-format-18 preinstalled
+      # (actions/runner-images), so prefer it and skip apt-get entirely: a
+      # resolver outage on the Ubuntu/Azure apt mirror can otherwise fail
+      # this job, and only this job, on every pull request, since it is the
+      # one package here actually fetched over the network rather than
+      # already present on the image. Only fall back to installing the
+      # distribution's clang-format package if a future image drops it.
+      - name: Locate clang-format, installing it only if the image lacks it
+        run: |
+          if command -v clang-format-18 >/dev/null 2>&1; then
+            echo "CF=clang-format-18" >> "$GITHUB_ENV"
+          elif command -v clang-format >/dev/null 2>&1; then
+            echo "CF=clang-format" >> "$GITHUB_ENV"
+          else
+            sudo apt-get update && sudo apt-get install -y clang-format
+            echo "CF=clang-format" >> "$GITHUB_ENV"
+          fi
+      - run: ./scripts/check-format.sh "$CF"
