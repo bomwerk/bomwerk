@@ -317,8 +317,6 @@ BOMWERK_SIMPLE_CONTRACT(MavenPom, parsers::lockfiles::maven, "pom.xml",
                         "golden/maven-pom/tree/pom.xml");
 BOMWERK_SIMPLE_CONTRACT(Gradle, parsers::lockfiles::maven, "gradle.lockfile",
                         "golden/gradle-lockfile/tree/gradle.lockfile");
-BOMWERK_SIMPLE_CONTRACT(Npm, parsers::lockfiles::npm, "package-lock.json",
-                        "golden/npm-lockfile/tree/package-lock.json");
 BOMWERK_SIMPLE_CONTRACT(NugetLock, parsers::lockfiles::nuget, "packages.lock.json",
                         "golden/nuget-lock/tree/packages.lock.json");
 BOMWERK_SIMPLE_CONTRACT(NugetCsproj, parsers::lockfiles::nuget, "MyApp.csproj",
@@ -357,6 +355,9 @@ BOMWERK_SIMPLE_CONTRACT(Pub, parsers::lockfiles::pub, "pubspec.lock",
 
 // clang-format on
 
+BOMWERK_HOSTILE_CONTRACT(Npm, parsers::lockfiles::npm, "package-lock.json",
+                         "golden/npm-lockfile/tree/package-lock.json", "npm/hostile",
+                         "package-lock.json");
 BOMWERK_HOSTILE_CONTRACT(PythonUv, parsers::lockfiles::python, "uv.lock",
                          "golden/python-uv/tree/uv.lock", "python/hostile", "uv.lock");
 BOMWERK_HOSTILE_CONTRACT(PythonPoetry, parsers::lockfiles::python, "poetry.lock",

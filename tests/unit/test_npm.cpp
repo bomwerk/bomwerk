@@ -106,6 +106,33 @@ int main()
                        std::string::npos);
   }
 
+  // Given a `link` or `dev` field present with a non-boolean type, when
+  // parsed, then it is treated as absent rather than crashing: `entry.value(
+  // "link", false)` throws `nlohmann::json::type_error` on a present,
+  // wrong-typed key, not only an absent one. Found by fuzzing (T40).
+  {
+    TempTree tree;
+    tree.write("package-lock.json", R"({
+      "lockfileVersion": 3,
+      "packages": {
+        "": { "name": "monorepo" },
+        "node_modules/link-string": { "version": "1.0.0", "link": "not-a-boolean" },
+        "node_modules/dev-string": { "version": "2.0.0", "dev": "not-a-boolean" }
+      }
+    })");
+
+    const Result<std::vector<Component>> result = npm_parser::parse(tree.root());
+    BOMWERK_TEST_CHECK(result.complete);
+    // Neither field's wrong type crashed the parse: both entries are real
+    // dependencies, `link-string` is NOT dropped as a workspace link, and
+    // `dev-string`'s scope is NOT set from a value that isn't a boolean.
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:npm/dev-string@2.0.0");
+    BOMWERK_TEST_CHECK(result.value[0].scope == Scope::Required);
+    BOMWERK_TEST_CHECK(result.value[1].purl == "pkg:npm/link-string@1.0.0");
+    BOMWERK_TEST_CHECK(result.value[1].scope == Scope::Required);
+  }
+
   // Given an npm <7 lockfile (lockfileVersion 1, nested dependencies tree),
   // when parsed, then no components are guessed and ONE clear warning asks for
   // a regenerate: the exit-1 path, never silence.

@@ -67,6 +67,18 @@ std::string npm_supplier_from_package_name(const std::string& package_name)
   return {};
 }
 
+/// `object.value(key, false)`, but a `key` present with a non-boolean type is
+/// treated as absent (`false`) instead of throwing: nlohmann's own
+/// `value(key, default)` only falls back to `default` when `key` is
+/// missing, and still calls `get<bool>()` when it is present with the wrong
+/// type, which throws `type_error.302`. Found by fuzzing a `package-lock.json`
+/// with `"link": "<string>"` (T40).
+bool bool_field_or_false(const nlohmann::json& object, const char* key)
+{
+  const auto field = object.find(key);
+  return field != object.end() && field->is_boolean() && field->get<bool>();
+}
+
 /// Build the `pkg:npm` purl. A scoped name `@scope/name` keeps the scope as
 /// the purl namespace with the `@` percent-encoded (`pkg:npm/%40scope/name`).
 std::string build_npm_purl(const std::string& package_name, const std::string& version)
@@ -146,7 +158,7 @@ void parse_package_lock(const std::string& bytes, const std::string& label,
       ++skipped_versionless_count;
       continue;
     }
-    if (entry.value("link", false))
+    if (bool_field_or_false(entry, "link"))
     {
       ++skipped_versionless_count;  // workspace symlink: the target is first-party
       continue;
@@ -180,7 +192,7 @@ void parse_package_lock(const std::string& bytes, const std::string& label,
     component.version = core::trimmed(entry_version_iterator->get<std::string>());
     component.purl = build_npm_purl(component.name, component.version);
     component.supplier = npm_supplier_from_package_name(component.name);
-    if (entry.value("dev", false))
+    if (bool_field_or_false(entry, "dev"))
     {
       component.scope = core::Scope::Excluded;  // the lockfile itself says dev-only
     }

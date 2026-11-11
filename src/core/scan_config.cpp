@@ -102,7 +102,13 @@ std::optional<std::size_t> read_package_limit(const toml::table& table, const fs
   {
     return std::nullopt;
   }
-  const std::optional<std::int64_t> value = node->value<std::int64_t>();
+  // `value<int64_t>()` also converts a TOML float, and toml++ 3.4.0 does that
+  // by running `static_cast<int64_t>(double)` before range-checking it, which
+  // is undefined behavior for a float far outside int64_t's range. `max_packages`
+  // is never meant to be a float, so `value_exact` (real integer nodes only)
+  // both avoids the UB and rejects the input the same "must be an integer" way.
+  // Found by fuzzing a config with `max_packages = 8.9e87` (T40).
+  const std::optional<std::int64_t> value = node->value_exact<std::int64_t>();
   if (!value || *value < 1 ||
       static_cast<std::uint64_t>(*value) > kMaxConfiguredPackagesPerEcosystem)
   {

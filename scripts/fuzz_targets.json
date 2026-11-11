@@ -286,6 +286,7 @@
         "bomwerk_parsers"
       ],
       "seed_paths": [
+        "fixtures/npm",
         "fixtures/golden"
       ],
       "seed_suffixes": [
@@ -605,6 +606,7 @@
       "source": "fuzz_scan_config.cpp",
       "libraries": [],
       "seed_paths": [
+        "fixtures/scan_config",
         "fixtures/golden"
       ],
       "seed_suffixes": [
