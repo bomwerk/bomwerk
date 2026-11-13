@@ -13,6 +13,23 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- The NVD CPE fallback (`vuln::match_via_cpe`) takes an optional stop
+  predicate, `NvdOptions::should_stop`, so a long-running caller can shut down
+  during NVD's rate-limit waits. It is asked before each request and every
+  250 ms of the wait; once it says stop, no further request is sent and the
+  CPEs not yet fetched are answered from stale cache or reported unchecked.
+  The wait before a request is never shortened. `scan` does not set it and
+  behaves as before. `vuln::nvd_request_interval` and
+  `vuln::wait_for_nvd_interval` expose the same spacing and wait to a caller
+  that makes several lookups.
+- `vuln::MatchOutcome::unresolved_purls` lists the purls the OSV pass queried
+  but could not answer at all (fetch failed, a page of a long advisory list
+  failed, or `--offline` with nothing cached), so a caller that keeps state
+  between runs can tell "unknown" from "clean". `scan` output is unchanged.
+- `make_curl_http_get` and `make_curl_http_post` take an optional
+  `should_abort` predicate that aborts a request in flight, so a long-running
+  caller can shut down without waiting out the 60 s timeout. `scan` does not
+  set it.
 - `scan` versions a submodule that was never checked out, the shape of every
   default CI clone (`actions/checkout` without `submodules:`). The commit the
   superproject pins for it is read from the gitlink in `.git/index`, as a

@@ -30,6 +30,11 @@ inline constexpr const char* kNvdApiKeyEnvironmentVariable = "BOMWERK_NVD_API_KE
 inline constexpr std::chrono::milliseconds kNvdIntervalWithoutApiKey(6000);
 inline constexpr std::chrono::milliseconds kNvdIntervalWithApiKey(700);
 
+/// Longest single sleep while `NvdOptions::should_stop` is set: the throttle
+/// wait is cut into slices this long, so a stop is seen within one slice
+/// rather than after the whole interval.
+inline constexpr std::chrono::milliseconds kNvdStopCheckInterval(250);
+
 /// Advisories requested per query. 2000 is the API's documented maximum and
 /// its default; a wildcard-vendor product query realistically never fills one
 /// page, and `match_via_cpe` warns rather than silently truncating if it does.
@@ -51,7 +56,32 @@ struct NvdOptions
   /// NVD API key; empty means unauthenticated (and eight times slower).
   /// NEVER logged, warned about, or written to any output.
   std::string api_key;
+
+  /// Optional: return true to stop sending requests (a caller shutting down).
+  /// Asked before each request and between `kNvdStopCheckInterval` slices of
+  /// the throttle wait. Once it says stop, no further request is sent; CPEs
+  /// still to fetch are answered from a stale cache entry when one exists and
+  /// otherwise left unchecked, with a warning. Stopping never shortens the
+  /// wait before a request: it only abandons the request. Empty means never
+  /// stop, and the throttle then sleeps the whole interval in one call.
+  std::function<bool()> should_stop;
 };
+
+/// The spacing `match_via_cpe` keeps between two NVD requests under `options`:
+/// `kNvdIntervalWithApiKey` with a key, `kNvdIntervalWithoutApiKey` without.
+[[nodiscard]] std::chrono::milliseconds nvd_request_interval(const NvdOptions& options);
+
+/// Wait out `interval` before an NVD request. With an empty `should_stop` this
+/// is one `sleep_for(interval)`. With one, the wait is cut into
+/// `kNvdStopCheckInterval` slices and the predicate is asked before each slice
+/// and after the last; false means a stop was seen, the rest of the wait is
+/// abandoned, and the caller must not send the request. Exposed so a caller
+/// that makes several `match_via_cpe` calls (one per release, say) can keep
+/// the same spacing between the last request of one call and the first of the
+/// next, which `match_via_cpe` itself cannot see.
+[[nodiscard]] bool wait_for_nvd_interval(
+    std::chrono::milliseconds interval, const std::function<bool()>& should_stop,
+    const std::function<void(std::chrono::milliseconds)>& sleep_for);
 
 /// Match the components OSV structurally cannot check against **NVD's CVE API
 /// 2.0**, using a CPE match string with a wildcard vendor.
@@ -76,7 +106,8 @@ struct NvdOptions
 /// NVD's rate limit is per-key, not per-connection, so issuing them in
 /// parallel would get the caller blocked rather than served. The CLI instead
 /// runs this whole function on its own thread so the waiting overlaps the OSV
-/// path (see cli/scan_command.cpp).
+/// path (see cli/scan_command.cpp). A long-running caller that must be able
+/// to shut down during those waits sets `NvdOptions::should_stop`.
 ///
 /// Counters: this fills `MatchOutcome::cpe_checked_purls` only and leaves
 /// `components_without_osv_coverage` at 0: that number is the OSV pass's fact

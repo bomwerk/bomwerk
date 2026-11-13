@@ -238,6 +238,115 @@ int main()
     BOMWERK_TEST_CHECK(sleeper.last == vuln::kNvdIntervalWithoutApiKey);
   }
 
+  // Given a stop predicate that never fires, when two uncached components are
+  // queried, then the throttle is the same full interval, only cut into
+  // slices no longer than kNvdStopCheckInterval: stopping support never
+  // shortens the wait before a request.
+  {
+    TempTree tree;
+    FakeTransport transport;
+    FakeSleeper sleeper;
+    vuln::NvdOptions options = options_with_cache(tree);
+    int stop_checks = 0;
+    options.should_stop = [&stop_checks]
+    {
+      ++stop_checks;
+      return false;
+    };
+    const std::vector<Component> components = {component_with_purl(kConanZlibPurl),
+                                               component_with_purl("pkg:vcpkg/openssl@3.2.0")};
+
+    const Result<vuln::MatchOutcome> outcome = vuln::match_via_cpe(
+        components, options, transport.as_function(), fixed_clock(kNow), sleeper.as_function());
+
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(transport.call_count == 2);
+    BOMWERK_TEST_CHECK(sleeper.total == vuln::kNvdIntervalWithoutApiKey);
+    BOMWERK_TEST_CHECK(sleeper.call_count ==
+                       vuln::kNvdIntervalWithoutApiKey / vuln::kNvdStopCheckInterval);
+    BOMWERK_TEST_CHECK(sleeper.last <= vuln::kNvdStopCheckInterval);
+    BOMWERK_TEST_CHECK(stop_checks > sleeper.call_count);
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.size() == 2);
+  }
+
+  // Given a stop that arrives during the throttle wait, when the second
+  // request is due, then it is never sent, the wait is abandoned within one
+  // slice, and the component it would have checked is reported unchecked.
+  {
+    TempTree tree;
+    FakeTransport transport;
+    FakeSleeper sleeper;
+    vuln::NvdOptions options = options_with_cache(tree);
+    options.should_stop = [&sleeper] { return sleeper.call_count >= 2; };
+    const std::vector<Component> components = {component_with_purl(kConanZlibPurl),
+                                               component_with_purl("pkg:vcpkg/openssl@3.2.0")};
+
+    const Result<vuln::MatchOutcome> outcome = vuln::match_via_cpe(
+        components, options, transport.as_function(), fixed_clock(kNow), sleeper.as_function());
+
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(transport.call_count == 1);
+    BOMWERK_TEST_CHECK(sleeper.call_count == 2);
+    BOMWERK_TEST_CHECK(sleeper.total < vuln::kNvdIntervalWithoutApiKey);
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.size() == 1);
+    BOMWERK_TEST_CHECK(warnings_mention(outcome.warnings,
+                                        "stopped before querying 1 CPE(s), those components "
+                                        "remain unchecked"));
+  }
+
+  // Given a stop requested before the run starts, when it runs, then no
+  // request is sent, nothing sleeps, and a fresh cache entry still answers
+  // while the uncached component stays unchecked.
+  {
+    TempTree tree;
+    {
+      FakeTransport seed_transport;
+      seed_transport.response_body = kZlibResponse;
+      FakeSleeper seed_sleeper;
+      (void)vuln::match_via_cpe({component_with_purl(kConanZlibPurl)}, options_with_cache(tree),
+                                seed_transport.as_function(), fixed_clock(kNow),
+                                seed_sleeper.as_function());
+    }
+    FakeTransport transport;
+    FakeSleeper sleeper;
+    vuln::NvdOptions options = options_with_cache(tree);
+    options.should_stop = [] { return true; };
+    const std::vector<Component> components = {component_with_purl(kConanZlibPurl),
+                                               component_with_purl("pkg:vcpkg/openssl@3.2.0")};
+
+    const Result<vuln::MatchOutcome> outcome = vuln::match_via_cpe(
+        components, options, transport.as_function(), fixed_clock(kNow), sleeper.as_function());
+
+    BOMWERK_TEST_CHECK(transport.call_count == 0);
+    BOMWERK_TEST_CHECK(sleeper.call_count == 0);
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.front() == kConanZlibPurl);
+    BOMWERK_TEST_CHECK(outcome.value.hits.size() == 1);
+    BOMWERK_TEST_CHECK(warnings_mention(outcome.warnings, "stopped before querying 1 CPE(s)"));
+  }
+
+  // Given the exposed wait helper, when it runs without a stop predicate, then
+  // it is one full sleep; with a predicate that says stop at once, nothing is
+  // slept and it reports the stop; and the interval follows the API key.
+  {
+    FakeSleeper sleeper;
+    BOMWERK_TEST_CHECK(
+        vuln::wait_for_nvd_interval(vuln::kNvdIntervalWithoutApiKey, {}, sleeper.as_function()));
+    BOMWERK_TEST_CHECK(sleeper.call_count == 1);
+    BOMWERK_TEST_CHECK(sleeper.last == vuln::kNvdIntervalWithoutApiKey);
+
+    FakeSleeper stopped_sleeper;
+    BOMWERK_TEST_CHECK(!vuln::wait_for_nvd_interval(
+        vuln::kNvdIntervalWithoutApiKey, [] { return true; }, stopped_sleeper.as_function()));
+    BOMWERK_TEST_CHECK(stopped_sleeper.call_count == 0);
+
+    vuln::NvdOptions keyed;
+    keyed.api_key = "key";
+    BOMWERK_TEST_CHECK(vuln::nvd_request_interval(keyed) == vuln::kNvdIntervalWithApiKey);
+    BOMWERK_TEST_CHECK(vuln::nvd_request_interval(vuln::NvdOptions{}) ==
+                       vuln::kNvdIntervalWithoutApiKey);
+  }
+
   // Given an API key, when components are queried, then it travels in the
   // request header and the faster interval is used: and it appears in NO
   // warning text, because a key leaked into a report is a leaked credential.

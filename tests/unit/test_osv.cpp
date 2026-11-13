@@ -497,6 +497,52 @@ int main()
     BOMWERK_TEST_CHECK(warnings_mention(matches.warnings, "transport unreachable"));
   }
 
+  // Given a fetch that fails (HTTP 500 or an unreachable host) and nothing
+  // cached, when matched, then the purl is listed as unresolved, under the
+  // same qualifier-stripped identity a hit would carry, so a caller that keeps
+  // state can tell "unknown" from "clean". A success lists nothing, and a
+  // stale cache entry that stands in for a failed fetch is an answer, not a
+  // hole.
+  {
+    TempTree tree;
+    FakeTransport transport;
+    transport.status_code = 500;
+    const std::vector<Component> components{
+        component_with_purl(std::string(kEcosystemPurl) + "?arch=x86_64"),
+        component_with_purl("pkg:npm/other-lib@2.0.0")};
+    const auto matches = vuln::match_components(components, options_with_cache(tree),
+                                                transport.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(matches.value.unresolved_purls ==
+                       (std::vector<std::string>{kEcosystemPurl, "pkg:npm/other-lib@2.0.0"}));
+  }
+  {
+    TempTree tree;
+    FakeTransport transport;
+    transport.response_body = kEcosystemResponse;
+    const std::vector<Component> components{component_with_purl(kEcosystemPurl)};
+    const auto matches = vuln::match_components(components, options_with_cache(tree),
+                                                transport.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(matches.value.unresolved_purls.empty());
+
+    FakeTransport failing_transport;
+    failing_transport.status_code = 0;
+    const auto stale = vuln::match_components(components, options_with_cache(tree),
+                                              failing_transport.as_function(),
+                                              fixed_clock(kNow + 2 * kOneDaySeconds));
+    BOMWERK_TEST_CHECK(stale.value.unresolved_purls.empty());
+    BOMWERK_TEST_CHECK(stale.value.hits.size() == 1);
+  }
+  {
+    TempTree tree;
+    FakeTransport transport;
+    vuln::MatchOptions options = options_with_cache(tree);
+    options.offline = true;
+    const std::vector<Component> components{component_with_purl(kEcosystemPurl)};
+    const auto matches =
+        vuln::match_components(components, options, transport.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(matches.value.unresolved_purls == std::vector<std::string>{kEcosystemPurl});
+  }
+
   // Given a body that is not JSON, when matched, then the batch is discarded
   // with a warning: a hostile feed can degrade the run, never break it.
   {
@@ -889,6 +935,12 @@ int main()
                                                   truncated_transport.as_function(),
                                                   fixed_clock(kNow + kOneDaySeconds + 1));
     BOMWERK_TEST_CHECK(warnings_mention(truncated.warnings, "did not complete"));
+    // A cut-short advisory list is not an answer: the purl is listed as
+    // unresolved so a stateful caller does not read missing advisories as
+    // fixed, while page one's hit is still reported.
+    BOMWERK_TEST_CHECK(truncated.value.unresolved_purls ==
+                       std::vector<std::string>{kEcosystemPurl});
+    BOMWERK_TEST_CHECK(truncated.value.hits.size() == 1);
     // The bug this guards against: CVE-2000-0002 must not appear as removed
     // anywhere in this run's deltas: after clearing a truncated answer's
     // spurious removals, the only observed advisory (CVE-2000-0001) still

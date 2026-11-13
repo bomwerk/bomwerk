@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <string>
 
 #include "vuln/http.hpp"
@@ -22,7 +23,15 @@ namespace bomwerk::vuln
 /// A URL outside `vuln/endpoints.hpp`'s registry is REFUSED before any socket
 /// opens: the enforcement point for the pinned-host allowlist that is the
 /// control against feed spoofing.
-[[nodiscard]] HttpPostFunction make_curl_http_post(std::string user_agent);
+///
+/// `should_abort` (optional): asked about once a second or more often while a
+/// request is in flight, including during DNS and connect. Returning true
+/// aborts the transfer, reported like any transport failure (`status_code ==
+/// 0` plus a warning). For a long-running caller that must be able to shut
+/// down without waiting out the 60 s request timeout. It may be called from
+/// several threads at once and must not throw.
+[[nodiscard]] HttpPostFunction make_curl_http_post(std::string user_agent,
+                                                   std::function<bool()> should_abort = {});
 
 /// Build the production `HttpGetFunction` backed by libcurl (NVD's CVE
 /// API 2.0 is a GET whose parameters live in the query string). Identical
@@ -31,6 +40,8 @@ namespace bomwerk::vuln
 ///
 /// `HttpGetRequest::headers` are passed to libcurl verbatim and never logged:
 /// this is the channel an NVD `apiKey` travels on.
-[[nodiscard]] HttpGetFunction make_curl_http_get(std::string user_agent);
+/// `should_abort` is as for `make_curl_http_post`.
+[[nodiscard]] HttpGetFunction make_curl_http_get(std::string user_agent,
+                                                 std::function<bool()> should_abort = {});
 
 }  // namespace bomwerk::vuln
