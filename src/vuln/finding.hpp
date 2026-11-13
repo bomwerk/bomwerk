@@ -133,6 +133,17 @@ struct MatchOutcome
   ///: the same single-source-of-truth shape used for
   /// `ReportContext::components_without_osv_coverage_purls`.
   std::vector<std::string> cpe_checked_purls;
+
+  /// The purls (the same identity as `VulnerabilityHit::purl`: qualifiers and
+  /// subpath stripped) the OSV pass queried but could not answer at all: the
+  /// fetch failed, or `--offline` found nothing cached, and not even a stale
+  /// cache entry stood in, or a purl's advisory list was cut short by a
+  /// failed or exhausted pagination (its first page's hits are still reported). Sorted and
+  /// deduplicated. For these an empty hit list means "unknown", never "clean": a caller that keeps
+  /// state across runs must not treat their absence from `hits` as a fixed vulnerability. A purl
+  /// answered from a stale cache entry is NOT listed: it has an answer, which the run's warnings
+  /// already call out as stale.
+  std::vector<std::string> unresolved_purls;
 };
 
 /// Fold a CPE-fallback outcome into a purl-driven one: hits are concatenated

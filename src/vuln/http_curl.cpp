@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -166,6 +167,36 @@ void apply_shared_request_options(CURL* easy_handle, const std::string& url,
   curl_easy_setopt(easy_handle, CURLOPT_HEADERDATA, &captured_headers);
 }
 
+/// libcurl progress callback: a non-zero return aborts the transfer. Runs
+/// inside libcurl, so nothing may escape it.
+int abort_if_requested(void* user_data, curl_off_t /*download_total*/, curl_off_t /*downloaded*/,
+                       curl_off_t /*upload_total*/, curl_off_t /*uploaded*/)
+{
+  try
+  {
+    const auto* should_abort = static_cast<const std::function<bool()>*>(user_data);
+    return (*should_abort)() ? 1 : 0;
+  }
+  catch (...)
+  {
+    return 0;
+  }
+}
+
+/// Arm `abort_if_requested` on `easy_handle` when the caller supplied a
+/// predicate. `should_abort` must outlive the transfer (it is a member of the
+/// transport closure, which does).
+void arm_abort_callback(CURL* easy_handle, const std::function<bool()>& should_abort)
+{
+  if (!should_abort)
+  {
+    return;
+  }
+  curl_easy_setopt(easy_handle, CURLOPT_NOPROGRESS, 0L);
+  curl_easy_setopt(easy_handle, CURLOPT_XFERINFOFUNCTION, abort_if_requested);
+  curl_easy_setopt(easy_handle, CURLOPT_XFERINFODATA, &should_abort);
+}
+
 /// Refuse a URL that is not in `vuln/endpoints.hpp`'s registry BEFORE any
 /// socket opens. The pinned-host allowlist is the control against feed
 /// spoofing; enforcing it here rather than trusting each call
@@ -215,10 +246,10 @@ void perform_and_collect(CURL* easy_handle, const std::string& url, const char* 
 
 }  // namespace
 
-HttpPostFunction make_curl_http_post(std::string user_agent)
+HttpPostFunction make_curl_http_post(std::string user_agent, std::function<bool()> should_abort)
 {
-  return
-      [user_agent = std::move(user_agent)](const HttpRequest& request) -> core::Result<HttpResponse>
+  return [user_agent = std::move(user_agent), should_abort = std::move(should_abort)](
+             const HttpRequest& request) -> core::Result<HttpResponse>
   {
     core::Result<HttpResponse> result;
     if (reject_unless_allowlisted(request.url, "POST", result))
@@ -242,6 +273,7 @@ HttpPostFunction make_curl_http_post(std::string user_agent)
     CapturedResponseHeaders captured_headers;
     apply_shared_request_options(easy_handle.get(), request.url, user_agent, request_headers.get(),
                                  response_body, captured_headers);
+    arm_abort_callback(easy_handle.get(), should_abort);
     curl_easy_setopt(easy_handle.get(), CURLOPT_POSTFIELDSIZE,
                      static_cast<long>(request.body.size()));
     curl_easy_setopt(easy_handle.get(), CURLOPT_COPYPOSTFIELDS, request.body.c_str());
@@ -252,10 +284,10 @@ HttpPostFunction make_curl_http_post(std::string user_agent)
   };
 }
 
-HttpGetFunction make_curl_http_get(std::string user_agent)
+HttpGetFunction make_curl_http_get(std::string user_agent, std::function<bool()> should_abort)
 {
-  return [user_agent =
-              std::move(user_agent)](const HttpGetRequest& request) -> core::Result<HttpResponse>
+  return [user_agent = std::move(user_agent), should_abort = std::move(should_abort)](
+             const HttpGetRequest& request) -> core::Result<HttpResponse>
   {
     core::Result<HttpResponse> result;
     if (reject_unless_allowlisted(request.url, "GET", result))
@@ -294,6 +326,7 @@ HttpGetFunction make_curl_http_get(std::string user_agent)
     CapturedResponseHeaders captured_headers;
     apply_shared_request_options(easy_handle.get(), request.url, user_agent, request_headers.get(),
                                  response_body, captured_headers);
+    arm_abort_callback(easy_handle.get(), should_abort);
     curl_easy_setopt(easy_handle.get(), CURLOPT_HTTPGET, 1L);
 
     perform_and_collect(easy_handle.get(), request.url, "GET", response_body, captured_headers,

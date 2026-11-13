@@ -149,6 +149,19 @@ int main()
     BOMWERK_TEST_CHECK(merged.deltas.purls_unchanged == 2);
   }
 
+  // Given unresolved purls on either side, when merged, then both are kept,
+  // sorted and deduplicated.
+  {
+    MatchOutcome purl_outcome;
+    purl_outcome.unresolved_purls = {"pkg:npm/b@1.0", "pkg:npm/a@1.0"};
+    MatchOutcome cpe_outcome;
+    cpe_outcome.unresolved_purls = {"pkg:npm/b@1.0", "pkg:npm/c@1.0"};
+    const MatchOutcome merged = merge_outcomes(purl_outcome, cpe_outcome);
+    BOMWERK_TEST_CHECK(
+        merged.unresolved_purls ==
+        (std::vector<std::string>{"pkg:npm/a@1.0", "pkg:npm/b@1.0", "pkg:npm/c@1.0"}));
+  }
+
   // Given two outcomes with default (empty) deltas, when merged, then the
   // merged deltas stay empty: the earlier shape this function already
   // handled correctly, unaffected by the folding logic added alongside it.

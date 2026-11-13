@@ -114,6 +114,16 @@ MatchOutcome merge_outcomes(MatchOutcome purl_outcome, MatchOutcome cpe_outcome)
   merged.cpe_checked_purls.erase(
       std::unique(merged.cpe_checked_purls.begin(), merged.cpe_checked_purls.end()),
       merged.cpe_checked_purls.end());
+  // The OSV pass owns `unresolved_purls`; folding both sides keeps this
+  // correct whichever outcome carries them.
+  for (std::string& unresolved_purl : cpe_outcome.unresolved_purls)
+  {
+    merged.unresolved_purls.push_back(std::move(unresolved_purl));
+  }
+  std::sort(merged.unresolved_purls.begin(), merged.unresolved_purls.end());
+  merged.unresolved_purls.erase(
+      std::unique(merged.unresolved_purls.begin(), merged.unresolved_purls.end()),
+      merged.unresolved_purls.end());
   return merged;
 }
 

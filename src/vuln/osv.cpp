@@ -526,6 +526,9 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
   const std::size_t fresh_cache_count = payload_by_purl.size();
   std::size_t fetched_purl_count = 0;
   std::set<std::string> freshly_fetched_purls;
+  // Query purls no answer (fresh, fetched or stale) exists for: reported on
+  // the outcome so a stateful caller can tell "unknown" from "clean".
+  std::vector<std::string> unresolved_query_purls;
 
   if (options.offline)
   {
@@ -545,8 +548,10 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
       else
       {
         ++missing_count;
+        unresolved_query_purls.push_back(purl);
       }
     }
+    result.value.unresolved_purls = unresolved_query_purls;  // already in query-purl order
     if (stale_used_count > 0)
     {
       result.warn(core::WarningCode::kVulnCoverageIncomplete,
@@ -684,8 +689,10 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
       else
       {
         ++unresolved_count;
+        unresolved_query_purls.push_back(purl);
       }
     }
+    result.value.unresolved_purls = unresolved_query_purls;  // already in query-purl order
     if (stale_fallback_count > 0)
     {
       result.warn(core::WarningCode::kVulnCoverageIncomplete,
@@ -816,6 +823,18 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     }
     if (!incomplete_pagination_purls.empty())
     {
+      // A partial advisory list is not an answer a stateful caller may read
+      // absence from: list these purls as unresolved too (page one's hits are
+      // still reported).
+      for (const std::string& purl : incomplete_pagination_purls)
+      {
+        unresolved_query_purls.push_back(purl);
+      }
+      std::sort(unresolved_query_purls.begin(), unresolved_query_purls.end());
+      unresolved_query_purls.erase(
+          std::unique(unresolved_query_purls.begin(), unresolved_query_purls.end()),
+          unresolved_query_purls.end());
+      result.value.unresolved_purls = unresolved_query_purls;
       result.warn(core::WarningCode::kVulnCoverageIncomplete,
                   "OSV pagination did not complete within " +
                       std::to_string(kMaxOsvPaginationRounds) + " round(s) for " +

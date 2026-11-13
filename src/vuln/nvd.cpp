@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -189,7 +190,41 @@ void finalize_advisories(std::vector<core::ScoredAdvisory>& advisories)
   advisories.erase(duplicate_begin, advisories.end());
 }
 
+/// True when the caller supplied a stop predicate and it says stop now.
+bool stop_requested(const NvdOptions& options)
+{
+  return options.should_stop && options.should_stop();
+}
+
 }  // namespace
+
+std::chrono::milliseconds nvd_request_interval(const NvdOptions& options)
+{
+  return options.api_key.empty() ? kNvdIntervalWithoutApiKey : kNvdIntervalWithApiKey;
+}
+
+bool wait_for_nvd_interval(std::chrono::milliseconds interval,
+                           const std::function<bool()>& should_stop,
+                           const std::function<void(std::chrono::milliseconds)>& sleep_for)
+{
+  if (!should_stop)
+  {
+    sleep_for(interval);
+    return true;
+  }
+  std::chrono::milliseconds remaining = interval;
+  while (remaining.count() > 0)
+  {
+    if (should_stop())
+    {
+      return false;
+    }
+    const std::chrono::milliseconds slice = std::min(remaining, kNvdStopCheckInterval);
+    sleep_for(slice);
+    remaining -= slice;
+  }
+  return !should_stop();
+}
 
 NvdCvePayload parse_nvd_cve_payload(const std::string& payload)
 {
@@ -260,8 +295,7 @@ core::Result<MatchOutcome> match_via_cpe(
 
   const std::int64_t now = now_epoch_seconds();
   const std::int64_t oldest_fresh_epoch_seconds = now - options.cache_max_age.count();
-  const std::chrono::milliseconds request_interval =
-      options.api_key.empty() ? kNvdIntervalWithoutApiKey : kNvdIntervalWithApiKey;
+  const std::chrono::milliseconds request_interval = nvd_request_interval(options);
 
   std::vector<std::string> request_headers;
   if (!options.api_key.empty())
@@ -275,8 +309,10 @@ core::Result<MatchOutcome> match_via_cpe(
   std::size_t fetched_count = 0;
   std::size_t stale_fallback_count = 0;
   std::size_t unresolved_count = 0;
+  std::size_t not_queried_count = 0;
   bool truncation_warned = false;
   bool has_issued_request = false;
+  bool stopped = false;
 
   // Keyed iteration rather than a structured binding: the purls behind each CPE
   // are irrelevant until the assembly loop below, and one query answers all of
@@ -313,10 +349,24 @@ core::Result<MatchOutcome> match_via_cpe(
     }
 
     // Throttle BETWEEN requests only: the first costs nothing, and a run
-    // answered entirely from cache never sleeps at all.
-    if (has_issued_request)
+    // answered entirely from cache never sleeps at all. A stop seen before or
+    // during the wait abandons this request and every later one; nothing is
+    // ever sent sooner than the interval allows.
+    stopped = stopped || stop_requested(options) ||
+              (has_issued_request &&
+               !wait_for_nvd_interval(request_interval, options.should_stop, sleep_for));
+    if (stopped)
     {
-      sleep_for(request_interval);
+      if (cached_entry.has_value())
+      {
+        payload_by_cpe.insert_or_assign(cpe_match_string, std::move(cached_entry->payload));
+        ++stale_fallback_count;
+      }
+      else
+      {
+        ++not_queried_count;
+      }
+      continue;
     }
     has_issued_request = true;
 
@@ -379,6 +429,12 @@ core::Result<MatchOutcome> match_via_cpe(
   {
     result.warn(core::WarningCode::kVulnCoverageIncomplete,
                 "CPE fallback: no NVD data for " + std::to_string(unresolved_count) +
+                    " CPE(s), those components remain unchecked");
+  }
+  if (not_queried_count > 0)
+  {
+    result.warn(core::WarningCode::kVulnCoverageIncomplete,
+                "CPE fallback: stopped before querying " + std::to_string(not_queried_count) +
                     " CPE(s), those components remain unchecked");
   }
 
