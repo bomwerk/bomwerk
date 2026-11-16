@@ -21,7 +21,12 @@ fixtures.
   the corpus the nightly run saved.
 - **Every night.** `.github/workflows/fuzz-nightly.yml` fuzzes for two hours
   in four parallel shards, minimizes each shard's corpus and saves it for the
-  next night. The goal is a night with all four shards green.
+  next night. The goal is a night with all four shards green. Each
+  minimization is a fresh libFuzzer merge whose control file is deleted
+  afterwards, never cached: a control file kept from the night before makes
+  the merge reuse coverage for inputs it already deleted and fail. A merge that
+  cannot finish keeps the corpus as it was and is a warning in the job
+  summary, not a failure; its `merge.log` is uploaded every night.
 
 Any crash, leak, timeout (one input taking over 10 s) or out-of-memory input
 (over 2 GiB) fails the job; the input is uploaded as a workflow artifact.
