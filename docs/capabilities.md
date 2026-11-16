@@ -59,7 +59,7 @@ one local file and opens no socket, so `--endpoints` is unchanged and
 
 | Capability | Status | Since | Evidence |
 | --- | --- | --- | --- |
-| Prebuilt, signed static binaries (Linux, macOS, Windows) | planned | | Release pipeline not built yet; build from source until then |
+| Prebuilt, signed static binaries (Linux, macOS) | planned | | Release pipeline not built yet; build from source until then. Windows binaries are not planned |
 | `scan --stats` (timings and counts) | planned | | Performance work in progress |
 | `scan --format all` (CycloneDX and SPDX in one run) | planned | | Run `scan` once per format today |
 | Component-to-component dependency edges | planned | | See [Limitations](../README.md#limitations) |
