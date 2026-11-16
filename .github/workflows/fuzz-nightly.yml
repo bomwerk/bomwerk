@@ -70,7 +70,9 @@ jobs:
           --corpus-root .fuzz-corpus --artifacts-dir fuzz-artifacts
           --shard ${{ matrix.shard }}/4 --budget-seconds 7200 --jobs 4
       # Minimized even after a finding, so the saved corpus stays small and
-      # the next night starts from everything this one learned.
+      # the next night starts from everything this one learned. Each merge
+      # starts from scratch; a merge that cannot finish keeps the corpus as it
+      # was and shows as a warning in the summary, without failing the job.
       - name: Minimize the corpus
         if: always()
         run: >
@@ -90,3 +92,12 @@ jobs:
           name: fuzz-nightly-findings-shard${{ matrix.shard }}
           path: fuzz-artifacts/
           retention-days: 30
+      # Every night, green or not: the only record of why a merge warned.
+      - name: Upload merge logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-nightly-merge-logs-shard${{ matrix.shard }}
+          path: fuzz-merge-logs/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -13,7 +13,8 @@ the generated ELF and `ar` seeds), then runs up to --jobs fuzzers at a time, spl
 directory, never in fixtures/: libFuzzer writes every new input into its first
 corpus directory. The exit status is 1 when any target produced a crash-, leak-,
 timeout- or oom- file or ended badly, so CI fails on findings; each finding's input
-is under --artifacts-dir/<target>/.
+is under --artifacts-dir/<target>/. A --merge that cannot finish without a finding is
+a warning: the corpus stays as it was and the exit status is not affected.
 
 Standard library only: CI runs it before any pip install.
 """
@@ -45,6 +46,10 @@ SEED_WRITER = "fuzz_binary_seed_writer"
 # A finding file written during a run is stamped after the run started; the
 # slack absorbs coarse filesystem timestamps, nothing more.
 FINDING_CLOCK_SLACK_SECONDS = 1.0
+# Where merges before T120 left libFuzzer's control file: beside the corpus, so
+# the nightly cache carried it into the next night. Removed on sight.
+LEGACY_MERGE_CONTROL_SUFFIX = ".merge-control"
+MERGE_CONTROL_FILE_NAME = "merge-control.txt"
 
 
 @dataclass
@@ -55,6 +60,7 @@ class TargetOutcome:
     findings: list[str] = field(default_factory=list)
     note: str = ""
     earlier: list[str] = field(default_factory=list)  # finding files left by earlier runs
+    warning: str = ""  # reported in the summary, but does not fail the run
 
     @property
     def failed(self) -> bool:
@@ -201,18 +207,44 @@ def replay_one(target: dict, binary: Path, defaults: dict, repository: Path, cor
                          earlier_findings(artifact_directory, started))
 
 
+def last_log_line(log_path: Path) -> str:
+    """The last non-empty line of a log, as one table-safe line: usually the reason
+    a libFuzzer run stopped."""
+    try:
+        lines = log_path.read_text(errors="replace").splitlines()
+    except OSError:
+        return ""
+    for line in reversed(lines):
+        if line.strip():
+            return line.strip().replace("|", "/")[:200]
+    return ""
+
+
 def merge_one(target: dict, binary: Path, defaults: dict, repository: Path, corpus_directory: Path,
               artifact_directory: Path) -> TargetOutcome:
-    """Minimize the corpus: keep the smallest set of inputs with the same coverage."""
+    """Minimize the corpus: keep the smallest set of inputs with the same coverage.
+
+    Every merge starts from scratch. libFuzzer's control file lets an interrupted
+    merge resume, but one left from an earlier merge makes the next one reuse
+    coverage for inputs that merge already deleted, and for a harness build that
+    no longer exists; when it then keeps such an input it cannot read it and
+    exits 1 (T120). So the file lives in the artifact directory, which is never
+    cached, for the length of one merge only.
+    """
+    legacy_control = corpus_directory.with_name(corpus_directory.name + LEGACY_MERGE_CONTROL_SUFFIX)
+    legacy_control.unlink(missing_ok=True)
+    control = artifact_directory / MERGE_CONTROL_FILE_NAME
+    control.unlink(missing_ok=True)
     merged = corpus_directory.with_name(corpus_directory.name + ".merged")
     shutil.rmtree(merged, ignore_errors=True)
     merged.mkdir(parents=True)
-    command = [str(binary), "-merge=1",
-               f"-merge_control_file={corpus_directory.with_name(corpus_directory.name + '.merge-control')}",
+    command = [str(binary), "-merge=1", f"-merge_control_file={control}",
                *libfuzzer_flags(target, defaults, repository, artifact_directory),
                str(merged), str(corpus_directory)]
     started = time.time() - FINDING_CLOCK_SLACK_SECONDS
-    exit_code, note = run_logged(command, artifact_directory / "merge.log", None)
+    log_path = artifact_directory / "merge.log"
+    exit_code, note = run_logged(command, log_path, None)
+    control.unlink(missing_ok=True)
     if exit_code == 0 and not note and any(merged.iterdir()):
         # Swap through a sibling so the corpus is never absent: an interrupted
         # run leaves either the old corpus or the merged one in place.
@@ -223,8 +255,19 @@ def merge_one(target: dict, binary: Path, defaults: dict, repository: Path, corp
         shutil.rmtree(previous, ignore_errors=True)
     else:
         shutil.rmtree(merged, ignore_errors=True)
-    return TargetOutcome(target["name"], 0, exit_code, findings_in(artifact_directory, started), note,
-                         earlier_findings(artifact_directory, started))
+    findings = findings_in(artifact_directory, started)
+    earlier = earlier_findings(artifact_directory, started)
+    if not findings and (exit_code not in (0, None) or note):
+        # Minimizing is housekeeping. A merge that cannot finish leaves the
+        # corpus exactly as it was, so the next night loses nothing; it is
+        # reported, not failed. An input that crashes, leaks, times out or runs
+        # out of memory during the merge still leaves a finding file and fails.
+        reason = note or f"exit {exit_code}"
+        detail = last_log_line(log_path)
+        return TargetOutcome(target["name"], 0, 0, [], "", earlier,
+                             warning=f"merge {reason}, corpus kept unminimized"
+                                     + (f": {detail}" if detail else ""))
+    return TargetOutcome(target["name"], 0, exit_code, findings, note, earlier)
 
 
 def write_summary(outcomes: list[TargetOutcome], mode: str) -> str:
@@ -236,13 +279,17 @@ def write_summary(outcomes: list[TargetOutcome], mode: str) -> str:
             result = "**" + outcome.note + "**"
         elif outcome.exit_code not in (0, None):
             result = f"**exit {outcome.exit_code}**"
+        elif outcome.warning:
+            result = "warning: " + outcome.warning
         elif outcome.earlier:
             result = "clean (earlier finding files ignored: " + ", ".join(outcome.earlier) + ")"
         else:
             result = "clean"
         lines.append(f"| `{outcome.name}` | {outcome.seconds} | {result} |")
     failed = sum(1 for outcome in outcomes if outcome.failed)
-    lines += ["", f"{len(outcomes)} target(s), {failed} with findings or errors."]
+    warned = sum(1 for outcome in outcomes if outcome.warning and not outcome.failed)
+    lines += ["", f"{len(outcomes)} target(s), {failed} with findings or errors"
+              + (f", {warned} with warnings." if warned else ".")]
     summary = "\n".join(lines) + "\n"
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
@@ -321,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
         for future in concurrent.futures.as_completed(futures):
             outcome = future.result()
             outcomes.append(outcome)
-            state = "FAILED" if outcome.failed else "ok"
+            state = "FAILED" if outcome.failed else "warning" if outcome.warning else "ok"
             print(f"run_fuzz: [{len(outcomes)}/{len(targets)}] {outcome.name} {state}", flush=True)
 
     print(write_summary(outcomes, mode_name))
