@@ -52,7 +52,7 @@
     },
     {
       "bom-ref": "603ab5ae-2f71-542b-9fb8-8ceefcde27b3",
-      "cpe": "cpe:2.3:a:*:freertos:v11.1.0:*:*:*:*:*:*:*",
+      "cpe": "cpe:2.3:a:*:freertos:11.1.0:*:*:*:*:*:*:*",
       "evidence": {
         "occurrences": [
           {

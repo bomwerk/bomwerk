@@ -14,7 +14,7 @@ matches upstream:
 |---|---|---|
 | Vendored library with a CVE | zlib 1.2.11 under `third_party/zlib`, compiled in `config-a` | `pkg:generic/zlib@1.2.11`, Medium. `conanfile.txt` declares zlib **1.3.1**, so both are reported, and only `trim` can tell which one ships |
 | Pinned, forgotten submodule | openssl 3.0.7 at `third_party/openssl` | shallow clone (`.git` present, submodule not checked out): `pkg:github/openssl/openssl@<pin>` read from `.git/index`, informational `BW-GIT-006`, exit 0; initialized: versioned, exit 0; exported tree with no `.git` at all: no version, `BW-GIT-004`, exit 1 |
-| Vendor fork | FreeRTOS V11.1.0 with one modified `list.c` | `pkg:generic/freertos@V11.1.0`. A plain scan cannot see the fork; with `--fingerprint-index` the component also carries a count of how many of that directory's files are byte-identical to the pinned release, and `list.c` is not among them. See below |
+| Vendor fork | FreeRTOS V11.1.0 with one modified `list.c` | `pkg:generic/freertos@V11.1.0`, with CPE `cpe:2.3:a:*:freertos:11.1.0` (the `V` dropped, as NVD files it). A plain scan cannot see the fork; with `--fingerprint-index` the component also carries a count of how many of that directory's files are byte-identical to the pinned release, and `list.c` is not among them. See below |
 | Unused library | stb, referenced by no target in either build | `pkg:generic/stb`, Low; `trim`: UNUSED in both configurations |
 | `#ifdef` variants | presets `config-a` / `config-b` | plain `scan` gives the same answer for both, and `observe` + `trim` give different used-sets |
 | Prebuilt static library, quoted version header | SQLite 3.41.2 as `sqlite3.h` + `libsqlite3.a` under `third_party/sqlite-prebuilt`, linked in `config-a` | `pkg:generic/sqlite3@3.41.2`, Medium, no license (public-domain blessing); `trim`: used (1 link input) in `config-a`, UNUSED in `config-b` |
@@ -79,10 +79,6 @@ Published on purpose. A torture test whose author scores 5/5 is a brochure.
   That is the ingredient, not the conclusion. Nothing yet says "this library is
   modified", and a gap that needs a flag and a corpus you build yourself is not a closed
   gap.
-- **A leading `v` breaks CPE matching.** `V11.1.0` synthesizes
-  `cpe:2.3:a:*:freertos:v11.1.0`, while NVD files `11.1.0`. The same applies to `pkg:golang`
-  under `--all-cpes`. The golden snapshot pins the current behavior, so the fix will
-  show up as an intended diff.
 - **Dual licenses are flattened.** stb is *MIT **or** Unlicense*; the first-match
   license recognizer reports `MIT` only.
 - **A version split across several macros is read only for listed libraries.** cJSON

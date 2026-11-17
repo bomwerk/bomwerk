@@ -123,6 +123,30 @@ int main()
     BOMWERK_TEST_CHECK(builds_to("pkg:generic/my_lib@2.0", "cpe:2.3:a:*:my_lib:2.0"));
   }
 
+  // Given a version tagged with a leading `v` or `V` before a digit, when a CPE
+  // match string is built, then that one letter is dropped: NVD files FreeRTOS
+  // V11.1.0 as `11.1.0` and Go modules without their `v`.
+  {
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/freertos@V11.1.0", "cpe:2.3:a:*:freertos:11.1.0"));
+    BOMWERK_TEST_CHECK(
+        builds_to("pkg:golang/github.com/pkg/errors@v0.9.1", "cpe:2.3:a:*:errors:0.9.1"));
+    BOMWERK_TEST_CHECK(builds_to("pkg:conan/foo@v2", "cpe:2.3:a:*:foo:2"));
+    BOMWERK_TEST_CHECK(identifier_builds_to("pkg:generic/freertos@V11.1.0",
+                                            "cpe:2.3:a:*:freertos:11.1.0:*:*:*:*:*:*:*"));
+  }
+
+  // Given a version that starts with `v` but not with `v` plus a digit (a
+  // doubled `v` included), when a CPE match string is built, then it is left
+  // alone: the rule strips a release prefix, never part of the version itself.
+  {
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/foo@vendor-1", "cpe:2.3:a:*:foo:vendor-1"));
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/foo@v", "cpe:2.3:a:*:foo:v"));
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/foo@version2", "cpe:2.3:a:*:foo:version2"));
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/foo@vv1", "cpe:2.3:a:*:foo:vv1"));
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/foo@Vendor-1", "cpe:2.3:a:*:foo:vendor-1"));
+    BOMWERK_TEST_CHECK(builds_to("pkg:generic/foo@V", "cpe:2.3:a:*:foo:v"));
+  }
+
   // Given a value bound for a URL query parameter, when it is percent-encoded,
   // then every byte outside the RFC 3986 unreserved set is escaped: the
   // wildcard and the colons in a CPE included.
@@ -208,7 +232,7 @@ int main()
     BOMWERK_TEST_CHECK(components[2].cpe == "cpe:2.3:a:*:left-pad:1.3.0:*:*:*:*:*:*:*");
     BOMWERK_TEST_CHECK(components[2].cpe_provenance ==
                        bomwerk::core::CpeProvenance::SynthesizedWildcardVendor);
-    BOMWERK_TEST_CHECK(components[3].cpe == "cpe:2.3:a:*:errors:v0.9.1:*:*:*:*:*:*:*");
+    BOMWERK_TEST_CHECK(components[3].cpe == "cpe:2.3:a:*:errors:0.9.1:*:*:*:*:*:*:*");
     BOMWERK_TEST_CHECK(components[3].cpe_provenance ==
                        bomwerk::core::CpeProvenance::SynthesizedWildcardVendor);
     BOMWERK_TEST_CHECK(components[4].cpe ==
