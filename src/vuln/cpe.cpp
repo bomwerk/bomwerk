@@ -67,6 +67,27 @@ std::optional<std::string> validated_segment(std::string_view segment)
   return lowercased;
 }
 
+/// `version` without one leading `v` or `V`, but only when a digit follows it.
+/// Releases are often tagged `v1.2.3` (Go modules always are, FreeRTOS writes
+/// `V11.1.0`), while NVD files the bare number, so `v11.1.0` would never match.
+/// The digit check keeps a version that merely starts with the letter, such as
+/// `vendor-1` or a lone `v`, untouched.
+std::string_view without_leading_v(std::string_view version)
+{
+  constexpr std::size_t kShortestStrippableVersion = 2;  // the `v` plus one digit
+  if (version.size() < kShortestStrippableVersion)
+  {
+    return version;
+  }
+  const bool starts_with_v = core::to_lower_ascii(version[0]) == 'v';
+  const bool digit_follows = version[1] >= '0' && version[1] <= '9';
+  if (starts_with_v && digit_follows)
+  {
+    return version.substr(1);
+  }
+  return version;
+}
+
 }  // namespace
 
 std::optional<std::string> cpe_match_string_for(std::string_view purl)
@@ -86,7 +107,7 @@ std::optional<std::string> cpe_match_string_for(std::string_view purl)
     return std::nullopt;
   }
   const std::optional<std::string> version =
-      validated_segment(core::purl_version_of(identity_part));
+      validated_segment(without_leading_v(core::purl_version_of(identity_part)));
   if (!version.has_value())
   {
     return std::nullopt;  // an unversioned purl would match every advisory ever filed

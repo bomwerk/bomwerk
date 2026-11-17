@@ -40,8 +40,12 @@ inline constexpr std::size_t kMaxCpeSegmentBytes = 128;
 /// rejected component is counted and warned about by the caller: never
 /// silently dropped, and never sent.
 ///
+/// One leading `v` or `V` is dropped from the version when a digit follows it,
+/// because NVD files `11.1.0`, not `v11.1.0`. The purl itself is never changed.
+///
 /// Examples: `pkg:conan/zlib@1.2.11` -> `cpe:2.3:a:*:zlib:1.2.11`;
 /// `pkg:vcpkg/OpenSSL@3.2.0` -> `cpe:2.3:a:*:openssl:3.2.0`;
+/// `pkg:generic/freertos@V11.1.0` -> `cpe:2.3:a:*:freertos:11.1.0`;
 /// `pkg:conan/zlib` (no version) -> nothing.
 [[nodiscard]] std::optional<std::string> cpe_match_string_for(std::string_view purl);
 
