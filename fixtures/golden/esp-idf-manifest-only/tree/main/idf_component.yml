@@ -1,0 +1,25 @@
+## IDF Component Manager Manifest File
+version: "1.0.0"
+description: Sensor node firmware
+dependencies:
+  idf: ">=5.0"
+  espressif/led_strip: "^2.4.1"
+  espressif/esp_tinyusb:
+    version: "^1.4"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"
+  button: "~3.2"
+  lvgl/lvgl: {version: "^8.3"}
+  u8g2:
+    git: "https://github.com/olikraus/u8g2.git"
+    version: "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
+  sensor_driver:
+    path: ../components/sensor_driver
+  protocol_examples_common:
+    path: ${IDF_PATH}/examples/common_components/protocol_examples_common
+  espressif/cmake_utilities:
+    version: "0.*"
+    override_path: ../components/cmake_utilities
+targets:
+  - esp32s3
+  - esp32s2

@@ -18,6 +18,7 @@
 #include "parsers/cpp/conan.hpp"
 #include "parsers/cpp/submodules.hpp"
 #include "parsers/cpp/vcpkg.hpp"
+#include "parsers/embedded/esp_idf.hpp"
 #include "parsers/embedded/west.hpp"
 #include "parsers/lockfiles/cargo.hpp"
 #include "parsers/lockfiles/composer.hpp"
@@ -229,6 +230,7 @@ BOMWERK_PRODUCER_ADAPTER(Rubygems, parsers::lockfiles::rubygems, ParseOptions, m
 BOMWERK_PRODUCER_ADAPTER(Yarn, parsers::lockfiles::yarn, ParseOptions, max_total_packages);
 BOMWERK_PRODUCER_ADAPTER(Vcpkg, parsers::cpp::vcpkg, ParseOptions, max_total_requirements);
 BOMWERK_PRODUCER_ADAPTER(West, parsers::embedded::west, ParseOptions, max_total_projects);
+BOMWERK_PRODUCER_ADAPTER(EspIdf, parsers::embedded::esp_idf, ParseOptions, max_total_components);
 BOMWERK_PRODUCER_ADAPTER(GithubActions, parsers::ci::github_actions, ParseOptions,
                          max_total_uses_references);
 BOMWERK_PRODUCER_ADAPTER(Conan, parsers::cpp::conan, ParseOptions, max_total_requirements);
@@ -281,6 +283,11 @@ int main()
       "vcpkg-configuration.json");
   check_producer<West>("west", {{"west.yml", "golden/west-manifest/tree/app/west.yml"}},
                        "west.toml");
+  check_producer<EspIdf>(
+      "esp_idf",
+      {{"dependencies.lock", "golden/esp-idf-lock/tree/dependencies.lock"},
+       {"main/idf_component.yml", "golden/esp-idf-manifest-only/tree/main/idf_component.yml"}},
+      "sdkconfig");
   check_producer<GithubActions>(
       "github_actions",
       {{".github/workflows/ci.yml", "golden/github-actions-clean/tree/.github/workflows/ci.yml"}},

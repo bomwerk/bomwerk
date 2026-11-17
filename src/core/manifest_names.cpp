@@ -203,7 +203,8 @@ const std::set<std::string>& default_manifest_names()
       "composer.lock",     "composer.json",   "Gemfile.lock",
       "yarn.lock",         "pnpm-lock.yaml",  "pubspec.lock",
       "packages.config",   ".csproj",         "Directory.Packages.props",
-      "west.yml",          "west.yaml"};
+      "west.yml",          "west.yaml",       "dependencies.lock",
+      "idf_component.yml"};
   return kDefaultNames;
 }
 

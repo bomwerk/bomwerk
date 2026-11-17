@@ -1,0 +1,4 @@
+dependencies:
+  idf: ">=5.0"
+  espressif/led_strip: "^2"
+  espressif/esp_websocket_client: "^1.2"

@@ -1,0 +1,6 @@
+dependencies:
+  tracking:
+    git: https://gitlab.example.com/firmware/tracking.git
+  star:
+    git: https://github.com/example/star.git
+    version: "*"

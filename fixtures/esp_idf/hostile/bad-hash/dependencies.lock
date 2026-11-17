@@ -1,0 +1,13 @@
+dependencies:
+  espressif/led_strip:
+    component_hash: 5c1a2b3d-not-hex-but-sixty-four-characters-long-xxxxxxxxxxxxxxxxxxxx
+    source:
+      type: service
+    version: 2.5.5
+  espressif/button:
+    component_hash: abc123
+    source:
+      type: service
+    version: 3.2.0
+manifest_hash: a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796
+version: 2.0.0

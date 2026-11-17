@@ -1,0 +1,133 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "8ee9d8c1-c8aa-574a-87ef-a46cd426ab88",
+      "cpe": "cpe:2.3:a:*:esp-idf:5.3.1:*:*:*:*:*:*:*",
+      "name": "esp-idf",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/espressif/esp-idf@5.3.1",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library",
+      "version": "5.3.1"
+    },
+    {
+      "bom-ref": "c1313a79-227f-5f28-9033-652973798066",
+      "cpe": "cpe:2.3:a:*:led_strip:2.5.5:*:*:*:*:*:*:*",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5c1a2b3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9"
+        }
+      ],
+      "name": "led_strip",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/espressif/led_strip@2.5.5",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library",
+      "version": "2.5.5"
+    },
+    {
+      "bom-ref": "a921b560-fddc-5047-82eb-257fce9c45fb",
+      "cpe": "cpe:2.3:a:*:littlefs:1.14.8:*:*:*:*:*:*:*",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a0b1c2d3e4f5061728394a5b6c7d8e9fa0b1c2d3e4f5061728394a5b6c7d8e9f"
+        }
+      ],
+      "name": "littlefs",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/joltwallet/littlefs@1.14.8",
+      "supplier": {
+        "name": "joltwallet"
+      },
+      "type": "library",
+      "version": "1.14.8"
+    },
+    {
+      "bom-ref": "b1657bd6-415d-5db1-992f-1d9906bf3ab6",
+      "name": "mdns",
+      "purl": "pkg:github/espressif/esp-protocols@0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c#components/mdns",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library",
+      "version": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "8ee9d8c1-c8aa-574a-87ef-a46cd426ab88"
+    },
+    {
+      "ref": "c1313a79-227f-5f28-9033-652973798066"
+    },
+    {
+      "ref": "a921b560-fddc-5047-82eb-257fce9c45fb"
+    },
+    {
+      "ref": "b1657bd6-415d-5db1-992f-1d9906bf3ab6"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "4"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:9f1919c0-83dc-56fe-8781-1e0686cc2d58",
+  "specVersion": "1.6",
+  "version": 1
+}

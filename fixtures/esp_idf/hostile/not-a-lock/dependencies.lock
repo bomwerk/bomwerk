@@ -1,0 +1,4 @@
+# Some other tool's lock that happens to share the name.
+dependencies:
+  left-pad: 1.3.0
+generated: 2026-11-17

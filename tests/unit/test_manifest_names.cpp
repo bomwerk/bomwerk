@@ -94,6 +94,10 @@ int main()
   BOMWERK_TEST_CHECK(default_manifest_names().contains("west.yml"));
   BOMWERK_TEST_CHECK(default_manifest_names().contains("west.yaml"));
 
+  // …and the ESP-IDF component manager's lock and manifest.
+  BOMWERK_TEST_CHECK(default_manifest_names().contains("dependencies.lock"));
+  BOMWERK_TEST_CHECK(default_manifest_names().contains("idf_component.yml"));
+
   // A list file: comments and blank lines skipped, whitespace trimmed, duplicates collapsed.
   const fs::path list_path = fs::temp_directory_path() / "bomwerk_test_manifest_names.txt";
   {

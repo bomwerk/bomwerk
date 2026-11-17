@@ -36,6 +36,7 @@
 #include "parsers/cpp/conan.hpp"
 #include "parsers/cpp/submodules.hpp"
 #include "parsers/cpp/vcpkg.hpp"
+#include "parsers/embedded/esp_idf.hpp"
 #include "parsers/embedded/west.hpp"
 #include "parsers/lockfiles/cargo.hpp"
 #include "parsers/lockfiles/composer.hpp"
@@ -450,6 +451,40 @@ struct West
   static std::pair<std::string, std::string> two_paths() { return {"a/west.yml", "b/west.yml"}; }
 };
 
+/// The ESP-IDF producer reads two formats; each gets its own sample, and the
+/// hostile fixtures are shared (each file is parsed under the name it ends with).
+struct EspIdfLock
+{
+  BOMWERK_CONTRACT_ENTRY_POINTS(parsers::embedded::esp_idf, ParseOptions)
+  static constexpr const char* kName = "EspIdfLock";
+  static constexpr const char* kSampleName = "dependencies.lock";
+  static constexpr const char* kSampleFixture = "golden/esp-idf-lock/tree/dependencies.lock";
+  static std::vector<std::string> hostile_directories() { return {"esp_idf/hostile"}; }
+  static std::string canonical_name(const fs::path& path)
+  {
+    return longest_suffix(path, {"dependencies.lock", "idf_component.yml"});
+  }
+  static std::pair<std::string, std::string> two_paths()
+  {
+    return {"a/dependencies.lock", "b/dependencies.lock"};
+  }
+};
+
+struct EspIdfManifest
+{
+  BOMWERK_CONTRACT_ENTRY_POINTS(parsers::embedded::esp_idf, ParseOptions)
+  static constexpr const char* kName = "EspIdfManifest";
+  static constexpr const char* kSampleName = "main/idf_component.yml";
+  static constexpr const char* kSampleFixture =
+      "golden/esp-idf-manifest-only/tree/main/idf_component.yml";
+  static std::vector<std::string> hostile_directories() { return no_hostile_directory(); }
+  static std::string canonical_name(const fs::path&) { return {}; }
+  static std::pair<std::string, std::string> two_paths()
+  {
+    return {"a/main/idf_component.yml", "b/main/idf_component.yml"};
+  }
+};
+
 #undef BOMWERK_SIMPLE_CONTRACT
 #undef BOMWERK_HOSTILE_CONTRACT
 #undef BOMWERK_CONTRACT_ENTRY_POINTS
@@ -479,6 +514,8 @@ int main()
   check_contract<CmakeDeps>();
   check_contract<GithubActions>();
   check_contract<West>();
+  check_contract<EspIdfLock>();
+  check_contract<EspIdfManifest>();
 
   // submodules has no options or FileIndex overload (it reads only the root
   // .gitmodules), so it keeps the in-memory half of the contract.

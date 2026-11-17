@@ -45,6 +45,7 @@
 #include "parsers/cpp/conan.hpp"
 #include "parsers/cpp/submodules.hpp"
 #include "parsers/cpp/vcpkg.hpp"
+#include "parsers/embedded/esp_idf.hpp"
 #include "parsers/embedded/west.hpp"
 #include "parsers/lockfiles/cargo.hpp"
 #include "parsers/lockfiles/composer.hpp"
@@ -685,6 +686,22 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     return core::kExitIncomplete;
   }
 
+  // ESP-IDF component manager files (dependencies.lock, idf_component.yml),
+  // filtered from the same shared file_index: bomwerk reads them and never
+  // runs idf.py (rule 9). A lock is reported at its resolved versions; a
+  // manifest only where no lock covers it, version-less with its constraint
+  // kept as evidence. Local components are the project itself and are dropped.
+  core::Result<std::vector<core::Component>> esp_idf_dependencies =
+      parsers::embedded::esp_idf::parse(
+          file_index.value, options.root_directory,
+          parse_options_with_max_scanned_files<parsers::embedded::esp_idf::ParseOptions>(
+              options.max_files));
+  record_warnings(esp_idf_dependencies.warnings);
+  if (!esp_idf_dependencies.complete)
+  {
+    return core::kExitIncomplete;
+  }
+
   // Heuristic: vendored C/C++ source with no manifest at all (third_party/
   // thirdparty/vendor/external/deps/libs), filtered from the same shared
   // file_index. Never a manifest, so every component from here is Low/Medium
@@ -911,6 +928,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
                     std::make_move_iterator(github_actions_dependencies.value.end()));
   components.insert(components.end(), std::make_move_iterator(west_dependencies.value.begin()),
                     std::make_move_iterator(west_dependencies.value.end()));
+  components.insert(components.end(), std::make_move_iterator(esp_idf_dependencies.value.begin()),
+                    std::make_move_iterator(esp_idf_dependencies.value.end()));
   components.insert(components.end(),
                     std::make_move_iterator(vendored_cpp_dependencies.value.begin()),
                     std::make_move_iterator(vendored_cpp_dependencies.value.end()));

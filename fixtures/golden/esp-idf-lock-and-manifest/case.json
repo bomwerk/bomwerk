@@ -1,0 +1,5 @@
+{
+  "description": "esp-idf: a lock covering the manifests below it (main/ and managed_components/ are not read), beside a lockless project whose declarations the lock already resolved (dropped) or did not (kept, version-less)",
+  "args": [],
+  "expect_exit": 0
+}

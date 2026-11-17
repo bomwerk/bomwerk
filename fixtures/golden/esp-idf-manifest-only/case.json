@@ -1,0 +1,5 @@
+{
+  "description": "esp-idf: lockless idf_component.yml manifests in main/ and components/ declaring scalar, block and flow constraints, a rules: condition, a bare name, a git SHA pin, and local path/override_path components (clean parse path)",
+  "args": [],
+  "expect_exit": 0
+}
