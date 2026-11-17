@@ -1,0 +1,4 @@
+description: |
+  dependencies:
+    espressif/injected: "^9.9"
+dependencies: {}

@@ -189,6 +189,7 @@ bomwerk binscan sbom.cdx.json
 | Ruby | `Gemfile.lock` |
 | Dart | `pubspec.lock` |
 | Zephyr | `west.yml`, `west.yaml` ([how projects resolve](docs/west-manifests.md)) |
+| ESP-IDF | `dependencies.lock`, `idf_component.yml` ([how components resolve](docs/esp-idf-components.md)) |
 | CI | GitHub Actions workflows |
 | No manifest | vendored and copied C/C++ source, prebuilt archives, pinned submodules |
 

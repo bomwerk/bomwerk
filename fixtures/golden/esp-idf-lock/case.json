@@ -1,0 +1,5 @@
+{
+  "description": "esp-idf: a component manager 2.x dependencies.lock with registry components (hashed and not), the idf pseudo-component, a git component in a repository subdirectory and a local component (clean parse path)",
+  "args": [],
+  "expect_exit": 0
+}

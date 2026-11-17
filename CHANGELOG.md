@@ -13,6 +13,19 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- `scan` reads the ESP-IDF component manager's files. A `dependencies.lock`
+  reports each component at its locked version with High confidence:
+  registry components as `pkg:generic/<namespace>/<name>@<version>` with the
+  lock's `component_hash` as their SHA-256, the framework itself as
+  `pkg:generic/espressif/esp-idf@<version>`, and git components through the
+  usual forge mapping with their repository subdirectory as the purl subpath.
+  An `idf_component.yml` is read only where no lock sits in its directory or
+  above it; its constraints stay in the evidence and the component is
+  reported version-less at Medium, never with a guessed version. Local
+  components are the project itself and are not reported, and files under
+  `managed_components/` are never read. None of these identities has an OSV
+  ecosystem, so match coverage lists them as unmatched unless the NVD CPE
+  fallback finds them. See `docs/esp-idf-components.md` (T86).
 - The NVD CPE fallback (`vuln::match_via_cpe`) takes an optional stop
   predicate, `NvdOptions::should_stop`, so a long-running caller can shut down
   during NVD's rate-limit waits. It is asked before each request and every

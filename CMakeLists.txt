@@ -171,6 +171,7 @@ add_library(bomwerk_parsers
   src/parsers/cpp/conan_ref.cpp
   src/parsers/cpp/submodules.cpp
   src/parsers/cpp/vcpkg.cpp
+  src/parsers/embedded/esp_idf.cpp
   src/parsers/embedded/west.cpp
   src/parsers/lockfiles/cargo.cpp
   src/parsers/lockfiles/composer.cpp
@@ -443,6 +444,7 @@ bomwerk_add_test(yarn bomwerk_parsers)
 bomwerk_add_test(pnpm bomwerk_parsers)
 bomwerk_add_test(pub bomwerk_parsers)
 bomwerk_add_test(west bomwerk_parsers)
+bomwerk_add_test(esp_idf bomwerk_parsers)
 # Every producer's parse_bytes against its own parse: the in-memory entry point
 # the fuzz harnesses call must answer exactly what a scanned file gets.
 bomwerk_add_test(parse_bytes bomwerk_parsers)

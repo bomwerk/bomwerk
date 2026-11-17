@@ -1,0 +1,7 @@
+dependencies:
+  espressif/led_strip:
+    source:
+      type: service
+    version: 2.5.5
+manifest_hash: 96a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a697887
+version: 3.0.0

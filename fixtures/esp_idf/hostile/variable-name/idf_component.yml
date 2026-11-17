@@ -1,0 +1,5 @@
+dependencies:
+  ${VENDOR}/driver: "^1.0"
+  fork:
+    git: ${FORK_URL}
+    version: v1.0

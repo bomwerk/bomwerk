@@ -1,0 +1,11 @@
+dependencies:
+  acme/motor_ctl:
+    component_hash: 69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a
+    dependencies: []
+    source:
+      registry_url: https://components.acme.example/
+      type: service
+    version: 3.1.0
+manifest_hash: 788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69
+target: esp32c3
+version: 2.0.0

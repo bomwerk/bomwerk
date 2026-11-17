@@ -188,6 +188,40 @@
       "dictionary": "fixtures/fuzz/dicts/yaml.dict"
     },
     {
+      "name": "fuzz_esp_idf_lock",
+      "source": "fuzz_esp_idf.cpp",
+      "variant": "dependencies.lock",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/esp_idf",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "dependencies.lock",
+        "idf_component.yml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
+      "name": "fuzz_esp_idf_manifest",
+      "source": "fuzz_esp_idf.cpp",
+      "variant": "idf_component.yml",
+      "libraries": [
+        "bomwerk_parsers"
+      ],
+      "seed_paths": [
+        "fixtures/esp_idf",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "dependencies.lock",
+        "idf_component.yml"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/yaml.dict"
+    },
+    {
       "name": "fuzz_cargo",
       "source": "fuzz_cargo.cpp",
       "variant": "Cargo.lock",

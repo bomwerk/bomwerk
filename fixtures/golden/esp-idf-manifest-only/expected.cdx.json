@@ -1,0 +1,169 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "b419e628-4658-5967-8ee9-d3647ddac0e3",
+      "name": "button",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/espressif/button",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "32c542ea-1f7e-5a1f-94a9-f48d5afd769a",
+      "name": "esp-dsp",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/espressif/esp-dsp",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "ad4efae3-1297-5e80-8886-1ffbcc6eeee4",
+      "name": "esp-idf",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/espressif/esp-idf",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "414b721d-536c-5e6c-92b7-42f15742e4c5",
+      "name": "esp_tinyusb",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/espressif/esp_tinyusb",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "def79d07-c073-5dc0-8aab-d8f21a06ddd5",
+      "name": "led_strip",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/espressif/led_strip",
+      "supplier": {
+        "name": "espressif"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "b162f450-d959-5a79-b115-832f3e5947dc",
+      "name": "lvgl",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/lvgl/lvgl",
+      "supplier": {
+        "name": "lvgl"
+      },
+      "type": "library"
+    },
+    {
+      "bom-ref": "dbcf2649-3f8d-5a07-afc4-9f1bd6c0dc19",
+      "name": "u8g2",
+      "purl": "pkg:github/olikraus/u8g2@1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d",
+      "supplier": {
+        "name": "olikraus"
+      },
+      "type": "library",
+      "version": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "b419e628-4658-5967-8ee9-d3647ddac0e3"
+    },
+    {
+      "ref": "32c542ea-1f7e-5a1f-94a9-f48d5afd769a"
+    },
+    {
+      "ref": "ad4efae3-1297-5e80-8886-1ffbcc6eeee4"
+    },
+    {
+      "ref": "414b721d-536c-5e6c-92b7-42f15742e4c5"
+    },
+    {
+      "ref": "def79d07-c073-5dc0-8aab-d8f21a06ddd5"
+    },
+    {
+      "ref": "b162f450-d959-5a79-b115-832f3e5947dc"
+    },
+    {
+      "ref": "dbcf2649-3f8d-5a07-afc4-9f1bd6c0dc19"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "7"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "6"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "6"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:a53b6703-06b9-50ae-be37-117394dd5950",
+  "specVersion": "1.6",
+  "version": 1
+}

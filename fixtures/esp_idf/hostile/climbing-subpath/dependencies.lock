@@ -1,0 +1,9 @@
+dependencies:
+  escape:
+    source:
+      git: https://github.com/example/escape.git
+      path: ../../etc
+      type: git
+    version: 0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c
+manifest_hash: b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5
+version: 2.0.0

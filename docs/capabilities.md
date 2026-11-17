@@ -46,6 +46,7 @@ contain each preview row; the 1.0.0 tag moves those rows to shipped.
 | `scan --license-fallback` | preview | 1.0.0 | `license_enrichment`, `license_fallback_timeout_cli` |
 | `scan --config` / `scan --no-config` (`bomwerk.toml`) | preview | 1.0.0 | `scan_config`, `golden_repo-config` |
 | `scan --fingerprint-index` (identify vendored C/C++ by file hash against a corpus you supply) | preview | 1.0.0 | `fingerprint`, `scan_fingerprint`, `sha256`, `golden_nightmare-corpus-fingerprint` |
+| `scan` reads ESP-IDF component manager files (`dependencies.lock`, `idf_component.yml`) | preview | 1.0.0 | `esp_idf`, `golden_esp-idf-*` |
 
 `--fingerprint-index` needs a corpus index, and bomwerk does not ship one: the
 flag is useless on its own. Build one with
