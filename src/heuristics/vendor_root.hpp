@@ -8,7 +8,10 @@ namespace bomwerk::heuristics
 /// The "vendor root" a file belongs to: the first (outermost) trigger-directory
 /// path component plus its immediate subfolder, e.g.
 /// `third_party/zlib/src/inflate.c` -> `third_party/zlib`. The trigger names
-/// are `third_party`, `thirdparty`, `vendor`, `external`, `deps` and `libs`.
+/// are `third_party`, `thirdparty`, `third-party`, `3rdparty`, `vendor`,
+/// `external`, `extern`, `deps` and `libs`. A directory matches when its whole
+/// name equals one of them ignoring ASCII case, so `ThirdParty` and `External`
+/// are triggers too; a name that merely contains one (`my_vendor`) is not.
 ///
 /// Returns nullopt, meaning "this file belongs to no vendored library", when:
 /// - the path contains no trigger directory at all;
@@ -30,6 +33,13 @@ namespace bomwerk::heuristics
 /// a library name), the chain keeps consuming trigger-named components until it
 /// reaches one that is not, so the two libraries get distinct roots instead of
 /// collapsing into `third_party/libs`.
+///
+/// `include` is looked through in that same position and only there:
+/// `3rdparty/include/vulkan/vulkan.h` -> `3rdparty/include/vulkan`, because
+/// OpenCV keeps several header-only libraries side by side in
+/// `3rdparty/include`. A project's own top-level `include/` never starts a
+/// root, and `third_party/zlib/include/zlib.h` still belongs to
+/// `third_party/zlib`.
 ///
 /// `relative_path` must be root-relative and lexically normal, as every path in
 /// a `core::FileIndex` already is.

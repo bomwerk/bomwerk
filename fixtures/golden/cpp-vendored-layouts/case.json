@@ -1,0 +1,5 @@
+{
+  "description": "T121 vendor-root spellings: zlib under OpenCV's 3rdparty/, libpng under ThirdParty/ (case-insensitive match), doctest under extern/, an unrecognized library under third-party/, and two header-only libraries side by side in 3rdparty/include/ that each get their own root; the product's own include/ is not a vendored library -- see SOURCES.md",
+  "args": [],
+  "expect_exit": 0
+}

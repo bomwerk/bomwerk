@@ -11,6 +11,7 @@
 
 #include "core/file_index.hpp"
 #include "core/model.hpp"
+#include "heuristics/vendor_root.hpp"
 #include "heuristics/vendored_cpp.hpp"
 #include "output/spdx_license_ids.hpp"
 #include "support/check.hpp"
@@ -22,6 +23,7 @@ using bomwerk::core::Component;
 using bomwerk::core::Confidence;
 using bomwerk::core::highest_confidence;
 using bomwerk::core::Scope;
+using bomwerk::heuristics::vendor_root_for;
 using bomwerk::test::TempTree;
 namespace vendored_cpp = bomwerk::heuristics::vendored_cpp;
 
@@ -179,6 +181,105 @@ int main()
     BOMWERK_TEST_CHECK(result.value[0].name == "openssl");
     BOMWERK_TEST_CHECK(result.value[1].root == fs::path("third_party/libs/zlib"));
     BOMWERK_TEST_CHECK(result.value[1].name == "zlib");
+  }
+
+  // Given OpenCV's layout, zlib vendored under `3rdparty/` with a header that
+  // declares ZLIB_VERSION, when parsed, then it is reported exactly as a
+  // `third_party/` copy would be: versioned, Medium confidence.
+  {
+    TempTree tree;
+    tree.write("3rdparty/zlib/zlib.h", "#define ZLIB_VERSION \"1.3.2\"\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].root == fs::path("3rdparty/zlib"));
+    BOMWERK_TEST_CHECK(result.value[0].name == "zlib");
+    BOMWERK_TEST_CHECK(result.value[0].version == "1.3.2");
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/zlib@1.3.2");
+    BOMWERK_TEST_CHECK(highest_confidence(result.value[0]) == Confidence::Medium);
+  }
+
+  // Given each of the other new trigger spellings (`third-party`, `extern`),
+  // when the vendor root is computed, then the library is the immediate
+  // subfolder, as for the older spellings.
+  {
+    const auto third_party_root = vendor_root_for("third-party/libfoo/src/foo.c");
+    BOMWERK_TEST_CHECK(third_party_root == fs::path("third-party/libfoo"));
+    const auto extern_root = vendor_root_for("extern/libbar/bar.h");
+    BOMWERK_TEST_CHECK(extern_root == fs::path("extern/libbar"));
+  }
+
+  // Given trigger directories spelled in another case (`ThirdParty` as in VTK
+  // and ParaView, `External`, `3rdParty`, `VENDOR`), when the vendor root is
+  // computed, then they are triggers too and the root keeps the spelling on
+  // disk, so it still joins with the fingerprint matcher's root.
+  {
+    BOMWERK_TEST_CHECK(vendor_root_for("ThirdParty/libpng/png.h") == fs::path("ThirdParty/libpng"));
+    BOMWERK_TEST_CHECK(vendor_root_for("External/libfoo/foo.c") == fs::path("External/libfoo"));
+    BOMWERK_TEST_CHECK(vendor_root_for("3rdParty/zlib/zlib.h") == fs::path("3rdParty/zlib"));
+    BOMWERK_TEST_CHECK(vendor_root_for("VENDOR/lz4/lz4.h") == fs::path("VENDOR/lz4"));
+  }
+
+  // Given a directory whose name only contains a trigger word, when the
+  // vendor root is computed, then it is not a trigger: the match is on whole
+  // names, never substrings.
+  {
+    BOMWERK_TEST_CHECK(!vendor_root_for("my_vendor/libfoo/foo.c").has_value());
+    BOMWERK_TEST_CHECK(!vendor_root_for("externals/libfoo/foo.c").has_value());
+    BOMWERK_TEST_CHECK(!vendor_root_for("3rdparty_old/libfoo/foo.c").has_value());
+  }
+
+  // Given a case-insensitive trigger inside ThirdParty with a version header,
+  // when parsed, then the component is named from the folder and versioned.
+  {
+    TempTree tree;
+    tree.write("ThirdParty/libpng/png.h", "#define PNG_LIBPNG_VER_STRING \"1.6.43\"\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].root == fs::path("ThirdParty/libpng"));
+    BOMWERK_TEST_CHECK(result.value[0].name == "libpng");
+    BOMWERK_TEST_CHECK(result.value[0].version == "1.6.43");
+  }
+
+  // Given OpenCV's `3rdparty/include/`, which holds several header-only
+  // libraries side by side (vulkan, opencl), when parsed, then each library
+  // gets its own root instead of one component called "include", and a file
+  // sitting directly in `3rdparty/include/` belongs to no library.
+  {
+    TempTree tree;
+    tree.write("3rdparty/include/vulkan/vulkan.h", "/* stub */\n");
+    tree.write("3rdparty/include/opencl/1.2/CL/cl.h", "/* stub */\n");
+    tree.write("3rdparty/include/stray.h", "/* stub */\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    BOMWERK_TEST_CHECK(result.value[0].root == fs::path("3rdparty/include/opencl"));
+    BOMWERK_TEST_CHECK(result.value[0].name == "opencl");
+    BOMWERK_TEST_CHECK(result.value[1].root == fs::path("3rdparty/include/vulkan"));
+    BOMWERK_TEST_CHECK(result.value[1].name == "vulkan");
+    BOMWERK_TEST_CHECK(!vendor_root_for("3rdparty/include/stray.h").has_value());
+    BOMWERK_TEST_CHECK(vendor_root_for("3rdparty/Include/vulkan/vulkan.h") ==
+                       fs::path("3rdparty/Include/vulkan"));
+  }
+
+  // Given `include` anywhere other than right after a trigger (a project's
+  // own headers, or inside a library that is already claimed), when the
+  // vendor root is computed, then it changes nothing: it never starts a root
+  // and never splits a claimed one.
+  {
+    BOMWERK_TEST_CHECK(!vendor_root_for("include/foo/bar.h").has_value());
+    BOMWERK_TEST_CHECK(vendor_root_for("third_party/zlib/include/zlib.h") ==
+                       fs::path("third_party/zlib"));
+  }
+
+  // Given a new trigger spelling below a test directory, when parsed, then
+  // the test and fixture exclusion still applies.
+  {
+    TempTree tree;
+    tree.write("tests/data/3rdparty/libfoo/foo.c", "int foo() { return 0; }\n");
+    tree.write("test/ThirdParty/libbar/bar.c", "int bar() { return 0; }\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.empty());
   }
 
   // Given ecosystem-native Go vendor and license trees whose first child is
@@ -344,9 +445,10 @@ int main()
     BOMWERK_TEST_CHECK(result.value[0].supplier == "vendor");
   }
 
-  // Given a tree with no third_party/thirdparty/vendor/external/deps/libs
-  // folder anywhere, when parsed, then the result is simply empty: not a
-  // warning, not an error.
+  // Given a tree with no vendor trigger folder anywhere (third_party,
+  // thirdparty, third-party, 3rdparty, vendor, external, extern, deps, libs),
+  // when parsed, then the result is simply empty: not a warning, not an
+  // error.
   {
     TempTree tree;
     tree.write("src/main.cpp", "int main() { return 0; }\n");

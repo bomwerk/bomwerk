@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#include "core/text.hpp"
+
 namespace fs = std::filesystem;
 
 namespace bomwerk::heuristics
@@ -14,9 +16,45 @@ namespace
 
 // Directory names that mark the start of vendored third-party code. A library
 // is the immediate subfolder of one of these, which is what `vendor_root_for`
-// returns.
-constexpr std::string_view kTriggerDirNames[] = {"third_party", "thirdparty", "vendor",
-                                                 "external",    "deps",       "libs"};
+// returns. Lowercase here; a directory matches when its whole name equals one
+// of these ignoring ASCII case (`ThirdParty`, `External`), never as a
+// substring. `3rdparty` is OpenCV's and nextcloud's layout, `ThirdParty` is
+// VTK's and ParaView's.
+constexpr std::string_view kTriggerDirNames[] = {"third_party", "thirdparty", "third-party",
+                                                 "3rdparty",    "vendor",     "external",
+                                                 "extern",      "deps",       "libs"};
+
+// Directory names that hold several libraries side by side rather than being
+// one (`3rdparty/include/vulkan`, `3rdparty/include/opencl` in OpenCV). They
+// never start a vendor root on their own, so a project's own `include/` is
+// untouched; they are only looked through when they sit right after a trigger,
+// the same way a trigger name in that position is.
+constexpr std::string_view kChainContainerDirNames[] = {"include"};
+
+bool is_one_of_ignoring_case(const std::string& name, const auto& lowercase_candidates)
+{
+  const std::string lowered = core::to_lower_ascii(name);
+  for (std::string_view candidate : lowercase_candidates)
+  {
+    if (lowered == candidate)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool is_trigger_dir_name(const std::string& name)
+{
+  return is_one_of_ignoring_case(name, kTriggerDirNames);
+}
+
+/// True for a component that continues a trigger chain: another trigger name,
+/// or a container such as `include` that groups libraries.
+bool continues_trigger_chain(const std::string& name)
+{
+  return is_trigger_dir_name(name) || is_one_of_ignoring_case(name, kChainContainerDirNames);
+}
 
 // A trigger below one of these directories describes test data rather than a
 // dependency shipped by the product. Keep this deliberately narrow and
@@ -24,19 +62,6 @@ constexpr std::string_view kTriggerDirNames[] = {"third_party", "thirdparty", "v
 // ordinary project names into exclusions.
 constexpr std::string_view kTestOrFixtureDirNames[] = {
     "test", "tests", "testdata", "fixture", "fixtures", "__tests__", "__fixtures__"};
-
-bool is_trigger_dir_name(const std::string& name)
-{
-  const std::string_view name_view(name);
-  for (std::string_view trigger : kTriggerDirNames)
-  {
-    if (name_view == trigger)
-    {
-      return true;
-    }
-  }
-  return false;
-}
 
 bool is_test_or_fixture_dir_name(const std::string& name)
 {
@@ -132,7 +157,7 @@ std::optional<fs::path> vendor_root_for(const fs::path& relative_path)
       }
       fs::path trigger_chain = accumulated / *component;
       auto subfolder = next;
-      while (is_trigger_dir_name(subfolder->string()))
+      while (continues_trigger_chain(subfolder->string()))
       {
         const auto after_subfolder = std::next(subfolder);
         if (after_subfolder == relative_path.end())
