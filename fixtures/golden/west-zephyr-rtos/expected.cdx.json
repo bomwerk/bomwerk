@@ -1,0 +1,95 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "673a7ddf-1d0e-52de-8ee2-5282691f420f",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "modules/hal/cmsis"
+          }
+        ]
+      },
+      "name": "cmsis",
+      "purl": "pkg:github/zephyrproject-rtos/cmsis@0123456789abcdef0123456789abcdef01234567",
+      "supplier": {
+        "name": "zephyrproject-rtos"
+      },
+      "type": "library",
+      "version": "0123456789abcdef0123456789abcdef01234567"
+    },
+    {
+      "bom-ref": "fb9a8d1d-679f-5677-a0f7-5950d1e43505",
+      "cpe": "cpe:2.3:o:*:zephyr:3.5.0:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "zephyr"
+          }
+        ]
+      },
+      "name": "zephyr",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:github/zephyrproject-rtos/zephyr@v3.5.0",
+      "supplier": {
+        "name": "zephyrproject-rtos"
+      },
+      "type": "library",
+      "version": "v3.5.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "673a7ddf-1d0e-52de-8ee2-5282691f420f"
+    },
+    {
+      "ref": "fb9a8d1d-679f-5677-a0f7-5950d1e43505"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "2"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "1"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "0"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:6c24e77c-c69f-5b85-8506-8a5006692760",
+  "specVersion": "1.6",
+  "version": 1
+}

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <string_view>
 
 #include "core/percent.hpp"
 
@@ -45,5 +46,10 @@ struct GitRemote
 /// result is meant to be validated/canonicalized by `core::Purl`. Deterministic.
 [[nodiscard]] std::string build_git_purl(const std::string& url, const std::string& commit,
                                          const std::string& fallback_name);
+
+/// True when `purl_type` is one `build_git_purl` emits for a known forge
+/// (`github`, `gitlab`, `bitbucket`), read from the same table, so a forge
+/// added there is recognized everywhere at once.
+[[nodiscard]] bool is_forge_purl_type(std::string_view purl_type);
 
 }  // namespace bomwerk::core

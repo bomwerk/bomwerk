@@ -393,8 +393,9 @@ CLI::App* register_scan_command(CLI::App& application, ScanOptions& options)
   // changes behavior or gets slower unless the operator asks. Also not
   // configurable from bomwerk.toml, for the same reason as --vuln/--offline.
   scan_command->add_flag("--cpe-fallback", options.cpe_fallback,
-                         "Also query NVD by CPE for components no OSV ecosystem covers "
-                         "(Conan/vcpkg/generic): lower-confidence findings");
+                         "Also query NVD by CPE for components OSV cannot match "
+                         "(Conan/vcpkg/generic, tag-pinned GitHub/GitLab/Bitbucket), asking a "
+                         "known OS or RTOS as an operating system too: lower-confidence findings");
   // Opt-in on purpose, same reasoning as --cpe-fallback above: a plain scan's
   // SBOM bytes must not change unless the operator asks. Independent of
   // --cpe-fallback -- this controls what the SBOM PUBLISHES, not whether NVD
@@ -1197,7 +1198,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   // it either way (an empty default simply renders as "nothing found", and
   // the report's own not-checked wording comes from options.vuln_enabled).
   core::Result<vuln::MatchOutcome> vulnerability_matches;
-  // Purls OSV structurally cannot check (Conan/vcpkg/generic). Computed once
+  // Purls OSV structurally cannot check (Conan/vcpkg/generic, tag-pinned
+  // forge repositories). Computed once
   // from the public predicate so the stdout note, the report's summary metric,
   // and the report's per-row tags all count the SAME set: the numbers can
   // never disagree (a versioned generic and a version-less vcpkg are both
@@ -1337,7 +1339,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     }
     // Compliance-relevant distinction (rule: never claim more accuracy than
     // the data supports): "0 hits" must not read as "checked, clean" for
-    // components OSV structurally cannot check (Conan/vcpkg/generic). The CPE fallback
+    // components OSV structurally cannot check (Conan/vcpkg/generic, tag-pinned
+    // forge repositories). The CPE fallback
     // splits the same set: what the CPE fallback reached is reported as
     // checked-but-weaker, and only the remainder as not checked at all.
     if (!cpe_checked_purls.empty())

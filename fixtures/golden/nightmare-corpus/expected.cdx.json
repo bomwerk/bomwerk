@@ -52,7 +52,7 @@
     },
     {
       "bom-ref": "603ab5ae-2f71-542b-9fb8-8ceefcde27b3",
-      "cpe": "cpe:2.3:a:*:freertos:11.1.0:*:*:*:*:*:*:*",
+      "cpe": "cpe:2.3:o:*:freertos:11.1.0:*:*:*:*:*:*:*",
       "evidence": {
         "occurrences": [
           {
@@ -184,7 +184,14 @@
     },
     {
       "bom-ref": "8c047c38-3453-5546-bd6b-9141bb74527f",
+      "cpe": "cpe:2.3:a:*:setup-node:4.1.0:*:*:*:*:*:*:*",
       "name": "setup-node",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/actions/setup-node@v4.1.0",
       "supplier": {
         "name": "actions"
@@ -334,7 +341,7 @@
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "6"
+        "value": "5"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -342,11 +349,11 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "7"
+        "value": "8"
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "11"
+        "value": "12"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",

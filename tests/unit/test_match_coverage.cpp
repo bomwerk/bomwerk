@@ -56,6 +56,29 @@ int main()
   BOMWERK_TEST_CHECK(classify_match_coverage("pkg:github/harfbuzz/harfbuzz@" +
                                              std::string(40, 'a')) == MatchCoverage::Matched);
 
+  // Given a forge purl pinned to a tag rather than a commit, when classified,
+  // then it is UnmappedPurlType: OSV answers `{}` for such a purl (Zephyr
+  // v3.5.0 included), so calling it Matched would read as checked and clean.
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:github/zephyrproject-rtos/zephyr@v3.5.0") ==
+                     MatchCoverage::UnmappedPurlType);
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:github/actions/checkout@v4") ==
+                     MatchCoverage::UnmappedPurlType);
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:gitlab/acme/widget@1.2.3") ==
+                     MatchCoverage::UnmappedPurlType);
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:bitbucket/acme/widget@release-7") ==
+                     MatchCoverage::UnmappedPurlType);
+  // ...while the same forges pinned to a full commit id stay Matched through
+  // OSV's commit index, and an unpinned one stays UnversionedPurl.
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:gitlab/acme/widget@" + std::string(40, 'd')) ==
+                     MatchCoverage::Matched);
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:bitbucket/acme/widget@" + std::string(64, 'e')) ==
+                     MatchCoverage::Matched);
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:github/acme/widget") ==
+                     MatchCoverage::UnversionedPurl);
+  // A purl type that merely contains a forge name is not one.
+  BOMWERK_TEST_CHECK(classify_match_coverage("pkg:githubactions/actions/checkout@4.1.0") ==
+                     MatchCoverage::Matched);
+
   // Given a Conan/vcpkg/generic purl pinned to a resolved 40/64-hex commit
   // id, when classified, then it is STILL Matched: this is the point: OSV's
   // commit index matches by sha regardless of purl type, so the commit check

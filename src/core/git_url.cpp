@@ -1,5 +1,6 @@
 #include "core/git_url.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <string_view>
 
@@ -198,6 +199,12 @@ std::string build_git_purl(const std::string& url, const std::string& commit,
   }
   purl += "?vcs_url=" + percent_encode("git+" + trimmed(url));
   return purl;
+}
+
+bool is_forge_purl_type(std::string_view purl_type)
+{
+  return std::ranges::any_of(
+      kForgeHosts, [purl_type](const ForgeHost& forge) { return forge.purl_type == purl_type; });
 }
 
 }  // namespace bomwerk::core

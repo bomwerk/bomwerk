@@ -113,9 +113,10 @@ struct MatchOutcome
   /// transitions off `hits` instead of this field.
   OsvDeltaReport deltas;
 
-  /// Components skipped because their purl's package type has no OSV
-  /// ecosystem today (Conan, vcpkg, generic: verified against OSV's own
-  /// ecosystem list, not inferred from a failed query). These are never
+  /// Components skipped because OSV cannot match their purl: the package type
+  /// has no OSV ecosystem today (Conan, vcpkg, generic: verified against OSV's
+  /// own ecosystem list, not inferred from a failed query), or it is a forge
+  /// repository pinned to a tag (OSV answers `{}` for those). These are never
   /// queried by the OSV path: sending them would waste a request, and a
   /// returned empty result would misleadingly look identical to "checked,
   /// clean". This stays a fact about the PURL, unchanged by whether the
@@ -124,8 +125,9 @@ struct MatchOutcome
 
   /// The purls of the components above that the CPE fallback actually
   /// resolved an answer for, sorted and deduplicated. Empty without
-  /// `--cpe-fallback`, and empty for a component whose NVD query failed: this
-  /// records what was genuinely checked, not what was attempted.
+  /// `--cpe-fallback`, and empty for a component whose NVD query failed (for
+  /// an operating system asked as part `a` and part `o`, either one failing
+  /// counts): this records what was genuinely checked, not what was attempted.
   ///
   /// Deliberately the LIST and not a count: every consumer (the stdout note,
   /// the report's tile, its notice and its per-row badges) derives its number

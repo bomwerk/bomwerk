@@ -15,7 +15,14 @@
     },
     {
       "bom-ref": "05dd4f51-1cbf-5230-89db-4b1dc79f95f9",
+      "cpe": "cpe:2.3:a:*:abseil-cpp:20250512.1:*:*:*:*:*:*:*",
       "name": "abseil",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/abseil/abseil-cpp@20250512.1",
       "supplier": {
         "name": "abseil"
@@ -40,7 +47,7 @@
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "1"
+        "value": "0"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -48,11 +55,11 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "0"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "1"
+        "value": "2"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",

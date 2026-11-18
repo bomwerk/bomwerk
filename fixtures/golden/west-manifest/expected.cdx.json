@@ -54,6 +54,7 @@
     },
     {
       "bom-ref": "a161118e-6a6a-57e5-a3ee-150f7faf658d",
+      "cpe": "cpe:2.3:o:*:zephyr:4.5.0:*:*:*:*:*:*:*",
       "evidence": {
         "occurrences": [
           {
@@ -62,6 +63,12 @@
         ]
       },
       "name": "zephyr",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/zephyrproject-rtos/zephyr@v4.5.0",
       "supplier": {
         "name": "zephyrproject-rtos"
@@ -92,7 +99,7 @@
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "4"
+        "value": "3"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -100,11 +107,11 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "0"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "0"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",

@@ -53,6 +53,34 @@ constexpr const char* kZlibResponse = R"({
 
 constexpr const char* kEmptyResponse = R"({"totalResults": 0, "vulnerabilities": []})";
 
+// Zephyr pinned the way west reports it: a forge purl at a tag, which OSV
+// cannot match, and a product on the CPE fallback's operating-system list.
+constexpr const char* kZephyrPurl = "pkg:github/zephyrproject-rtos/zephyr@v3.5.0";
+constexpr const char* kEncodedZephyrApplicationCpe = "cpe%3A2.3%3Aa%3A%2A%3Azephyr%3A3.5.0";
+constexpr const char* kEncodedZephyrOperatingSystemCpe = "cpe%3A2.3%3Ao%3A%2A%3Azephyr%3A3.5.0";
+
+// Synthetic answers in the CVE API 2.0 shape. The two parts overlap on one
+// CVE so the merge has a duplicate to drop.
+constexpr const char* kZephyrApplicationResponse = R"({
+  "totalResults": 1,
+  "vulnerabilities": [
+    {"cve": {"id": "CVE-2023-4263", "metrics": {"cvssMetricV31": [
+      {"source": "nvd@nist.gov", "type": "Primary",
+       "cvssData": {"vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"}}]}}}
+  ]
+})";
+constexpr const char* kZephyrOperatingSystemResponse = R"({
+  "totalResults": 2,
+  "vulnerabilities": [
+    {"cve": {"id": "CVE-2023-4263", "metrics": {"cvssMetricV31": [
+      {"source": "nvd@nist.gov", "type": "Primary",
+       "cvssData": {"vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"}}]}}},
+    {"cve": {"id": "CVE-2023-5779", "metrics": {"cvssMetricV31": [
+      {"source": "nvd@nist.gov", "type": "Primary",
+       "cvssData": {"vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}}]}}}
+  ]
+})";
+
 Component component_with_purl(const std::string& purl)
 {
   Component component;
@@ -85,6 +113,33 @@ struct FakeTransport
       }
       result.value.status_code = status_code;
       result.value.body = response_body;
+      return result;
+    };
+  }
+};
+
+/// Canned GET transport that answers by CPE part: a part `o` request gets
+/// `operating_system_*`, every other request `application_*`.
+struct PartRoutingTransport
+{
+  long application_status = 200;
+  std::string application_body = kZephyrApplicationResponse;
+  long operating_system_status = 200;
+  std::string operating_system_body = kZephyrOperatingSystemResponse;
+  int call_count = 0;
+  std::vector<std::string> requested_urls;
+
+  vuln::HttpGetFunction as_function()
+  {
+    return [this](const vuln::HttpGetRequest& request) -> Result<vuln::HttpResponse>
+    {
+      ++call_count;
+      requested_urls.push_back(request.url);
+      const bool asks_operating_system = request.url.find("cpe%3A2.3%3Ao%3A") != std::string::npos;
+      Result<vuln::HttpResponse> result;
+      result.value.status_code =
+          asks_operating_system ? operating_system_status : application_status;
+      result.value.body = asks_operating_system ? operating_system_body : application_body;
       return result;
     };
   }
@@ -216,6 +271,107 @@ int main()
     BOMWERK_TEST_CHECK(transport.call_count == 0);
     BOMWERK_TEST_CHECK(outcome.value.hits.empty());
     BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.empty());
+  }
+
+  // Given ordinary libraries, a tag-pinned forge one among them, when the
+  // fallback runs, then each sends exactly ONE request, all part `a`: the
+  // operating-system list never adds requests for anything not on it.
+  {
+    TempTree tree;
+    FakeTransport transport;
+    FakeSleeper sleeper;
+    const std::vector<Component> components = {
+        component_with_purl(kConanZlibPurl), component_with_purl("pkg:vcpkg/openssl@3.2.0"),
+        component_with_purl("pkg:github/acme/widget@v1.4.0")};
+
+    const Result<vuln::MatchOutcome> outcome =
+        vuln::match_via_cpe(components, options_with_cache(tree), transport.as_function(),
+                            fixed_clock(kNow), sleeper.as_function());
+
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(transport.call_count == 3);
+    BOMWERK_TEST_CHECK(!any_mentions(transport.requested_urls, "cpe%3A2.3%3Ao%3A"));
+    BOMWERK_TEST_CHECK(
+        any_mentions(transport.requested_urls, "cpe%3A2.3%3Aa%3A%2A%3Awidget%3A1.4.0"));
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.size() == 3);
+  }
+
+  // Given Zephyr pinned by tag, when the fallback runs, then it asks NVD twice,
+  // as an application and as an operating system, and merges both answers into
+  // ONE lower-confidence hit with the shared CVE kept once, worst first.
+  {
+    TempTree tree;
+    PartRoutingTransport transport;
+    FakeSleeper sleeper;
+
+    const Result<vuln::MatchOutcome> outcome =
+        vuln::match_via_cpe({component_with_purl(kZephyrPurl)}, options_with_cache(tree),
+                            transport.as_function(), fixed_clock(kNow), sleeper.as_function());
+
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(transport.call_count == 2);
+    BOMWERK_TEST_CHECK(sleeper.call_count == 1);  // the throttle spaces the two
+    BOMWERK_TEST_CHECK(any_mentions(transport.requested_urls, kEncodedZephyrApplicationCpe));
+    BOMWERK_TEST_CHECK(any_mentions(transport.requested_urls, kEncodedZephyrOperatingSystemCpe));
+    BOMWERK_TEST_CHECK(outcome.value.hits.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].purl == kZephyrPurl);
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].provenance == vuln::MatchProvenance::CpeFallback);
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].advisories.size() == 2);
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].advisories[0].id == "CVE-2023-5779");
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].advisories[1].id == "CVE-2023-4263");
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls == std::vector<std::string>{kZephyrPurl});
+  }
+
+  // Given both Zephyr answers cached, when the fallback runs --offline, then
+  // the cache replays both parts: no request, the same merged hit.
+  {
+    TempTree tree;
+    vuln::NvdOptions options = options_with_cache(tree);
+    {
+      PartRoutingTransport transport;
+      FakeSleeper sleeper;
+      const Result<vuln::MatchOutcome> online =
+          vuln::match_via_cpe({component_with_purl(kZephyrPurl)}, options, transport.as_function(),
+                              fixed_clock(kNow), sleeper.as_function());
+      BOMWERK_TEST_CHECK(transport.call_count == 2);
+      BOMWERK_TEST_CHECK(online.value.hits.size() == 1);
+    }
+    options.offline = true;
+    PartRoutingTransport transport;
+    FakeSleeper sleeper;
+    const Result<vuln::MatchOutcome> offline =
+        vuln::match_via_cpe({component_with_purl(kZephyrPurl)}, options, transport.as_function(),
+                            fixed_clock(kNow), sleeper.as_function());
+    BOMWERK_TEST_CHECK(offline.complete);
+    BOMWERK_TEST_CHECK(transport.call_count == 0);
+    BOMWERK_TEST_CHECK(sleeper.call_count == 0);
+    BOMWERK_TEST_CHECK(offline.warnings.empty());
+    BOMWERK_TEST_CHECK(offline.value.hits.size() == 1);
+    BOMWERK_TEST_CHECK(offline.value.hits[0].advisories.size() == 2);
+    BOMWERK_TEST_CHECK(offline.value.cpe_checked_purls.size() == 1);
+  }
+
+  // Given Zephyr's part `o` query failing, when the fallback runs, then what
+  // part `a` found is still reported, but Zephyr is NOT listed as checked: it
+  // was not checked where NVD files most of its CVEs, and a warning says so.
+  {
+    TempTree tree;
+    PartRoutingTransport transport;
+    transport.operating_system_status = 503;
+    transport.operating_system_body = "";
+    FakeSleeper sleeper;
+
+    const Result<vuln::MatchOutcome> outcome =
+        vuln::match_via_cpe({component_with_purl(kZephyrPurl)}, options_with_cache(tree),
+                            transport.as_function(), fixed_clock(kNow), sleeper.as_function());
+
+    BOMWERK_TEST_CHECK(transport.call_count == 2);
+    BOMWERK_TEST_CHECK(outcome.value.hits.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].advisories.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.value.hits[0].advisories[0].id == "CVE-2023-4263");
+    BOMWERK_TEST_CHECK(outcome.value.cpe_checked_purls.empty());
+    BOMWERK_TEST_CHECK(warnings_mention(outcome.warnings, "no NVD data for 1 CPE(s)"));
+    BOMWERK_TEST_CHECK(warnings_mention(outcome.warnings, "comes from another of its CPEs"));
   }
 
   // Given two uncached components, when they are queried, then the throttle

@@ -676,7 +676,8 @@ int main()
                                 "CPE (low confidence)"));
     BOMWERK_TEST_CHECK(contains(document,
                                 "1 component(s) have no OSV ecosystem coverage (Conan, "
-                                "vcpkg, generic) and were matched against NVD by CPE"));
+                                "vcpkg, generic, or a forge repository pinned to a tag) and "
+                                "were matched against NVD by CPE"));
     BOMWERK_TEST_CHECK(!contains(document, "and were not checked"));
   }
 

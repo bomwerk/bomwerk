@@ -1220,7 +1220,8 @@ void append_vulnerabilities_section(std::string& document, const ReportContext& 
     document += "        <p class=\"notice\">";
     document += std::to_string(cpe_checked_count);
     document +=
-        " component(s) have no OSV ecosystem coverage (Conan, vcpkg, generic) and were matched "
+        " component(s) have no OSV ecosystem coverage (Conan, vcpkg, generic, or a forge "
+        "repository pinned to a tag) and were matched "
         "against NVD by CPE instead. Each is tagged <span class=\"badge low\">checked via "
         "CPE</span> in the component table above. That match uses a wildcard vendor, so a "
         "different vendor's product of the same name can match too: treat these findings as "
@@ -1231,7 +1232,8 @@ void append_vulnerabilities_section(std::string& document, const ReportContext& 
     document += "        <p class=\"notice\">";
     document += std::to_string(uncovered_count - cpe_checked_count);
     document +=
-        " component(s) have no OSV ecosystem coverage (Conan, vcpkg, generic) and were not "
+        " component(s) have no OSV ecosystem coverage (Conan, vcpkg, generic, or a forge "
+        "repository pinned to a tag) and were not "
         "checked. Each is tagged <span class=\"badge low\">no OSV coverage</span> in the "
         "component table above. Absence here is not evidence of absence.</p>\n";
   }

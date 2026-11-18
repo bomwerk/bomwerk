@@ -1,0 +1,26 @@
+# A Zephyr application pinned to the Zephyr 3.5.0 release by tag, the way an
+# application's west.yml usually pins its RTOS. Hand-written; the module's
+# commit id is synthetic.
+#
+# OSV cannot match `pkg:github/zephyrproject-rtos/zephyr@v3.5.0` (a tag, not a
+# commit), so it is unmapped-purl-type and the CPE fallback asks NVD for it as
+# both `cpe:2.3:a:*:zephyr:3.5.0` and `cpe:2.3:o:*:zephyr:3.5.0`. The
+# commit-pinned module stays matched through OSV's commit index.
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  defaults:
+    remote: zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      revision: v3.5.0
+      path: zephyr
+    - name: cmsis
+      revision: 0123456789abcdef0123456789abcdef01234567
+      path: modules/hal/cmsis
+
+  self:
+    path: app

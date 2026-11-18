@@ -3,7 +3,14 @@
   "components": [
     {
       "bom-ref": "0bf925ba-63d5-5eb5-a50b-3d01f7ed23d5",
+      "cpe": "cpe:2.3:a:*:checkout:4:*:*:*:*:*:*:*",
       "name": "checkout",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/actions/checkout@v4",
       "supplier": {
         "name": "actions"
@@ -44,7 +51,7 @@
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "1"
+        "value": "0"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -52,11 +59,11 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "0"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "1"
+        "value": "2"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",

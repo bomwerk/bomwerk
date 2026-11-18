@@ -3,6 +3,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "core/match_coverage.hpp"
 #include "core/model.hpp"
@@ -14,10 +16,56 @@ namespace bomwerk::vuln
 namespace
 {
 
-/// CPE 2.3 formatted-string prefix through the `part` component. Everything
-/// bomwerk reports from a manifest is an application or library, never an OS
-/// or hardware entry, so `a` is fixed rather than guessed.
+/// CPE 2.3 formatted-string prefix through the `part` component, for an
+/// application or library: what nearly everything bomwerk reports is.
 constexpr std::string_view kCpeApplicationPrefix = "cpe:2.3:a:";
+
+/// The same prefix for an operating system. NVD files OS, RTOS kernel and
+/// firmware releases here, so an RTOS asked only as an application is missed:
+/// on 2026-11-17 `cpe:2.3:a:*:zephyr:3.5.0` matched 0 CVEs and
+/// `cpe:2.3:o:*:zephyr:3.5.0` matched 74.
+constexpr std::string_view kCpeOperatingSystemPrefix = "cpe:2.3:o:";
+
+/// One reviewed operating-system product name and the NVD CPE dictionary
+/// entry it was checked against.
+struct OperatingSystemProduct
+{
+  std::string_view name;             ///< the CPE product, compared after lowercasing
+  std::string_view checked_against;  ///< an NVD dictionary entry filed under part `o`
+};
+
+/// Products asked as an operating system (part `o`) as well as an
+/// application (part `a`). Exact names only, never a pattern: each extra name
+/// doubles that component's NVD requests and widens the wildcard-vendor match,
+/// so an entry joins only after NVD's CPE dictionary confirms it files the
+/// product under part `o` (`/rest/json/cpes/2.0?cpeMatchString=cpe:2.3:o:*:<name>`,
+/// checked 2026-11-17). Sorted by name.
+///
+/// Deliberately absent: `nuttx` and `threadx`. NVD has no part `o` entry for
+/// either (0 results on the same date); it files them as applications
+/// (`cpe:2.3:a:nuttx:nuttx:...`, `cpe:2.3:a:eclipse:threadx:...`), which the
+/// part `a` query already asks.
+constexpr OperatingSystemProduct kOperatingSystemProducts[] = {
+    {"contiki-ng", "cpe:2.3:o:contiki-ng:contiki-ng:4.9:*:*:*:*:*:*:*"},
+    {"freertos", "cpe:2.3:o:amazon:freertos:10.0.1:*:*:*:*:*:*:*"},
+    {"linux_kernel", "cpe:2.3:o:linux:linux_kernel:1.2.0:*:*:*:*:*:*:*"},
+    {"mbed_os", "cpe:2.3:o:arm:mbed_os:6.17.0:*:*:*:*:*:*:*"},
+    {"riot", "cpe:2.3:o:riot-os:riot:2023.10:-:*:*:*:*:*:*"},
+    {"zephyr", "cpe:2.3:o:zephyrproject:zephyr:3.5.0:-:*:*:*:*:*:*"},
+};
+
+/// True when `product` (already lowercased) is a reviewed operating system.
+bool is_operating_system_product(std::string_view product)
+{
+  for (const OperatingSystemProduct& listed : kOperatingSystemProducts)
+  {
+    if (listed.name == product)
+    {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// The vendor component. NVD's `virtualMatchString` allows a wildcard here :
 /// see cpe.hpp for why that is the whole point of this path.
@@ -88,9 +136,16 @@ std::string_view without_leading_v(std::string_view version)
   return version;
 }
 
-}  // namespace
+/// The validated product and version segments of a purl.
+struct ProductAndVersion
+{
+  std::string product;
+  std::string version;
+};
 
-std::optional<std::string> cpe_match_string_for(std::string_view purl)
+/// Read and validate `purl`'s product and version, or nothing when either
+/// cannot form a safe CPE segment.
+std::optional<ProductAndVersion> product_and_version_of(std::string_view purl)
 {
   // Qualifiers and subpath are stripped through the SAME shared accessor the
   // OSV client and the coverage classifier use, so all three agree on where a
@@ -101,38 +156,77 @@ std::optional<std::string> cpe_match_string_for(std::string_view purl)
     return std::nullopt;
   }
 
-  const std::optional<std::string> product = validated_segment(core::purl_name_of(identity_part));
+  std::optional<std::string> product = validated_segment(core::purl_name_of(identity_part));
   if (!product.has_value())
   {
     return std::nullopt;
   }
-  const std::optional<std::string> version =
+  std::optional<std::string> version =
       validated_segment(without_leading_v(core::purl_version_of(identity_part)));
   if (!version.has_value())
   {
     return std::nullopt;  // an unversioned purl would match every advisory ever filed
   }
+  return ProductAndVersion{std::move(*product), std::move(*version)};
+}
 
+/// `<part_prefix>*:<product>:<version>`.
+std::string match_string_with_part(std::string_view part_prefix, const ProductAndVersion& segments)
+{
   std::string match_string;
-  match_string.reserve(kCpeApplicationPrefix.size() + kAnyVendor.size() + product->size() +
-                       version->size() + 2);
-  match_string.append(kCpeApplicationPrefix);
+  match_string.reserve(part_prefix.size() + kAnyVendor.size() + segments.product.size() +
+                       segments.version.size() + 2);
+  match_string.append(part_prefix);
   match_string.append(kAnyVendor);
   match_string.push_back(':');
-  match_string.append(*product);
+  match_string.append(segments.product);
   match_string.push_back(':');
-  match_string.append(*version);
+  match_string.append(segments.version);
   return match_string;
+}
+
+}  // namespace
+
+std::optional<std::string> cpe_match_string_for(std::string_view purl)
+{
+  const std::optional<ProductAndVersion> segments = product_and_version_of(purl);
+  if (!segments.has_value())
+  {
+    return std::nullopt;
+  }
+  return match_string_with_part(kCpeApplicationPrefix, *segments);
+}
+
+std::vector<std::string> cpe_match_strings_for(std::string_view purl)
+{
+  std::vector<std::string> match_strings;
+  const std::optional<ProductAndVersion> segments = product_and_version_of(purl);
+  if (!segments.has_value())
+  {
+    return match_strings;
+  }
+  match_strings.push_back(match_string_with_part(kCpeApplicationPrefix, *segments));
+  if (is_operating_system_product(segments->product))
+  {
+    match_strings.push_back(match_string_with_part(kCpeOperatingSystemPrefix, *segments));
+  }
+  return match_strings;
 }
 
 std::optional<std::string> cpe_identifier_for(std::string_view purl)
 {
-  std::optional<std::string> identifier = cpe_match_string_for(purl);
-  if (!identifier.has_value())
+  const std::optional<ProductAndVersion> segments = product_and_version_of(purl);
+  if (!segments.has_value())
   {
     return std::nullopt;
   }
-  identifier->append(kRemainingWildcardAttributes);
+  // An SBOM carries one identifier, so a listed operating system publishes
+  // the part NVD files its releases under rather than one it never matches.
+  const std::string_view part_prefix = is_operating_system_product(segments->product)
+                                           ? kCpeOperatingSystemPrefix
+                                           : kCpeApplicationPrefix;
+  std::string identifier = match_string_with_part(part_prefix, *segments);
+  identifier.append(kRemainingWildcardAttributes);
   return identifier;
 }
 
@@ -144,9 +238,9 @@ void populate_cpe_identifiers(std::vector<core::Component>& components, CpePopul
     {
       continue;  // existing identifier (and whatever provenance it carries) is preserved verbatim
     }
-    // UnmappedOnly keeps the long-standing gate: only types with no OSV
-    // ecosystem at all. AllVersioned drops the gate entirely and lets
-    // cpe_identifier_for's own product/version validation be the only filter
+    // UnmappedOnly keeps the long-standing gate: only purls OSV cannot match
+    // (no OSV ecosystem, or a tag-pinned forge repository). AllVersioned drops the gate entirely
+    // and lets cpe_identifier_for's own product/version validation be the only filter
     //: that is what newly admits npm, Go, every other OSV-native ecosystem,
     // and commit-pinned purls of any type.
     if (scope == CpePopulationScope::UnmappedOnly &&

@@ -436,7 +436,8 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
   // component is classified once through the SAME predicate the coverage
   // reporting uses (`core::classify_match_coverage`), so this gate and the
   // numbers a scan reports elsewhere can never disagree. A purl with no OSV
-  // ecosystem at all (Conan/vcpkg/generic) is counted separately and never
+  // ecosystem at all (Conan/vcpkg/generic), or a tag-pinned forge purl OSV
+  // cannot answer, is counted separately and never
   // queried UNLESS its version is a resolved commit id: OSV's commit index
   // matches by sha regardless of purl type: see
   // MatchOutcome::components_without_osv_coverage.
@@ -471,7 +472,8 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     // these components against NVD, so a bare "not queried" would read as
     // "not checked at all" on a run where they were.
     spdlog::info(
-        "vuln: {} component(s) have no OSV ecosystem coverage (Conan/vcpkg/generic), "
+        "vuln: {} component(s) have no OSV ecosystem coverage (Conan/vcpkg/generic or "
+        "a tag-pinned forge repository), "
         "not queried by OSV",
         result.value.components_without_osv_coverage);
   }

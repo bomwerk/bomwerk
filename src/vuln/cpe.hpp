@@ -19,8 +19,10 @@ inline constexpr std::size_t kMaxCpeSegmentBytes = 128;
 /// the purl cannot safely produce one.
 ///
 /// The result has the shape `cpe:2.3:a:*:<product>:<version>`: part `a`
-/// (Conan/vcpkg/generic all package applications and libraries), a WILDCARD
-/// VENDOR, the purl's bare name as product and its resolved version.
+/// (application or library), a WILDCARD VENDOR, the purl's bare name as
+/// product and its resolved version. It answers "can this purl form a CPE at
+/// all"; the complete set of strings the NVD fallback asks, which adds part
+/// `o` for a reviewed operating system, is `cpe_match_strings_for`.
 ///
 /// The wildcard vendor is the whole reason this path works without a
 /// hand-maintained vendor table: NVD's `virtualMatchString` does not require a
@@ -49,10 +51,24 @@ inline constexpr std::size_t kMaxCpeSegmentBytes = 128;
 /// `pkg:conan/zlib` (no version) -> nothing.
 [[nodiscard]] std::optional<std::string> cpe_match_string_for(std::string_view purl);
 
+/// Every NVD `virtualMatchString` the CPE fallback sends for `purl`, in a
+/// fixed order: the part `a` string of `cpe_match_string_for`, then, only when
+/// the product is on the reviewed operating-system list in cpe.cpp (Zephyr,
+/// FreeRTOS, NuttX, ...), the same string with part `o`, where NVD files OS
+/// and RTOS releases. Empty exactly when `cpe_match_string_for` gives nothing.
+///
+/// Examples: `pkg:conan/zlib@1.2.11` -> {`cpe:2.3:a:*:zlib:1.2.11`};
+/// `pkg:github/zephyrproject-rtos/zephyr@v3.5.0` ->
+/// {`cpe:2.3:a:*:zephyr:3.5.0`, `cpe:2.3:o:*:zephyr:3.5.0`}.
+[[nodiscard]] std::vector<std::string> cpe_match_strings_for(std::string_view purl);
+
 /// Build a complete CPE 2.3 formatted identifier for SBOM publication, or
 /// nothing when `purl` cannot safely produce one. This shares all parsing and
-/// validation with `cpe_match_string_for`, but appends the seven remaining
-/// wildcard attributes required by the formatted-string binding.
+/// validation with `cpe_match_string_for` and appends the seven remaining
+/// wildcard attributes required by the formatted-string binding. An SBOM
+/// carries one identifier, so a reviewed operating system is published with
+/// part `o` (`cpe:2.3:o:*:zephyr:3.5.0:*:*:*:*:*:*:*`) and everything else
+/// with part `a`.
 [[nodiscard]] std::optional<std::string> cpe_identifier_for(std::string_view purl);
 
 /// How broadly `populate_cpe_identifiers` synthesizes CPEs. There is
@@ -61,10 +77,10 @@ inline constexpr std::size_t kMaxCpeSegmentBytes = 128;
 /// two scopes change SBOM bytes very differently.
 enum class CpePopulationScope
 {
-  /// The long-standing default: only the same versioned Conan, vcpkg and
-  /// generic components the NVD fallback targets (`core::MatchCoverage::
-  /// UnmappedPurlType`): the ecosystems with no OSV mapping at all. A plain
-  /// scan's output is byte-identical to before `--all-cpes` existed.
+  /// The long-standing default: only the same versioned components the NVD
+  /// fallback targets (`core::MatchCoverage::UnmappedPurlType`): Conan, vcpkg
+  /// and generic, plus forge repositories pinned to a tag, none of which OSV
+  /// can match by purl. A plain scan publishes no other CPE.
   UnmappedOnly,
   /// The `--all-cpes` opt-in: every purl `cpe_identifier_for` can safely turn
   /// into a non-empty product/version pair, regardless of OSV coverage: this

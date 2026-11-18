@@ -13,7 +13,14 @@
     },
     {
       "bom-ref": "a15c803e-08d7-57b9-b311-483e11047ff7",
+      "cpe": "cpe:2.3:a:*:spdlog:1.14.1:*:*:*:*:*:*:*",
       "name": "spdlog",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/gabime/spdlog@v1.14.1",
       "supplier": {
         "name": "gabime"
@@ -23,7 +30,14 @@
     },
     {
       "bom-ref": "233572e7-0229-5b1a-9276-27e0e584f0cf",
+      "cpe": "cpe:2.3:a:*:json:3.11.3:*:*:*:*:*:*:*",
       "name": "json",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/nlohmann/json@3.11.3",
       "supplier": {
         "name": "nlohmann"
@@ -51,7 +65,7 @@
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "3"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -59,11 +73,11 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "0"
+        "value": "2"
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "0"
+        "value": "2"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",
