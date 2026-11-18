@@ -139,7 +139,7 @@ struct ReportContext
   std::vector<ReportVulnerability> vulnerabilities;
 
   /// The purls of every component OSV structurally cannot check
-  /// (Conan/vcpkg/generic), populated by the caller from
+  /// (Conan/vcpkg/generic, tag-pinned forge repositories), populated by the caller from
   /// `vuln::has_no_known_osv_coverage`. This list is the single source of
   /// truth: the report tags exactly these rows AND derives the summary
   /// metric/notice count from its size, so the number and the tagged rows can

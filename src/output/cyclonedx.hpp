@@ -62,7 +62,7 @@ namespace bomwerk::output
 ///
 /// A non-empty `core::Component::cpe` is emitted as the component's CPE field.
 /// The CLI fills this independently of vulnerability matching for safely
-/// derivable Conan, vcpkg and generic purls; the writer only serializes the
+/// derivable Conan, vcpkg, generic and tag-pinned forge purls; the writer only serializes the
 /// shared model and never reaches into the vulnerability module. When
 /// `core::Component::cpe_provenance` carries a recognized value (today only
 /// `SynthesizedWildcardVendor`, set for a CPE synthesized under `--all-cpes`

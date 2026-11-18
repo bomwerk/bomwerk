@@ -91,12 +91,21 @@ struct NvdOptions
 /// the set queried here and the set reported as uncovered elsewhere can never
 /// disagree. Everything else is left alone: a component OSV can match is never
 /// sent here, and neither is one whose purl cannot produce a safe CPE
-/// (`vuln::cpe_match_string_for`), which is counted and warned about instead.
+/// (`vuln::cpe_match_strings_for`), which is counted and warned about instead.
+///
+/// What is asked: one query per distinct string `vuln::cpe_match_strings_for`
+/// returns. That is one part `a` query for an ordinary library, and a part
+/// `a` plus a part `o` query for a product on the reviewed operating-system
+/// list (Zephyr, FreeRTOS, ...), whose releases NVD files under part `o`.
+/// Both answers merge into one hit per purl, deduplicated by CVE id, and the
+/// purl counts as checked only when every query behind it answered. The part
+/// is inside the match string, so each part has its own cache entry and
+/// `--offline` replays both.
 ///
 /// Why NVD and not OSV: OSV's API has no CPE query of any kind: `/v1/query`
 /// accepts only `commit`, `version` and `package{name,ecosystem,purl}`. For a
-/// Conan/vcpkg/generic purl with no resolved commit id, NVD is the only feed
-/// that can answer at all.
+/// Conan/vcpkg/generic purl, or a forge repository pinned to a tag, with no
+/// resolved commit id, NVD is the only feed that answers.
 ///
 /// Findings carry `MatchProvenance::CpeFallback` and are LOWER CONFIDENCE by
 /// construction: a wildcard vendor also matches a different vendor's product

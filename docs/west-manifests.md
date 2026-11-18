@@ -34,6 +34,17 @@ The rules are west's own:
 `manifest.self` describes the manifest repository itself and is never a
 component.
 
+## Vulnerability coverage
+
+A project pinned to a full commit SHA is matched through OSV's commit index.
+A project pinned to a tag is not: OSV cannot match a tag through a
+`pkg:github` purl, so its match coverage is `unmapped-purl-type` and it is
+listed as not checked unless `scan --cpe-fallback` asks NVD about it. Zephyr
+itself is on the CPE fallback's operating-system list, so
+`zephyr@v3.5.0` is asked both as `cpe:2.3:a:*:zephyr:3.5.0` and as
+`cpe:2.3:o:*:zephyr:3.5.0`; NVD files Zephyr's CVEs under the second. Those
+findings use a wildcard vendor and are labelled lower confidence.
+
 ## What is not followed
 
 `import:` on a project or on `self` pulls in projects from another manifest.

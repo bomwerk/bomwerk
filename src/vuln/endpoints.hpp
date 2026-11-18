@@ -64,8 +64,9 @@ inline constexpr FeedEndpoint kFeedEndpoints[] = {
     {"OSV query", kOsvQueryUrl,
      "full advisory records (CVSS severity) for a component already known to be affected", false},
     {"NVD CVE API 2.0", kNvdCveApiUrl,
-     "CPE-based advisory lookup for Conan/vcpkg/generic components OSV cannot match "
-     "(--cpe-fallback only)",
+     "CPE-based advisory lookup for components OSV cannot match: Conan/vcpkg/generic and "
+     "tag-pinned forge repositories, as an application and, for a known OS or RTOS, also as "
+     "an operating system (--cpe-fallback only)",
      false},
     {"crates.io crate version API", kCratesIoCrateVersionApiUrl,
      "declared license for an exact Cargo package version (--license-fallback only)", true},

@@ -56,6 +56,25 @@ behaves exactly as it did before this option existed. The matcher reads that
 one local file and opens no socket, so `--endpoints` is unchanged and
 `--offline` makes no difference to it.
 
+### What `--cpe-fallback` asks NVD
+
+The fallback covers the components OSV cannot match by purl: Conan, vcpkg and
+generic purls, and GitHub, GitLab or Bitbucket repositories pinned to a tag
+rather than a commit. For each, it sends NVD one `virtualMatchString` with a
+wildcard vendor, the purl's name as product and its version without a leading
+`v`: `cpe:2.3:a:*:zlib:1.2.11`. Part `a` (application) is always asked.
+
+NVD files operating systems and RTOS kernels under part `o`, so a component
+whose name is on a short reviewed list (`contiki-ng`, `freertos`,
+`linux_kernel`, `mbed_os`, `riot`, `zephyr`) is asked a second time with part
+`o`: `cpe:2.3:o:*:zephyr:3.5.0`. Each list entry in `src/vuln/cpe.cpp` cites
+the NVD dictionary entry it was checked against, and a name joins the list only
+after that check. The two answers merge into one finding per component,
+deduplicated by CVE id, and every other component still costs one request.
+Each answer is cached under its own match string, so `--offline` replays both.
+All CPE-fallback findings are labelled lower confidence: a wildcard vendor
+also matches another vendor's product of the same name.
+
 ## Planned
 
 | Capability | Status | Since | Evidence |

@@ -38,6 +38,13 @@ constexpr std::string_view kNvdCacheKeySuffix =
     "\x1f"
     "nvd";
 
+/// Appended to the "remain unchecked" warnings. A reviewed operating system
+/// is asked under two CPEs, so when only one of them answered, its findings
+/// are still shown for a component this warning calls unchecked.
+constexpr std::string_view kPartialAnswerNote =
+    " (a finding shown for one of them comes from another of its CPEs that did answer, and may "
+    "be incomplete)";
+
 /// Parse semi-trusted feed JSON under rule-1 bounds: the linear depth
 /// pre-scan runs first (nlohmann's parser is recursive-descent), then a
 /// non-throwing parse. Any problem yields a discarded value.
@@ -178,16 +185,28 @@ ExtractedPayload extract_advisories(const std::string& payload)
   return extracted;
 }
 
-/// Sort worst-severity-first and drop duplicate ids, so a hit's advisory list
-/// is byte-stable regardless of the order NVD returned them (rule 3).
+/// Drop duplicate ids, then sort worst-severity-first, so a hit's advisory
+/// list is byte-stable regardless of the order NVD returned them (rule 3).
+/// Duplicates are grouped by id first, worst copy leading, so a CVE named by
+/// both the part `a` and the part `o` answer survives once, at its worst
+/// severity, even if the two answers ever scored it differently.
 void finalize_advisories(std::vector<core::ScoredAdvisory>& advisories)
 {
-  std::sort(advisories.begin(), advisories.end(), core::more_severe);
+  std::sort(advisories.begin(), advisories.end(),
+            [](const core::ScoredAdvisory& left, const core::ScoredAdvisory& right)
+            {
+              if (left.id != right.id)
+              {
+                return left.id < right.id;
+              }
+              return core::more_severe(left, right);
+            });
   const auto duplicate_begin =
       std::unique(advisories.begin(), advisories.end(),
                   [](const core::ScoredAdvisory& left, const core::ScoredAdvisory& right)
                   { return left.id == right.id; });
   advisories.erase(duplicate_begin, advisories.end());
+  std::sort(advisories.begin(), advisories.end(), core::more_severe);
 }
 
 /// True when the caller supplied a stop predicate and it says stop now.
@@ -240,8 +259,10 @@ core::Result<MatchOutcome> match_via_cpe(
 
   // One query per distinct CPE, but a CPE may stand for several components
   // (`pkg:conan/zlib@1.2.11` and `pkg:vcpkg/zlib@1.2.11` produce the same
-  // match string), so the answer fans back out to every purl behind it. The
-  // maps are ordered, which is where this function's determinism starts.
+  // match string), so the answer fans back out to every purl behind it. A
+  // component may also stand behind several CPEs (a reviewed operating system
+  // is asked as part `a` and part `o`). The map is ordered, which is where
+  // this function's determinism starts.
   std::map<std::string, std::set<std::string>> purls_by_cpe;
   std::size_t unconvertible_component_count = 0;
   for (const core::Component& component : components)
@@ -250,18 +271,21 @@ core::Result<MatchOutcome> match_via_cpe(
     {
       continue;  // OSV can match it; sending it here would only add false positives
     }
-    const std::optional<std::string> cpe_match_string = cpe_match_string_for(component.purl);
-    if (!cpe_match_string.has_value())
+    const std::vector<std::string> cpe_match_strings = cpe_match_strings_for(component.purl);
+    if (cpe_match_strings.empty())
     {
       ++unconvertible_component_count;
       continue;
     }
-    // The component's purl VERBATIM, qualifiers included. `cpe_match_string_for`
+    // The component's purl VERBATIM, qualifiers included. `cpe_match_strings_for`
     // already strips them for the query itself, but every consumer of the
     // result: the report's per-row badge lookup, the CLI's uncovered list :
     // joins on `Component::purl` as stored, so a stripped key here would
     // silently fail to match a component carrying `?os=linux`.
-    purls_by_cpe[*cpe_match_string].insert(component.purl);
+    for (const std::string& cpe_match_string : cpe_match_strings)
+    {
+      purls_by_cpe[cpe_match_string].insert(component.purl);
+    }
   }
 
   if (unconvertible_component_count > 0)
@@ -429,24 +453,30 @@ core::Result<MatchOutcome> match_via_cpe(
   {
     result.warn(core::WarningCode::kVulnCoverageIncomplete,
                 "CPE fallback: no NVD data for " + std::to_string(unresolved_count) +
-                    " CPE(s), those components remain unchecked");
+                    " CPE(s), those components remain unchecked" + std::string(kPartialAnswerNote));
   }
   if (not_queried_count > 0)
   {
     result.warn(core::WarningCode::kVulnCoverageIncomplete,
                 "CPE fallback: stopped before querying " + std::to_string(not_queried_count) +
-                    " CPE(s), those components remain unchecked");
+                    " CPE(s), those components remain unchecked" + std::string(kPartialAnswerNote));
   }
 
-  // Assemble hits. Map iteration is CPE-ordered and the purls behind each CPE
-  // are a sorted set, so the walk is deterministic before the final sort
-  // (rule 3).
+  // Assemble per purl. Map iteration is CPE-ordered and the purls behind each
+  // CPE are a sorted set, so the walk is deterministic, and the per-purl maps
+  // below are ordered by purl, which is the order every consumer expects and
+  // the one the OSV pass uses (rule 3).
+  std::map<std::string, std::vector<core::ScoredAdvisory>> advisories_by_purl;
+  // Purls with at least one CPE that did not answer usably.
+  std::set<std::string> partly_unanswered_purls;
   for (const auto& [cpe_match_string, purls] : purls_by_cpe)
   {
     const auto payload_position = payload_by_cpe.find(cpe_match_string);
     if (payload_position == payload_by_cpe.end())
     {
-      continue;  // unresolved: already counted and warned about above
+      // Unresolved: already counted and warned about above.
+      partly_unanswered_purls.insert(purls.begin(), purls.end());
+      continue;
     }
 
     ExtractedPayload extracted = extract_advisories(payload_position->second);
@@ -454,17 +484,9 @@ core::Result<MatchOutcome> match_via_cpe(
     {
       result.warn(core::WarningCode::kVulnResponseMalformed,
                   "NVD data for " + cpe_match_string + " is malformed, ignored");
+      partly_unanswered_purls.insert(purls.begin(), purls.end());
       continue;
     }
-    // Every purl behind this CPE was genuinely checked, even when the answer
-    // was "nothing known": that is the distinction this list exists for. A
-    // CPE with no resolved payload never reaches here, so an unchecked
-    // component can never appear as checked.
-    for (const std::string& purl : purls)
-    {
-      result.value.cpe_checked_purls.push_back(purl);
-    }
-
     if (extracted.truncated && !truncation_warned)
     {
       result.warn(core::WarningCode::kVulnCoverageIncomplete,
@@ -472,30 +494,37 @@ core::Result<MatchOutcome> match_via_cpe(
                   "The advisory list may be incomplete");
       truncation_warned = true;
     }
-    if (extracted.advisories.empty())
-    {
-      continue;
-    }
-    finalize_advisories(extracted.advisories);
-
     for (const std::string& purl : purls)
     {
-      VulnerabilityHit hit;
-      hit.purl = purl;
-      hit.advisories = extracted.advisories;
-      hit.provenance = MatchProvenance::CpeFallback;
-      result.value.hits.push_back(std::move(hit));
+      std::vector<core::ScoredAdvisory>& merged = advisories_by_purl[purl];
+      merged.insert(merged.end(), extracted.advisories.begin(), extracted.advisories.end());
     }
   }
 
-  // Two CPEs can contribute hits for different purls, so the accumulated order
-  // is CPE-major; sorting by purl restores the identity order every consumer
-  // expects and makes this agree with the OSV pass (rule 3). The checked-purl
-  // list is sorted for the same reason.
-  std::sort(result.value.hits.begin(), result.value.hits.end(),
-            [](const VulnerabilityHit& left, const VulnerabilityHit& right)
-            { return left.purl < right.purl; });
-  std::sort(result.value.cpe_checked_purls.begin(), result.value.cpe_checked_purls.end());
+  for (auto& [purl, advisories] : advisories_by_purl)
+  {
+    // A purl was genuinely checked, even when the answer was "nothing known",
+    // only when EVERY CPE behind it answered: an operating system whose part
+    // `o` query failed was not checked where NVD files most of its CVEs, so it
+    // must not be listed as checked. What did answer is still reported below,
+    // and the unresolved CPE was already warned about.
+    if (!partly_unanswered_purls.contains(purl))
+    {
+      result.value.cpe_checked_purls.push_back(purl);
+    }
+    if (advisories.empty())
+    {
+      continue;
+    }
+    // The part `a` and part `o` answers can name the same CVE; finalizing
+    // keeps it once.
+    finalize_advisories(advisories);
+    VulnerabilityHit hit;
+    hit.purl = purl;
+    hit.advisories = std::move(advisories);
+    hit.provenance = MatchProvenance::CpeFallback;
+    result.value.hits.push_back(std::move(hit));
+  }
 
   spdlog::info("vuln: CPE fallback: {} CPE(s) from fresh cache, {} fetched from NVD",
                fresh_cache_count, fetched_count);

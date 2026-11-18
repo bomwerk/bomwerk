@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "support/check.hpp"
 #include "vuln/cpe.hpp"
@@ -49,6 +50,54 @@ int main()
         identifier_builds_to("pkg:conan/zlib@1.2.11", "cpe:2.3:a:*:zlib:1.2.11:*:*:*:*:*:*:*"));
     BOMWERK_TEST_CHECK(identifier_builds_to("pkg:vcpkg/OpenSSL@1.0.2K?triplet=x64-linux",
                                             "cpe:2.3:a:*:openssl:1.0.2k:*:*:*:*:*:*:*"));
+  }
+
+  // Given an ordinary library, when every NVD match string is requested, then
+  // there is exactly one, with part `a`: the request count for libraries does
+  // not grow with the operating-system list.
+  {
+    const std::vector<std::string> zlib = vuln::cpe_match_strings_for("pkg:conan/zlib@1.2.11");
+    BOMWERK_TEST_CHECK(zlib == std::vector<std::string>{"cpe:2.3:a:*:zlib:1.2.11"});
+    BOMWERK_TEST_CHECK(vuln::cpe_match_strings_for("pkg:conan/zlib").empty());
+    BOMWERK_TEST_CHECK(vuln::cpe_match_strings_for("pkg:conan/a:b@1.0").empty());
+  }
+
+  // Given a reviewed operating system, when every NVD match string is
+  // requested, then part `a` comes first and part `o` second: NVD files
+  // Zephyr 3.5.0's 74 CVEs under `o` and none under `a`. The name matches
+  // after lowercasing and the version loses its leading `v` as usual.
+  {
+    BOMWERK_TEST_CHECK(
+        vuln::cpe_match_strings_for("pkg:github/zephyrproject-rtos/zephyr@v3.5.0") ==
+        (std::vector<std::string>{"cpe:2.3:a:*:zephyr:3.5.0", "cpe:2.3:o:*:zephyr:3.5.0"}));
+    BOMWERK_TEST_CHECK(
+        vuln::cpe_match_strings_for("pkg:generic/FreeRTOS@V10.0.1") ==
+        (std::vector<std::string>{"cpe:2.3:a:*:freertos:10.0.1", "cpe:2.3:o:*:freertos:10.0.1"}));
+    for (const char* listed : {"pkg:generic/contiki-ng@4.9", "pkg:generic/linux_kernel@6.6",
+                               "pkg:generic/mbed_os@6.17.0", "pkg:generic/riot@2023.10"})
+    {
+      BOMWERK_TEST_CHECK(vuln::cpe_match_strings_for(listed).size() == 2);
+    }
+    // Exact names only: a name that merely contains a listed one, or a listed
+    // one NVD files as an application (nuttx, threadx), stays part `a` only.
+    for (const char* unlisted : {"pkg:generic/zephyr-sdk@0.16.1", "pkg:github/acme/linux@6.6",
+                                 "pkg:generic/nuttx@12.0.0", "pkg:generic/threadx@6.4.0"})
+    {
+      BOMWERK_TEST_CHECK(vuln::cpe_match_strings_for(unlisted).size() == 1);
+    }
+    // The part `a` string stays what cpe_match_string_for says, so a caller
+    // using it as a "can this purl form a CPE" test sees no change.
+    BOMWERK_TEST_CHECK(
+        builds_to("pkg:github/zephyrproject-rtos/zephyr@v3.5.0", "cpe:2.3:a:*:zephyr:3.5.0"));
+  }
+
+  // Given a reviewed operating system, when its SBOM identifier is built, then
+  // it carries part `o`, where NVD files its releases; a library keeps `a`.
+  {
+    BOMWERK_TEST_CHECK(identifier_builds_to("pkg:github/zephyrproject-rtos/zephyr@v3.5.0",
+                                            "cpe:2.3:o:*:zephyr:3.5.0:*:*:*:*:*:*:*"));
+    BOMWERK_TEST_CHECK(
+        identifier_builds_to("pkg:conan/zlib@1.2.11", "cpe:2.3:a:*:zlib:1.2.11:*:*:*:*:*:*:*"));
   }
 
   // Given a purl carrying qualifiers or a subpath, when a CPE match string is
@@ -131,8 +180,10 @@ int main()
     BOMWERK_TEST_CHECK(
         builds_to("pkg:golang/github.com/pkg/errors@v0.9.1", "cpe:2.3:a:*:errors:0.9.1"));
     BOMWERK_TEST_CHECK(builds_to("pkg:conan/foo@v2", "cpe:2.3:a:*:foo:2"));
+    // FreeRTOS is on the operating-system list, so its published identifier
+    // carries part `o`; the `v` is dropped there too.
     BOMWERK_TEST_CHECK(identifier_builds_to("pkg:generic/freertos@V11.1.0",
-                                            "cpe:2.3:a:*:freertos:11.1.0:*:*:*:*:*:*:*"));
+                                            "cpe:2.3:o:*:freertos:11.1.0:*:*:*:*:*:*:*"));
   }
 
   // Given a version that starts with `v` but not with `v` plus a digit (a

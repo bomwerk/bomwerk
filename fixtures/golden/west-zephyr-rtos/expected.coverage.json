@@ -1,0 +1,36 @@
+{
+  "components": [
+    {
+      "confidence": "high",
+      "coverage": "matched",
+      "identity": "pkg:github/zephyrproject-rtos/cmsis@0123456789abcdef0123456789abcdef01234567",
+      "name": "cmsis",
+      "purl": "pkg:github/zephyrproject-rtos/cmsis@0123456789abcdef0123456789abcdef01234567",
+      "version": "0123456789abcdef0123456789abcdef01234567"
+    },
+    {
+      "confidence": "medium",
+      "coverage": "unmapped-purl-type",
+      "identity": "pkg:github/zephyrproject-rtos/zephyr@v3.5.0",
+      "name": "zephyr",
+      "purl": "pkg:github/zephyrproject-rtos/zephyr@v3.5.0",
+      "version": "v3.5.0"
+    }
+  ],
+  "generated_at": "2025-01-01T00:00:00Z",
+  "summary": {
+    "by_class": {
+      "matched": 1,
+      "no-identifier": 0,
+      "unmapped-purl-type": 1,
+      "unversioned-purl": 0
+    },
+    "components": 2,
+    "matchable": 1,
+    "unmatched": 1
+  },
+  "tool": {
+    "name": "bomwerk",
+    "version": "@BOMWERK_VERSION@"
+  }
+}

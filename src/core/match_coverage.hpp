@@ -22,8 +22,10 @@ enum class MatchCoverage
   Matched,           ///< purl-shaped, versioned, and OSV can query it: either directly (a mapped
                      ///< ecosystem) or by commit id (any purl type, when the version resolves to
                      ///< a 40/64-hex object id)
-  UnmappedPurlType,  ///< purl-shaped and versioned, but the type has no OSV ecosystem at all
-                     ///< (Conan, vcpkg, generic) and the version is not a resolvable commit id
+  UnmappedPurlType,  ///< purl-shaped and versioned, but OSV cannot match it by purl: the type
+                     ///< has no OSV ecosystem at all (Conan, vcpkg, generic), or it is a forge
+                     ///< repository (github, gitlab, bitbucket) pinned to a tag; in both cases
+                     ///< the version is not a resolvable commit id
   UnversionedPurl,   ///< purl-shaped but carries no resolved `@version` (a bare manifest
                      ///< dependency, e.g. an un-pinned vcpkg.json entry)
   NoIdentifier       ///< not purl-shaped at all: empty, or malformed
@@ -58,7 +60,8 @@ constexpr const char* match_coverage_reason(MatchCoverage coverage)
     case MatchCoverage::Matched:
       return "";
     case MatchCoverage::UnmappedPurlType:
-      return "package type has no OSV ecosystem mapping (Conan, vcpkg, generic)";
+      return "package type has no OSV ecosystem mapping (Conan, vcpkg, generic, or a forge "
+             "repository pinned to a tag)";
     case MatchCoverage::UnversionedPurl:
       return "no resolved version: nothing to match against";
     case MatchCoverage::NoIdentifier:

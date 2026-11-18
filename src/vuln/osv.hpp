@@ -137,8 +137,8 @@ struct MatchOptions
 /// - everything else with a resolved, non-hex version is queried by
 ///   **purl** (`package.purl`): this is where a future OSV-native ecosystem
 ///   (npm, PyPI, …) would match once M2's lockfile parsers exist.
-/// A purl in `has_no_known_osv_coverage`'s bucket (Conan, vcpkg, generic
-/// WITHOUT a resolved commit id) is never queried at all; its component is
+/// A purl in `has_no_known_osv_coverage`'s bucket (Conan, vcpkg, generic or a forge repository
+/// pinned to a tag, WITHOUT a resolved commit id) is never queried at all; its component is
 /// counted in `MatchOutcome::components_without_osv_coverage` instead.
 ///
 /// Injection points (so unit tests never touch network or wall clock):

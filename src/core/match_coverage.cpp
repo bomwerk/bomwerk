@@ -1,7 +1,9 @@
 #include "core/match_coverage.hpp"
 
+#include <algorithm>
 #include <string_view>
 
+#include "core/git_url.hpp"
 #include "core/purl.hpp"
 #include "core/text.hpp"
 
@@ -40,13 +42,20 @@ MatchCoverage classify_match_coverage(std::string_view purl)
     return MatchCoverage::Matched;
   }
 
+  // Reaching here means the version is not a commit id. A forge purl
+  // (`core::is_forge_purl_type`, the table `build_git_purl` maps hosts with)
+  // is then pinned to a tag or a branch, which OSV cannot match through a
+  // purl: measured 2026-11-17, `/v1/query` returns `{}` for
+  // `pkg:github/zephyrproject-rtos/zephyr@v3.5.0` (Zephyr 3.5.0 has known
+  // CVEs), for `pkg:github/tj-actions/changed-files@v45.0.0` (a
+  // known-vulnerable Action) and for a `pkg:gitlab` tag alike. Calling it
+  // Matched would report "checked, nothing found" for a component nothing
+  // checked, so it lands with the unmapped types.
   const std::string_view type = purl_type_of(purl);
-  for (const std::string_view unmapped_type : kUnmappedPurlTypes)
+  if (std::ranges::find(kUnmappedPurlTypes, type) != std::ranges::end(kUnmappedPurlTypes) ||
+      is_forge_purl_type(type))
   {
-    if (type == unmapped_type)
-    {
-      return MatchCoverage::UnmappedPurlType;
-    }
+    return MatchCoverage::UnmappedPurlType;
   }
   return MatchCoverage::Matched;
 }

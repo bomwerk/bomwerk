@@ -72,7 +72,7 @@
     },
     {
       "confidence": "medium",
-      "coverage": "matched",
+      "coverage": "unmapped-purl-type",
       "identity": "pkg:github/actions/setup-node@v4.1.0",
       "name": "setup-node",
       "purl": "pkg:github/actions/setup-node@v4.1.0",
@@ -137,14 +137,14 @@
   "generated_at": "2025-01-01T00:00:00Z",
   "summary": {
     "by_class": {
-      "matched": 7,
+      "matched": 6,
       "no-identifier": 0,
-      "unmapped-purl-type": 7,
+      "unmapped-purl-type": 8,
       "unversioned-purl": 3
     },
     "components": 17,
-    "matchable": 7,
-    "unmatched": 10
+    "matchable": 6,
+    "unmatched": 11
   },
   "tool": {
     "name": "bomwerk",

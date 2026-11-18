@@ -13,7 +13,14 @@
     },
     {
       "bom-ref": "beaf4550-1f31-560e-b504-19a3ae1764e8",
+      "cpe": "cpe:2.3:a:*:setup-node:4:*:*:*:*:*:*:*",
       "name": "setup-node",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
       "purl": "pkg:github/actions/setup-node@v4",
       "supplier": {
         "name": "actions"
@@ -38,7 +45,7 @@
       },
       {
         "name": "bomwerk:coverage:matchable",
-        "value": "2"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:no-identifier",
@@ -46,11 +53,11 @@
       },
       {
         "name": "bomwerk:coverage:unmapped-purl-type",
-        "value": "0"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:unmatched",
-        "value": "0"
+        "value": "1"
       },
       {
         "name": "bomwerk:coverage:unversioned-purl",
