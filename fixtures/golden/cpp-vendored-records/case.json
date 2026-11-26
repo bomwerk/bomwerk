@@ -1,0 +1,5 @@
+{
+  "description": "T123: vendored versions from vendoring records, CMake and an encoded integer. A Godot-layout thirdparty/README.md gives accessor its release (pkg:generic, supplier from the GitHub owner), basisu its commit as the upstream GitHub repository at that commit, angleish its commit with a generic purl (googlesource is not a mapped forge), and wayland-protocols its release through a single-# heading; the pair section holds two Version lines and gives nothing. zlib's header and its record agree, so there is no warning. third_party/fiat/README.chromium states only a Revision with a GitHub URL. 3rdparty/libjpeg-turbo and openjpeg are read from their own top-level CMakeLists.txt (set(VERSION 3.1.2); set(OPENJPEG_VERSION_MAJOR/_MINOR/_BUILD)), and protobuf from #define PROTOBUF_VERSION 3019001 (3.19.1). Every record, version and commit is invented; see SOURCES.md",
+  "args": [],
+  "expect_exit": 0
+}

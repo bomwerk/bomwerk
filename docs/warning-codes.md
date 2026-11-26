@@ -171,6 +171,19 @@ version header says another. bomwerk keeps what the project declared and
 records both, because a disagreement is a finding, not a defect in either
 source.
 
+### Vendored C/C++ (the vendored-source heuristic)
+
+| Code | Meaning |
+| --- | --- |
+| `BW-VENDORED-001` | A vendoring record and the library's own files state different versions |
+
+A vendoring record is a note beside copied-in code, such as Godot's
+`thirdparty/README.md` or a `README.chromium`. It says which upstream release
+the copy came from. When it names a different release than the library's own
+version header or `CMakeLists.txt`, the record has usually gone stale. bomwerk
+reports the library's version, keeps both as evidence, and names both files
+and both values in the warning. See [vendored versions](vendored-versions.md).
+
 ### SBOM readers (`trim`, `binscan` re-reading a CycloneDX/SPDX document)
 
 | Code | Meaning |

@@ -112,6 +112,10 @@ enum class WarningCode
   kFingerprintFileBudgetReached,       ///< hashing stopped at the per-scan file budget, so later
                                        ///< vendor roots were not matched
 
+  // --- vendored (the vendored C/C++ heuristic) ------------------------------------------
+  kVendoringRecordVersionDisagreement,  ///< a vendoring record states a different release than
+                                        ///< the library's own header or build file
+
   // --- sbom readers (the inverse of output's writers) ------------------------------------
   kSbomDocumentInvalid,  ///< not JSON, no components array, unreadable, oversized
   kSbomWrongFormat,      ///< SPDX where CycloneDX was expected, or unrecognized entirely

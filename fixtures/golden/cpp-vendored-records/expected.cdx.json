@@ -1,0 +1,277 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "6f6e8f84-86d2-5bf6-a73e-9469ef77fe21",
+      "cpe": "cpe:2.3:a:*:accessor:0.22.3:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "thirdparty/accessor"
+          }
+        ]
+      },
+      "name": "accessor",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/accessor@0.22.3",
+      "supplier": {
+        "name": "Example-Org"
+      },
+      "type": "library",
+      "version": "0.22.3"
+    },
+    {
+      "bom-ref": "ba256cef-d404-5e1e-a6c1-3e71e852937e",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "thirdparty/angleish"
+          }
+        ]
+      },
+      "name": "angleish",
+      "purl": "pkg:generic/angleish@2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e",
+      "type": "library",
+      "version": "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e"
+    },
+    {
+      "bom-ref": "6a22f474-f440-5625-8850-2a2cec4e6801",
+      "cpe": "cpe:2.3:a:*:libjpeg-turbo:3.1.2:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "3rdparty/libjpeg-turbo"
+          }
+        ]
+      },
+      "name": "libjpeg-turbo",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/libjpeg-turbo@3.1.2",
+      "type": "library",
+      "version": "3.1.2"
+    },
+    {
+      "bom-ref": "2f70460d-3a3a-5bf0-81f3-5a77c182e16f",
+      "cpe": "cpe:2.3:a:*:openjpeg:2.5.3:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "3rdparty/openjpeg"
+          }
+        ]
+      },
+      "name": "openjpeg",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/openjpeg@2.5.3",
+      "type": "library",
+      "version": "2.5.3"
+    },
+    {
+      "bom-ref": "55572904-1472-5633-b977-dac77edcabcd",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "thirdparty/pair"
+          }
+        ]
+      },
+      "name": "pair",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unversioned-purl"
+        }
+      ],
+      "purl": "pkg:generic/pair",
+      "type": "library"
+    },
+    {
+      "bom-ref": "c66d1917-4982-5a13-9f32-f800700d5b18",
+      "cpe": "cpe:2.3:a:*:protobuf:3.19.1:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "3rdparty/protobuf"
+          }
+        ]
+      },
+      "name": "protobuf",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/protobuf@3.19.1",
+      "type": "library",
+      "version": "3.19.1"
+    },
+    {
+      "bom-ref": "4aee40b8-e5fe-5e68-858f-5cf8f45b7487",
+      "cpe": "cpe:2.3:a:*:wayland-protocols:1.47:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "thirdparty/wayland-protocols"
+          }
+        ]
+      },
+      "name": "wayland-protocols",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/wayland-protocols@1.47",
+      "type": "library",
+      "version": "1.47"
+    },
+    {
+      "bom-ref": "aba8e4a8-58e2-52b1-be72-0b800a76593b",
+      "cpe": "cpe:2.3:a:*:zlib:1.3.1:*:*:*:*:*:*:*",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "thirdparty/zlib"
+          }
+        ]
+      },
+      "name": "zlib",
+      "properties": [
+        {
+          "name": "bomwerk:match-coverage",
+          "value": "unmapped-purl-type"
+        }
+      ],
+      "purl": "pkg:generic/zlib@1.3.1",
+      "supplier": {
+        "name": "madler"
+      },
+      "type": "library",
+      "version": "1.3.1"
+    },
+    {
+      "bom-ref": "ca35e0a0-96c9-5216-b0d3-328fc165acdd",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "thirdparty/basisu"
+          }
+        ]
+      },
+      "name": "basisu",
+      "purl": "pkg:github/example-org/basisu@1a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d",
+      "supplier": {
+        "name": "Example-Org"
+      },
+      "type": "library",
+      "version": "1a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d"
+    },
+    {
+      "bom-ref": "752b0627-97cc-5cf7-b94d-3f941f0fcd4c",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "third_party/fiat"
+          }
+        ]
+      },
+      "name": "fiat-crypto",
+      "purl": "pkg:github/example-org/fiat-crypto@708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3",
+      "supplier": {
+        "name": "Example-Org"
+      },
+      "type": "library",
+      "version": "708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "6f6e8f84-86d2-5bf6-a73e-9469ef77fe21"
+    },
+    {
+      "ref": "ba256cef-d404-5e1e-a6c1-3e71e852937e"
+    },
+    {
+      "ref": "6a22f474-f440-5625-8850-2a2cec4e6801"
+    },
+    {
+      "ref": "2f70460d-3a3a-5bf0-81f3-5a77c182e16f"
+    },
+    {
+      "ref": "55572904-1472-5633-b977-dac77edcabcd"
+    },
+    {
+      "ref": "c66d1917-4982-5a13-9f32-f800700d5b18"
+    },
+    {
+      "ref": "4aee40b8-e5fe-5e68-858f-5cf8f45b7487"
+    },
+    {
+      "ref": "aba8e4a8-58e2-52b1-be72-0b800a76593b"
+    },
+    {
+      "ref": "ca35e0a0-96c9-5216-b0d3-328fc165acdd"
+    },
+    {
+      "ref": "752b0627-97cc-5cf7-b94d-3f941f0fcd4c"
+    }
+  ],
+  "metadata": {
+    "properties": [
+      {
+        "name": "bomwerk:coverage:components",
+        "value": "10"
+      },
+      {
+        "name": "bomwerk:coverage:matchable",
+        "value": "3"
+      },
+      {
+        "name": "bomwerk:coverage:no-identifier",
+        "value": "0"
+      },
+      {
+        "name": "bomwerk:coverage:unmapped-purl-type",
+        "value": "6"
+      },
+      {
+        "name": "bomwerk:coverage:unmatched",
+        "value": "7"
+      },
+      {
+        "name": "bomwerk:coverage:unversioned-purl",
+        "value": "1"
+      }
+    ],
+    "timestamp": "2025-01-01T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "name": "bomwerk",
+          "type": "application",
+          "version": "@BOMWERK_VERSION@"
+        }
+      ]
+    }
+  },
+  "serialNumber": "urn:uuid:3a4453f8-3a98-5645-bad1-e31aff1642ee",
+  "specVersion": "1.6",
+  "version": 1
+}

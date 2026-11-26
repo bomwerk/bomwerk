@@ -79,6 +79,7 @@ constexpr WarningCode kAllCodes[] = {
     WarningCode::kBinaryTooLarge,
     WarningCode::kBinaryMalformedHeader,
     WarningCode::kBinaryEvidenceLimited,
+    WarningCode::kVendoringRecordVersionDisagreement,
     WarningCode::kSbomDocumentInvalid,
     WarningCode::kSbomWrongFormat,
     WarningCode::kSbomComponentEntrySkipped,

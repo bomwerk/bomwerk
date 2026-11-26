@@ -1,0 +1,5 @@
+#ifdef PROTOBUF_VERSION
+#error PROTOBUF_VERSION was previously defined
+#endif
+#define PROTOBUF_VERSION 3019001
+#define PROTOBUF_VERSION_SUFFIX ""

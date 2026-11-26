@@ -1,0 +1,9 @@
+Name: Fiat stub: written for bomwerk golden tests
+Short Name: fiat
+URL: https://github.com/Example-Org/fiat-crypto
+Version: git (see METADATA)
+Revision: 708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3
+License: Apache-2.0
+
+Description:
+An invented record in the layout Chromium keeps beside vendored code.

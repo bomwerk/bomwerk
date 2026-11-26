@@ -391,6 +391,13 @@ const WarningCodeInfo& warning_code_info(WarningCode code)
                                              "the fingerprint matcher stopped at its file budget"};
       return kInfo;
     }
+    case WarningCode::kVendoringRecordVersionDisagreement:
+    {
+      static constexpr WarningCodeInfo kInfo{
+          "BW-VENDORED-001",
+          "a vendoring record and the library's own files state different versions"};
+      return kInfo;
+    }
     case WarningCode::kSbomDocumentInvalid:
     {
       static constexpr WarningCodeInfo kInfo{"BW-SBOM-001", "an SBOM document could not be read"};
