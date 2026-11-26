@@ -1,0 +1,7 @@
+Name: duplicate fields
+Version: 1.0.0
+Version: 2.0.0
+Revision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+URL: https://github.com/example-org/one https://github.com/example-org/two
+:no key
+Description:

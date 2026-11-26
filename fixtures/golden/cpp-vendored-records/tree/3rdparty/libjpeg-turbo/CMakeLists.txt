@@ -1,0 +1,4 @@
+project(${JPEG_LIBRARY} C)
+
+set(VERSION 3.1.2)
+string(REPLACE "." ";" VERSION_TRIPLET ${VERSION})

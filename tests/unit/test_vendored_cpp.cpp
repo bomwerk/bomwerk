@@ -11,6 +11,7 @@
 
 #include "core/file_index.hpp"
 #include "core/model.hpp"
+#include "core/warning_code.hpp"
 #include "heuristics/vendor_root.hpp"
 #include "heuristics/vendored_cpp.hpp"
 #include "output/spdx_license_ids.hpp"
@@ -52,6 +53,45 @@ bomwerk::core::Result<std::vector<Component>> parse_tree(const TempTree& tree,
       bomwerk::core::build_file_index(tree.root(), {}, {});
   BOMWERK_TEST_CHECK(file_index.complete);
   return vendored_cpp::parse(file_index.value, tree.root(), limits);
+}
+
+/// The component rooted at `root`, or nullptr.
+const Component* component_at(const std::vector<Component>& components, const fs::path& root)
+{
+  for (const Component& component : components)
+  {
+    if (component.root == root)
+    {
+      return &component;
+    }
+  }
+  return nullptr;
+}
+
+bool has_evidence_containing(const Component& component, std::string_view text)
+{
+  for (const auto& evidence : component.evidence)
+  {
+    if (evidence.detail.find(text) != std::string::npos)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::size_t count_warnings(const bomwerk::core::Result<std::vector<Component>>& result,
+                           bomwerk::core::WarningCode code)
+{
+  std::size_t count = 0;
+  for (const auto& warning : result.warnings)
+  {
+    if (warning.code == code)
+    {
+      ++count;
+    }
+  }
+  return count;
 }
 
 }  // namespace
@@ -848,6 +888,348 @@ int main()
         "zlib", "zlib/zlib.h", "#define ZLIB_VERSION \"\"\n#define ZLIB_VERSION \"1.3.1\"\n");
     BOMWERK_TEST_CHECK(later.has_value());
     BOMWERK_TEST_CHECK(later->version == "1.3.1");
+  }
+
+  using bomwerk::core::WarningCode;
+
+  // Given a Godot-style index beside the vendored folders, when parsed, then
+  // each listed folder takes its version from the record, at Medium, with the
+  // record named in the evidence:
+  // - a release keeps the folder's generic identity and claims no tag;
+  // - a commit with a forge repository upstream is that repository at that
+  //   commit, the shape a leftover .git gives the same fact;
+  // - a commit whose upstream is not a forge repository (another host, or a
+  //   file inside a repository) stays generic, with no vcs_url;
+  // - an unlisted folder is unchanged.
+  {
+    TempTree tree;
+    tree.write("thirdparty/README.md",
+               "# Third party libraries\n\n"
+               "## alpha\n\n- Upstream: https://github.com/Example-Org/alpha-c\n"
+               "- Version: 0.22.3 (" +
+                   kSha +
+                   ", 2026)\n\n"
+                   "## beta\n\n- Upstream: https://github.com/Example-Org/beta.git\n"
+                   "- Version: git (" +
+                   kSha +
+                   ", 2025)\n\n"
+                   "## gamma\n\n- Upstream: https://chromium.googlesource.com/example/gamma/\n"
+                   "- Version: git (chromium/5907, " +
+                   kSha +
+                   ", 2023)\n\n"
+                   "## mu\n\n- Upstream: https://github.com/example-org/mu/blob/master/mu.cpp\n"
+                   "- Version: git (" +
+                   kSha + ", 2025)\n");
+    tree.write("thirdparty/alpha/alpha.c", "int alpha;\n");
+    tree.write("thirdparty/beta/beta.c", "int beta;\n");
+    tree.write("thirdparty/gamma/gamma.c", "int gamma;\n");
+    tree.write("thirdparty/mu/mu.cpp", "int mu;\n");
+    tree.write("thirdparty/unlisted/unlisted.c", "int unlisted;\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(result.value.size() == 5);
+
+    const Component* alpha = component_at(result.value, "thirdparty/alpha");
+    BOMWERK_TEST_CHECK(alpha != nullptr);
+    BOMWERK_TEST_CHECK(alpha->name == "alpha");
+    BOMWERK_TEST_CHECK(alpha->version == "0.22.3");
+    BOMWERK_TEST_CHECK(alpha->purl == "pkg:generic/alpha@0.22.3");
+    BOMWERK_TEST_CHECK(alpha->supplier == "Example-Org");
+    BOMWERK_TEST_CHECK(highest_confidence(*alpha) == Confidence::Medium);
+    BOMWERK_TEST_CHECK(has_evidence_containing(
+        *alpha, "thirdparty/README.md -> section alpha: \"- Version: 0.22.3 (" + kSha +
+                    ", 2026)\", upstream https://github.com/Example-Org/alpha-c"));
+
+    const Component* beta = component_at(result.value, "thirdparty/beta");
+    BOMWERK_TEST_CHECK(beta != nullptr);
+    BOMWERK_TEST_CHECK(beta->name == "beta");
+    BOMWERK_TEST_CHECK(beta->version == kSha);
+    BOMWERK_TEST_CHECK(beta->purl == "pkg:github/example-org/beta@" + kSha);
+    BOMWERK_TEST_CHECK(beta->supplier == "Example-Org");
+
+    const Component* gamma = component_at(result.value, "thirdparty/gamma");
+    BOMWERK_TEST_CHECK(gamma != nullptr);
+    BOMWERK_TEST_CHECK(gamma->purl == "pkg:generic/gamma@" + kSha);
+    BOMWERK_TEST_CHECK(gamma->supplier.empty());
+
+    const Component* mu = component_at(result.value, "thirdparty/mu");
+    BOMWERK_TEST_CHECK(mu != nullptr);
+    BOMWERK_TEST_CHECK(mu->purl == "pkg:generic/mu@" + kSha);
+    BOMWERK_TEST_CHECK(mu->supplier.empty());
+
+    const Component* unlisted = component_at(result.value, "thirdparty/unlisted");
+    BOMWERK_TEST_CHECK(unlisted != nullptr);
+    BOMWERK_TEST_CHECK(unlisted->purl == "pkg:generic/unlisted");
+    BOMWERK_TEST_CHECK(highest_confidence(*unlisted) == Confidence::Low);
+  }
+
+  // Given a record and the library's own header stating different releases,
+  // when parsed, then the header wins, both appear in the evidence, and one
+  // warning names both values and both files.
+  {
+    TempTree tree;
+    tree.write("thirdparty/README.md", "## zlib\n\n- Version: 1.3.0\n");
+    tree.write("thirdparty/zlib/zlib.h", "#define ZLIB_VERSION \"1.3.1\"\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.complete);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version == "1.3.1");
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/zlib@1.3.1");
+    BOMWERK_TEST_CHECK(has_evidence_containing(result.value[0], "#define ZLIB_VERSION \"1.3.1\""));
+    BOMWERK_TEST_CHECK(has_evidence_containing(result.value[0], "- Version: 1.3.0"));
+    BOMWERK_TEST_CHECK(result.warnings.size() == 1);
+    const auto& warning = result.warnings.front();
+    BOMWERK_TEST_CHECK(warning.code == WarningCode::kVendoringRecordVersionDisagreement);
+    BOMWERK_TEST_CHECK(warning.affected_path == fs::path("thirdparty/zlib"));
+    BOMWERK_TEST_CHECK(warning.message.find("\"1.3.0\"") != std::string::npos);
+    BOMWERK_TEST_CHECK(warning.message.find("\"1.3.1\"") != std::string::npos);
+    BOMWERK_TEST_CHECK(warning.message.find("thirdparty/README.md") != std::string::npos);
+    BOMWERK_TEST_CHECK(warning.message.find("thirdparty/zlib/zlib.h") != std::string::npos);
+  }
+
+  // Given a record that agrees with the header up to a leading `v`, or that
+  // states only a commit, when parsed, then there is nothing to warn about and
+  // the header's version stands.
+  {
+    TempTree tree;
+    tree.write("thirdparty/README.md",
+               "## zlib\n- Version: v1.3.1\n\n## libpng\n- Version: git (" + kSha + ")\n");
+    tree.write("thirdparty/zlib/zlib.h", "#define ZLIB_VERSION \"1.3.1\"\n");
+    tree.write("thirdparty/libpng/png.h", "#define PNG_LIBPNG_VER_STRING \"1.6.58\"\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.warnings.empty());
+    BOMWERK_TEST_CHECK(component_at(result.value, "thirdparty/zlib")->version == "1.3.1");
+    BOMWERK_TEST_CHECK(component_at(result.value, "thirdparty/libpng")->version == "1.6.58");
+  }
+
+  // Given a leftover .git and a record, when parsed, then the resolved HEAD
+  // still wins and the record is only evidence.
+  {
+    TempTree tree;
+    tree.write("third_party/README.md", "## mbedtls\n- Version: 3.6.0\n");
+    tree.write("third_party/mbedtls/.git/HEAD", kSha + "\n");
+    tree.write("third_party/mbedtls/.git/config",
+               "[remote \"origin\"]\n\turl = https://github.com/Mbed-TLS/mbedtls.git\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:github/mbed-tls/mbedtls@" + kSha);
+    BOMWERK_TEST_CHECK(has_evidence_containing(result.value[0], "- Version: 3.6.0"));
+  }
+
+  // Given a folder with its own README.chromium and a section in the parent's
+  // index, when parsed, then the record inside the folder wins; a
+  // README.chromium deeper inside describes a sub-library and is not read.
+  {
+    TempTree tree;
+    tree.write("third_party/README.md", "## inner\n- Version: 1.0.0\n");
+    tree.write("third_party/inner/README.chromium",
+               "Name: inner\nURL: https://example.org/inner\nVersion: 2.0.0\n");
+    tree.write("third_party/inner/inner.c", "int inner;\n");
+    tree.write("third_party/outer/sub/README.chromium", "Name: sub\nVersion: 3.0.0\n");
+    tree.write("third_party/outer/outer.c", "int outer;\n");
+    const auto result = parse_tree(tree);
+    const Component* inner = component_at(result.value, "third_party/inner");
+    BOMWERK_TEST_CHECK(inner != nullptr);
+    BOMWERK_TEST_CHECK(inner->purl == "pkg:generic/inner@2.0.0");
+    BOMWERK_TEST_CHECK(has_evidence_containing(*inner,
+                                               "third_party/inner/README.chromium -> "
+                                               "\"Version: 2.0.0\""));
+    const Component* outer = component_at(result.value, "third_party/outer");
+    BOMWERK_TEST_CHECK(outer != nullptr);
+    BOMWERK_TEST_CHECK(outer->purl == "pkg:generic/outer");
+  }
+
+  // Given an index somewhere other than the folder's parent directory (the
+  // repository's own README.md), when parsed, then it is not this folder's
+  // record.
+  {
+    TempTree tree;
+    tree.write("README.md", "## foo\n- Version: 1.0.0\n");
+    tree.write("third_party/foo/foo.c", "int foo;\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/foo");
+  }
+
+  // Given an index cut by max_record_bytes in the middle of a Version line,
+  // when parsed, then the cut line is dropped rather than read as a shorter
+  // version.
+  {
+    TempTree tree;
+    const std::string index = "## foo\n- Version: 1.22.333\n";
+    tree.write("third_party/README.md", index);
+    tree.write("third_party/foo/foo.c", "int foo;\n");
+    vendored_cpp::ParseLimits limits;
+    limits.max_record_bytes = index.size() - 3;  // cuts inside "1.22.333"
+    const auto result = parse_tree(tree, limits);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].version.empty());
+  }
+
+  // Given libjpeg-turbo's own top-level CMakeLists.txt with
+  // `set(VERSION 3.1.2)` (upstream's line at tag 3.1.2), when parsed, then
+  // that is its version, quoted as written in the evidence.
+  {
+    TempTree tree;
+    tree.write("3rdparty/libjpeg-turbo/CMakeLists.txt",
+               "project(${JPEG_LIBRARY} C)\n"
+               "set(VERSION 3.1.2)\n"
+               "string(REPLACE \".\" \";\" VERSION_TRIPLET ${VERSION})\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/libjpeg-turbo@3.1.2");
+    BOMWERK_TEST_CHECK(has_evidence_containing(
+        result.value[0], "3rdparty/libjpeg-turbo/CMakeLists.txt -> set(VERSION 3.1.2)"));
+  }
+
+  // Given `set(VERSION ...)` in a build file the row does not cover (one in a
+  // subdirectory, or one in a folder not named for the library), when parsed,
+  // then no version is read from it.
+  {
+    TempTree tree;
+    tree.write("3rdparty/libjpeg-turbo/simd/CMakeLists.txt", "set(VERSION 3.1.2)\n");
+    tree.write("3rdparty/jpeg/CMakeLists.txt", "set(VERSION 3.1.2)\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 2);
+    for (const Component& component : result.value)
+    {
+      BOMWERK_TEST_CHECK(component.version.empty());
+    }
+  }
+
+  // Given CMake lines that are not one plain `set(VERSION x.y.z)` (a comment,
+  // a list, another command, a variable, a CACHE entry), when parsed, then
+  // none is read; any spelling of `set` with blanks around `(` is.
+  {
+    constexpr std::string_view kRejected[] = {"# set(VERSION 3.1.2)\n",
+                                              "set(VERSION 3.1.2 3.1.3)\n",
+                                              "offset(VERSION 3.1.2)\n",
+                                              "set(VERSION ${PROJECT_VERSION})\n",
+                                              "set(VERSION 3.1.2 CACHE STRING \"\")\n",
+                                              "set(MY_VERSION 3.1.2)\n",
+                                              "set(VERSION \"3.1.2\")\n"};
+    for (const std::string_view content : kRejected)
+    {
+      TempTree tree;
+      tree.write("3rdparty/libjpeg-turbo/CMakeLists.txt", std::string(content));
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.value.size() == 1);
+      BOMWERK_TEST_CHECK(result.value[0].version.empty());
+    }
+    TempTree tree;
+    tree.write("3rdparty/libjpeg-turbo/CMakeLists.txt", "  SET ( VERSION 3.1.2 ) # release\r\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value[0].version == "3.1.2");
+  }
+
+  // Given openjpeg's own CMakeLists.txt setting MAJOR, MINOR and BUILD
+  // (upstream's lines at tag v2.5.3), when parsed, then BUILD is the third
+  // part; without it there is no version, never a partial `2.5`.
+  {
+    TempTree tree;
+    tree.write("3rdparty/openjpeg/CMakeLists.txt",
+               "set(OPENJPEG_VERSION_MAJOR 2)\n"
+               "set(OPENJPEG_VERSION_MINOR 5)\n"
+               "set(OPENJPEG_VERSION_BUILD 3)\n"
+               "set(OPENJPEG_MAJOR_VERSION ${OPENJPEG_VERSION_MAJOR} PARENT_SCOPE)\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/openjpeg@2.5.3");
+    BOMWERK_TEST_CHECK(
+        has_evidence_containing(result.value[0],
+                                "set(OPENJPEG_VERSION_MAJOR 2); set(OPENJPEG_VERSION_MINOR 5); "
+                                "set(OPENJPEG_VERSION_BUILD 3)"));
+
+    TempTree partial;
+    partial.write("3rdparty/openjpeg/CMakeLists.txt",
+                  "set(OPENJPEG_VERSION_MAJOR 2)\nset(OPENJPEG_VERSION_MINOR 5)\n");
+    BOMWERK_TEST_CHECK(parse_tree(partial).value[0].version.empty());
+  }
+
+  // Given protobuf's encoded-integer macros (3019001 at tag v3.19.1, 4022000
+  // at v22.0), when parsed, then each decodes MAJOR*1000000 + MINOR*1000 +
+  // PATCH, and the evidence quotes the integer as written.
+  {
+    TempTree tree;
+    tree.write("3rdparty/protobuf/src/google/protobuf/port_def.inc",
+               "#ifdef PROTOBUF_VERSION\n#error PROTOBUF_VERSION was previously defined\n#endif\n"
+               "#define PROTOBUF_VERSION 3019001\n#define PROTOBUF_VERSION_SUFFIX \"\"\n");
+    const auto result = parse_tree(tree);
+    BOMWERK_TEST_CHECK(result.value.size() == 1);
+    BOMWERK_TEST_CHECK(result.value[0].purl == "pkg:generic/protobuf@3.19.1");
+    BOMWERK_TEST_CHECK(
+        has_evidence_containing(result.value[0], "#define PROTOBUF_VERSION 3019001"));
+
+    TempTree runtime;
+    runtime.write("third_party/protobuf/src/google/protobuf/stubs/common.h",
+                  "#define GOOGLE_PROTOBUF_VERSION 4022000\n");
+    BOMWERK_TEST_CHECK(parse_tree(runtime).value[0].version == "4.22.0");
+  }
+
+  // Given encoded values the rule must not decode (too few digits, a second
+  // definition, a folder not named for the library), when parsed, then no
+  // version is read.
+  {
+    TempTree short_number;
+    short_number.write("third_party/protobuf/port_def.inc", "#define PROTOBUF_VERSION 999999\n");
+    BOMWERK_TEST_CHECK(parse_tree(short_number).value[0].version.empty());
+
+    TempTree twice;
+    twice.write("third_party/protobuf/port_def.inc",
+                "#define PROTOBUF_VERSION 3019001\n#define PROTOBUF_VERSION 3020000\n");
+    BOMWERK_TEST_CHECK(parse_tree(twice).value[0].version.empty());
+
+    TempTree other_folder;
+    other_folder.write("third_party/pb/port_def.inc", "#define PROTOBUF_VERSION 3019001\n");
+    BOMWERK_TEST_CHECK(parse_tree(other_folder).value[0].version.empty());
+  }
+
+  // Given the in-memory matcher the fuzz harness uses, when a CMake row's
+  // file is passed directly inside the named folder and then one level
+  // deeper, then only the first matches.
+  {
+    namespace vendored = bomwerk::heuristics::vendored_cpp;
+    const auto top = vendored::match_version_header("libjpeg-turbo", "libjpeg-turbo/CMakeLists.txt",
+                                                    "set(VERSION 3.1.2)\n");
+    BOMWERK_TEST_CHECK(top.has_value());
+    BOMWERK_TEST_CHECK(top->version == "3.1.2");
+    BOMWERK_TEST_CHECK(!vendored::match_version_header("libjpeg-turbo",
+                                                       "libjpeg-turbo/simd/CMakeLists.txt",
+                                                       "set(VERSION 3.1.2)\n")
+                            .has_value());
+  }
+
+  // Given every hostile vendoring record, when placed where the heuristic
+  // reads it (an index beside the folders, a README.chromium inside one),
+  // then the scan completes with only valid purls (rule 1).
+  {
+    const fs::path hostile_dir = fs::path(BOMWERK_FIXTURES_DIR) / "vendoring_record" / "hostile";
+    for (const auto& entry : fs::directory_iterator(hostile_dir))
+    {
+      const std::string name = entry.path().filename().string();
+      TempTree tree;
+      if (name.ends_with(".README.md"))
+      {
+        tree.write("third_party/README.md", read_file(entry.path()));
+      }
+      else if (name.ends_with(".README.chromium"))
+      {
+        tree.write("third_party/hostile-case/README.chromium", read_file(entry.path()));
+      }
+      else
+      {
+        continue;
+      }
+      constexpr std::string_view kFolders[] = {"before", "twice", "repeated", "hostile-case"};
+      for (const std::string_view folder : kFolders)
+      {
+        tree.write(fs::path("third_party") / folder / "x.c", "int x;\n");
+      }
+      const auto result = parse_tree(tree);
+      BOMWERK_TEST_CHECK(result.complete);
+      BOMWERK_TEST_CHECK(count_warnings(result, WarningCode::kPurlValidationFailed) == 0);
+    }
   }
 
   std::puts("test_vendored_cpp: OK");

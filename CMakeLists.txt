@@ -207,7 +207,8 @@ target_link_libraries(bomwerk_parsers
 add_library(bomwerk_heuristics
   src/heuristics/fingerprint.cpp
   src/heuristics/vendor_root.cpp
-  src/heuristics/vendored_cpp.cpp)
+  src/heuristics/vendored_cpp.cpp
+  src/heuristics/vendoring_record.cpp)
 # nlohmann_json is PRIVATE: the fingerprint corpus index is a JSON document, but
 # no header here names a JSON type, the same arrangement bomwerk_parsers and
 # bomwerk_binscan already have.
@@ -505,6 +506,7 @@ bomwerk_add_test(purl_emission bomwerk_parsers bomwerk_heuristics)
 # module dependency law forbids the heuristic itself from including output : 
 # but the test is allowed to see both).
 bomwerk_add_test(vendored_cpp bomwerk_heuristics bomwerk_output)
+bomwerk_add_test(vendoring_record bomwerk_heuristics)
 
 # The content-hash corpus matcher. Links nlohmann_json because the test builds
 # index documents as JSON rather than as hand-broken strings: a loader guard is

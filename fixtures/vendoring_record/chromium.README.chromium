@@ -1,0 +1,14 @@
+Name: Example Library: written for bomwerk's tests
+Short Name: example
+URL: https://github.com/example-org/example
+Version: git (see METADATA)
+Revision: abcdef0123456789abcdef0123456789abcdef01
+License: Apache-2.0
+License File: LICENSE
+Security Critical: yes
+Shipped: yes
+
+Description:
+A record in the layout Chromium keeps beside each vendored directory. The
+name, URL and revision are invented.
+Version: 9.9.9 is prose here, after Description, and must not be read.

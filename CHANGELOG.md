@@ -13,6 +13,21 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- The vendored-source heuristic reads vendoring records, the notes a project
+  keeps beside code it copied in. These are a directory's `README.md` index in
+  Godot's layout (one `## <folder>` section with `- Version:` and
+  `- Upstream:` per library) and a `README.chromium` inside the folder. A
+  stated release is reported as `pkg:generic/<folder>@<release>`. A stated
+  commit with a GitHub, GitLab or Bitbucket repository upstream becomes
+  `pkg:github/<owner>/<repo>@<commit>`, as a leftover `.git` does. The record
+  is named in the evidence. A record never overrides the library's own header
+  or build file: a different release is reported as `BW-VENDORED-001` with
+  both values. The version tables also read libjpeg-turbo's
+  `set(VERSION 3.1.2)` and openjpeg's `set(OPENJPEG_VERSION_MAJOR/_MINOR/_BUILD)`
+  from their own top-level `CMakeLists.txt`, and protobuf's encoded
+  `PROTOBUF_VERSION 3019001` (3.19.1). Godot's 69 vendored directories go from
+  4 to 65 with a version, and OpenCV's 3rdparty libjpeg-turbo, openjpeg and
+  protobuf are now versioned. See `docs/vendored-versions.md` (T123).
 - `scan` reads the ESP-IDF component manager's files. A `dependencies.lock`
   reports each component at its locked version with High confidence:
   registry components as `pkg:generic/<namespace>/<name>@<version>` with the

@@ -18,9 +18,10 @@ namespace bomwerk::heuristics::vendored_cpp
 /// scan read or search an unbounded amount).
 struct ParseLimits
 {
-  std::size_t max_header_bytes = 16u * 1024u;  ///< version-header search window
-  std::size_t max_license_bytes = 4u * 1024u;  ///< LICENSE/COPYING sniff window
-  std::size_t max_readme_bytes = 1024u;        ///< README first-lines window
+  std::size_t max_header_bytes = 16u * 1024u;   ///< version-header search window
+  std::size_t max_license_bytes = 4u * 1024u;   ///< LICENSE/COPYING sniff window
+  std::size_t max_readme_bytes = 1024u;         ///< README first-lines window
+  std::size_t max_record_bytes = 128u * 1024u;  ///< vendoring record (index or README.chromium)
 };
 
 /// Heuristic C/C++ vendored-code detection: walk
@@ -34,9 +35,15 @@ struct ParseLimits
 /// this heuristic must not fabricate a `pkg:generic/github.com` placeholder
 /// for the namespace. Retained roots are
 /// built from whatever identity clues are present there: a recognized
-/// version-defining header, a LICENSE/COPYING file, a README, or a leftover
-/// `.git` directory. This is heuristic evidence (`core::Source::Heuristic`),
-/// never a manifest, so a component from here is never `core::Confidence::High`.
+/// version-defining header or own `CMakeLists.txt`, a vendoring record (the
+/// parent directory's `README.md` index in Godot's format, or the root's own
+/// `README.chromium`; see `heuristics/vendoring_record.hpp`), a LICENSE/COPYING
+/// file, a README, or a leftover `.git` directory. The version comes from the
+/// strongest of these: `.git` HEAD, then the library's own files, then a
+/// record. A record that states a different release than the library's own
+/// files never overrides them; it raises `kVendoringRecordVersionDisagreement`
+/// naming both. This is heuristic evidence (`core::Source::Heuristic`), never a
+/// manifest, so a component from here is never `core::Confidence::High`.
 /// `root` must be the same directory `file_index` was built from. Never
 /// throws (rule 1); a vendor root with no recognizable clue at all still
 /// yields a Low-confidence component named from its folder: silently
@@ -75,9 +82,12 @@ struct VersionHeaderMatch
 /// Match one version header held in memory exactly as `parse` matches the
 /// file `header_path` inside a vendored folder named `vendor_folder_name`:
 /// the same tables, the same `max_header_bytes` cap and last-line trim, and
-/// the same rule that bare-dotted and split-macro rows need the folder to
-/// name their library. Never touches the filesystem: this is the entry point
-/// of the `fuzz_vendored_version_header` harness.
+/// the same rule that bare-dotted, split-macro, CMake and encoded-integer rows
+/// need the folder to name their library. A CMake row matches only a build
+/// file directly in the vendored folder, which here means `header_path`'s
+/// parent directory is named `vendor_folder_name` (`libjpeg-turbo/CMakeLists.txt`
+/// or `3rdparty/libjpeg-turbo/CMakeLists.txt`). Never touches the filesystem:
+/// this is the entry point of the `fuzz_vendored_version_header` harness.
 [[nodiscard]] std::optional<VersionHeaderMatch> match_version_header(
     std::string_view vendor_folder_name, const std::filesystem::path& header_path,
     std::string_view header_bytes, const ParseLimits& limits = {});

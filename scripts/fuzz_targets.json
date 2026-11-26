@@ -686,9 +686,43 @@
         "fixtures/fuzz/seeds/vendored_version_header"
       ],
       "seed_suffixes": [
-        ".h"
+        ".h",
+        ".inc",
+        "CMakeLists.txt"
       ],
       "dictionary": "fixtures/fuzz/dicts/lines.dict"
+    },
+    {
+      "name": "fuzz_vendoring_record_index",
+      "source": "fuzz_vendoring_record.cpp",
+      "variant": "README.md",
+      "libraries": [
+        "bomwerk_heuristics"
+      ],
+      "seed_paths": [
+        "fixtures/vendoring_record",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "README.md"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/vendoring_record.dict"
+    },
+    {
+      "name": "fuzz_vendoring_record_chromium",
+      "source": "fuzz_vendoring_record.cpp",
+      "variant": "README.chromium",
+      "libraries": [
+        "bomwerk_heuristics"
+      ],
+      "seed_paths": [
+        "fixtures/vendoring_record",
+        "fixtures/golden"
+      ],
+      "seed_suffixes": [
+        "README.chromium"
+      ],
+      "dictionary": "fixtures/fuzz/dicts/vendoring_record.dict"
     },
     {
       "name": "fuzz_fingerprint_index",
