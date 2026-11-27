@@ -37,13 +37,18 @@ component.
 ## Vulnerability coverage
 
 A project pinned to a full commit SHA is matched through OSV's commit index.
-A project pinned to a tag is not: OSV cannot match a tag through a
-`pkg:github` purl, so its match coverage is `unmapped-purl-type` and it is
-listed as not checked unless `scan --cpe-fallback` asks NVD about it. Zephyr
-itself is on the CPE fallback's operating-system list, so
-`zephyr@v3.5.0` is asked both as `cpe:2.3:a:*:zephyr:3.5.0` and as
-`cpe:2.3:o:*:zephyr:3.5.0`; NVD files Zephyr's CVEs under the second. Those
-findings use a wildcard vendor and are labelled lower confidence.
+A project pinned to a tag cannot be matched through its `pkg:github` purl, so
+its match coverage in the SBOM is `unmapped-purl-type`. The vulnerability check
+asks OSV about it another way: in OSV's `GIT` ecosystem, by repository URL and
+tag (`https://github.com/zephyrproject-rtos/zephyr` at `v3.5.0`). When OSV
+indexes the repository, its answer is an ordinary OSV finding: Zephyr `v3.5.0`
+had 156 OSV records on 2026-11-27. A repository OSV does not index, or a pin
+that reads like a branch (`main`, `v3.5-branch`) with no record, is listed as
+not checked unless `scan --cpe-fallback` asks NVD about it. Zephyr is on the CPE
+fallback's operating-system list, so there it would be asked both as
+`cpe:2.3:a:*:zephyr:3.5.0` and as `cpe:2.3:o:*:zephyr:3.5.0`; NVD files
+Zephyr's CVEs under the second. Those findings use a wildcard vendor and are
+labelled lower confidence.
 
 ## What is not followed
 

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "core/cvss.hpp"
+#include "core/git_url.hpp"
 #include "core/joining_thread.hpp"
 #include "core/json_utils.hpp"
 #include "core/match_coverage.hpp"
@@ -85,11 +86,62 @@ std::optional<std::string> commit_sha_if_applicable(std::string_view query_purl)
   return std::string(version);
 }
 
-/// The OSV query object for one purl: `{"commit": sha}` when the version is
-/// a resolved commit id, else `{"package": {"purl": ...}}`.
-json build_query_object(const std::string& query_purl)
+/// Query keys: what one OSV query is cached and batched under. Besides a bare
+/// query purl, a forge repository pinned to a tag adds two (T124):
+/// - the TAG key, its query purl plus this suffix, asked in OSV's `GIT`
+///   ecosystem by repository URL and tag. The suffix keeps it apart from the
+///   bare purl, under which a cache written before T122 may still hold the `{}`
+///   OSV answered for the purl query: reusing that key would replay a false
+///   "clean", forever under `--offline`;
+/// - the REPOSITORY key, the repository URL itself, asked without a version:
+///   whether OSV indexes the repository at all. A URL never starts with `pkg:`,
+///   so it cannot collide with a purl, and every tag of one repository shares it.
+constexpr std::string_view kGitTagKeySuffix =
+    "\x1f"
+    "git";
+
+bool is_repository_key(std::string_view query_key)
+{
+  return query_key.starts_with("https://");
+}
+
+bool is_git_tag_key(std::string_view query_key)
+{
+  return query_key.ends_with(kGitTagKeySuffix);
+}
+
+/// The purl a query key answers for: hits, delta snapshots and unresolved
+/// lists name this, never the key.
+std::string reported_purl_of(std::string_view query_key)
+{
+  if (is_git_tag_key(query_key))
+  {
+    query_key.remove_suffix(kGitTagKeySuffix.size());
+  }
+  return std::string(query_key);
+}
+
+/// The OSV query object for one query key: `{"package": {"name": url,
+/// "ecosystem": "GIT"}}` (plus `"version": tag` for a tag key) for the two
+/// forge keys above, `{"commit": sha}` when a purl's version is a resolved
+/// commit id, else `{"package": {"purl": ...}}`.
+json build_query_object(const std::string& query_key)
 {
   json query_object;
+  if (is_repository_key(query_key))
+  {
+    query_object["package"]["name"] = query_key;
+    query_object["package"]["ecosystem"] = "GIT";
+    return query_object;
+  }
+  const std::string query_purl = reported_purl_of(query_key);
+  if (is_git_tag_key(query_key))
+  {
+    query_object["package"]["name"] = core::forge_repository_url(query_purl).value_or("");
+    query_object["package"]["ecosystem"] = "GIT";
+    query_object["version"] = core::percent_decode(core::purl_version_of(query_purl));
+    return query_object;
+  }
   if (const std::optional<std::string> commit_sha = commit_sha_if_applicable(query_purl);
       commit_sha.has_value())
   {
@@ -375,14 +427,15 @@ std::map<std::string, AdvisoryRecord> finish_hydration_fetch(const std::string& 
       cache.store(cache_key, now, parsed.dump());
       return extract_full_records(parsed);
     }
-    result.warn(core::WarningCode::kVulnResponseMalformed,
-                "OSV severity payload for " + query_purl + " is malformed, severity omitted");
+    result.warn(core::WarningCode::kVulnResponseMalformed, "OSV severity payload for " +
+                                                               reported_purl_of(query_purl) +
+                                                               " is malformed, severity omitted");
   }
   else if (response.value.status_code != 0)
   {
     result.warn(core::WarningCode::kVulnHttpUnexpectedStatus,
                 "OSV query (severity) returned HTTP " + std::to_string(response.value.status_code) +
-                    " for " + query_purl);
+                    " for " + reported_purl_of(query_purl));
   }
   const std::optional<VulnCacheEntry> cached = cache.lookup(cache_key);
   return cached.has_value() ? extract_full_records(cached->payload)
@@ -441,7 +494,12 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
   // queried UNLESS its version is a resolved commit id: OSV's commit index
   // matches by sha regardless of purl type: see
   // MatchOutcome::components_without_osv_coverage.
-  std::set<std::string> query_purls;
+  //
+  // A forge repository pinned to a tag is the exception (T124): it is asked
+  // in OSV's `GIT` ecosystem under two query keys (see `kGitTagKeySuffix`),
+  // and counts as checked only when the answers below say so.
+  std::set<std::string> query_purls;  // query keys, in fact: purls plus the two forge keys
+  std::map<std::string, std::string> repository_url_by_tag_key;
   std::size_t skipped_component_count = 0;
   for (const core::Component& component : components)
   {
@@ -452,7 +510,14 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
         ++skipped_component_count;
         break;
       case core::MatchCoverage::UnmappedPurlType:
-        ++result.value.components_without_osv_coverage;
+        if (std::optional<std::string> repository_url = core::forge_repository_url(component.purl))
+        {
+          std::string tag_key = query_purl_for(component.purl) + std::string(kGitTagKeySuffix);
+          query_purls.insert(tag_key);
+          query_purls.insert(*repository_url);
+          repository_url_by_tag_key.insert_or_assign(std::move(tag_key),
+                                                     std::move(*repository_url));
+        }
         break;
       case core::MatchCoverage::Matched:
         query_purls.insert(query_purl_for(component.purl));
@@ -466,19 +531,27 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     spdlog::info("vuln: skipped {} component(s) without a resolved version (nothing to match)",
                  skipped_component_count);
   }
-  if (result.value.components_without_osv_coverage > 0)
+
+  // Once the tag pins OSV answered for are known: everything else unmapped is
+  // counted as not checked by OSV, and logged as such.
+  const auto count_components_without_osv_coverage = [&]
   {
-    // "by OSV" is load-bearing since: the CPE fallback may query exactly
-    // these components against NVD, so a bare "not queried" would read as
-    // "not checked at all" on a run where they were.
-    spdlog::info(
-        "vuln: {} component(s) have no OSV ecosystem coverage (Conan/vcpkg/generic or "
-        "a tag-pinned forge repository), "
-        "not queried by OSV",
-        result.value.components_without_osv_coverage);
-  }
+    result.value.components_without_osv_coverage =
+        components_osv_did_not_check(components, result.value).size();
+    if (result.value.components_without_osv_coverage > 0)
+    {
+      // "by OSV" is load-bearing: the CPE fallback may query exactly these
+      // components against NVD, so a bare "not checked" would read as "not
+      // checked at all" on a run where they were.
+      spdlog::info(
+          "vuln: {} component(s) have no OSV coverage (Conan/vcpkg/generic, or a tag-pinned "
+          "forge repository OSV did not answer for), not checked by OSV",
+          result.value.components_without_osv_coverage);
+    }
+  };
   if (query_purls.empty())
   {
+    count_components_without_osv_coverage();
     return result;
   }
 
@@ -545,11 +618,12 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
       {
         payload_by_purl.insert(*stale_position);
         stale_answer_purls.insert(purl);
-        ++stale_used_count;
+        // A repository key is evidence about a tag pin, not a purl of its own.
+        stale_used_count += is_repository_key(purl) ? 0 : 1;
       }
       else
       {
-        ++missing_count;
+        missing_count += is_repository_key(purl) ? 0 : 1;
         unresolved_query_purls.push_back(purl);
       }
     }
@@ -686,11 +760,11 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
       {
         payload_by_purl.insert(*stale_position);
         stale_answer_purls.insert(purl);
-        ++stale_fallback_count;
+        stale_fallback_count += is_repository_key(purl) ? 0 : 1;
       }
       else
       {
-        ++unresolved_count;
+        unresolved_count += is_repository_key(purl) ? 0 : 1;
         unresolved_query_purls.push_back(purl);
       }
     }
@@ -718,6 +792,10 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     std::map<std::string, std::string> next_page_token_by_purl;
     for (const std::string& purl : freshly_fetched_purls)
     {
+      if (is_repository_key(purl))
+      {
+        continue;  // one non-empty page already says OSV indexes the repository
+      }
       const json first_page = parse_bounded_json(payload_by_purl.at(purl));
       if (first_page.is_discarded() || !first_page.is_object())
       {
@@ -886,6 +964,84 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
   spdlog::info("vuln: {} purl(s) answered from fresh cache, {} fetched from OSV", fresh_cache_count,
                fetched_purl_count);
 
+  // T124: which tag pins OSV answered for. An advisory at the tag is an answer
+  // on its own. An empty answer is one only when OSV indexes the repository
+  // (its repository-key answer names something) and the tag is release-shaped:
+  // OSV answers `{}` alike for a repository it never heard of and for a branch
+  // name. A tag pin with no such answer drops its empty tag payload here, so it
+  // yields no hit and no delta snapshot, and stays unchecked for the CPE
+  // fallback. A malformed payload is kept, so phase 1 below still warns.
+  const auto has_advisories = [&payload_by_purl](const std::string& query_key)
+  {
+    const auto payload_position = payload_by_purl.find(query_key);
+    if (payload_position == payload_by_purl.end())
+    {
+      return false;
+    }
+    const ExtractedPayload extracted = extract_advisory_revisions(payload_position->second);
+    return !extracted.malformed && (extracted.truncated || !extracted.advisory_revisions.empty());
+  };
+  std::set<std::string> repository_known_tag_keys;
+  std::set<std::string> osv_checked_query_purls;
+  for (const auto& [tag_key, repository_url] : repository_url_by_tag_key)
+  {
+    const bool repository_known = has_advisories(repository_url) || has_advisories(tag_key);
+    if (repository_known)
+    {
+      repository_known_tag_keys.insert(tag_key);
+    }
+    const auto tag_payload = payload_by_purl.find(tag_key);
+    if (tag_payload == payload_by_purl.end())
+    {
+      continue;  // unanswered: unresolved below when OSV indexes the repository
+    }
+    const std::string query_purl = reported_purl_of(tag_key);
+    if (has_advisories(tag_key) ||
+        (repository_known && core::is_release_shaped_version(core::purl_version_of(query_purl))))
+    {
+      osv_checked_query_purls.insert(query_purl);
+    }
+    else if (!extract_advisory_revisions(tag_payload->second).malformed)
+    {
+      payload_by_purl.erase(tag_payload);
+    }
+  }
+  for (const core::Component& component : components)
+  {
+    if (osv_checked_query_purls.contains(query_purl_for(component.purl)) &&
+        core::classify_match_coverage(component) == core::MatchCoverage::UnmappedPurlType)
+    {
+      result.value.osv_repository_checked_purls.push_back(component.purl);
+    }
+  }
+  std::sort(result.value.osv_repository_checked_purls.begin(),
+            result.value.osv_repository_checked_purls.end());
+  result.value.osv_repository_checked_purls.erase(
+      std::unique(result.value.osv_repository_checked_purls.begin(),
+                  result.value.osv_repository_checked_purls.end()),
+      result.value.osv_repository_checked_purls.end());
+  count_components_without_osv_coverage();
+
+  // Unresolved lists name purls. A repository key is never one, and an
+  // unanswered tag pin is "unknown" only when OSV indexes the repository;
+  // otherwise it is simply not covered by OSV, which the count above says.
+  {
+    std::vector<std::string> unresolved_purls;
+    for (const std::string& query_key : result.value.unresolved_purls)
+    {
+      if (is_repository_key(query_key) ||
+          (is_git_tag_key(query_key) && !repository_known_tag_keys.contains(query_key)))
+      {
+        continue;
+      }
+      unresolved_purls.push_back(reported_purl_of(query_key));
+    }
+    std::sort(unresolved_purls.begin(), unresolved_purls.end());
+    unresolved_purls.erase(std::unique(unresolved_purls.begin(), unresolved_purls.end()),
+                           unresolved_purls.end());
+    result.value.unresolved_purls = std::move(unresolved_purls);
+  }
+
   // phase 1 (single-threaded): everything the earlier loop below did
   // EXCEPT the network hydration call: malformed/truncated handling, delta
   // computation and snapshot persistence, and (new) the non-network hydration
@@ -894,15 +1050,21 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
   // the old single-pass loop's output (rule 3).
   struct PurlWork
   {
-    std::string purl;
+    std::string query_key;  ///< what hydration asks and caches under
+    std::string purl;       ///< what the hit names
     ExtractedPayload extracted;
     std::optional<std::map<std::string, AdvisoryRecord>> cached_hydration_answer;
   };
   std::vector<PurlWork> purl_work;
   purl_work.reserve(payload_by_purl.size());
   bool pagination_warned = false;
-  for (const auto& [purl, payload] : payload_by_purl)
+  for (const auto& [query_key, payload] : payload_by_purl)
   {
+    if (is_repository_key(query_key))
+    {
+      continue;  // evidence about a tag pin, already read above
+    }
+    const std::string purl = reported_purl_of(query_key);
     ExtractedPayload extracted = extract_advisory_revisions(payload);
     if (extracted.malformed)
     {
@@ -959,7 +1121,7 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     // genuinely new advisory could be sitting on the page pagination never
     // reached, and skipping hydration here would hide it indefinitely.
     const bool detection_confirmed_unchanged =
-        delta.is_unchanged() && !stale_answer_purls.count(purl) && !extracted.truncated;
+        delta.is_unchanged() && !stale_answer_purls.count(query_key) && !extracted.truncated;
     if (!delta.is_unchanged())
     {
       result.value.deltas.changed_purls.push_back(std::move(delta));
@@ -971,9 +1133,10 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     }
 
     PurlWork work;
+    work.query_key = query_key;
     work.purl = purl;
     work.cached_hydration_answer = try_cached_hydration_answer(
-        purl, cache, options, now, oldest_fresh_epoch_seconds, detection_confirmed_unchanged);
+        query_key, cache, options, now, oldest_fresh_epoch_seconds, detection_confirmed_unchanged);
     work.extracted = std::move(extracted);
     purl_work.push_back(std::move(work));
   }
@@ -997,9 +1160,9 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
       hydration_fetch_indices.size(), std::max<std::size_t>(options.max_osv_request_concurrency, 1),
       [&](std::size_t fetch_slot)
       {
-        const std::string& query_purl = purl_work[hydration_fetch_indices[fetch_slot]].purl;
-        hydration_responses[fetch_slot] = http_post(
-            HttpRequest{std::string(kOsvQueryUrl), build_query_object(query_purl).dump()});
+        const std::string& query_key = purl_work[hydration_fetch_indices[fetch_slot]].query_key;
+        hydration_responses[fetch_slot] =
+            http_post(HttpRequest{std::string(kOsvQueryUrl), build_query_object(query_key).dump()});
       });
 
   // phase 3 (single-threaded, `purl_work` order == earlier loop order):
@@ -1016,8 +1179,8 @@ core::Result<MatchOutcome> match_components(const std::vector<core::Component>& 
     }
     else
     {
-      record_by_id =
-          finish_hydration_fetch(work.purl, cache, now, hydration_responses[fetch_slot], result);
+      record_by_id = finish_hydration_fetch(work.query_key, cache, now,
+                                            hydration_responses[fetch_slot], result);
       ++fetch_slot;
     }
 

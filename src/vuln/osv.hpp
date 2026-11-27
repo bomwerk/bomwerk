@@ -137,9 +137,16 @@ struct MatchOptions
 /// - everything else with a resolved, non-hex version is queried by
 ///   **purl** (`package.purl`): this is where a future OSV-native ecosystem
 ///   (npm, PyPI, …) would match once M2's lockfile parsers exist.
-/// A purl in `has_no_known_osv_coverage`'s bucket (Conan, vcpkg, generic or a forge repository
-/// pinned to a tag, WITHOUT a resolved commit id) is never queried at all; its component is
-/// counted in `MatchOutcome::components_without_osv_coverage` instead.
+/// - a forge repository pinned to a tag (`pkg:github/zephyrproject-rtos/zephyr@v3.5.0`),
+///   which OSV answers `{}` for by purl, is asked in OSV's `GIT` ecosystem instead: by
+///   repository URL and tag, plus once by repository URL alone to learn whether OSV
+///   indexes the repository. Both go in the same batch and are cached. One OSV answered
+///   for is listed in `MatchOutcome::osv_repository_checked_purls`, with its hits as
+///   ordinary OSV findings (measured 2026-11-27: Zephyr v3.5.0 has 156 OSV records by
+///   tag and none by purl).
+/// Any other purl in `has_no_known_osv_coverage`'s bucket (Conan, vcpkg, generic, WITHOUT a
+/// resolved commit id) is never queried at all. Its component, and a tag pin OSV did not
+/// answer for, is counted in `MatchOutcome::components_without_osv_coverage` instead.
 ///
 /// Injection points (so unit tests never touch network or wall clock):
 /// `http_post`: production passes `make_curl_http_post(...)`;

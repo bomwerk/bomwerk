@@ -42,7 +42,8 @@ constexpr const char* kFooter =
 constexpr const char* kEndpointsHeader =
     "bomwerk makes outbound HTTPS requests to these hosts, and to no others.\n"
     "Your source code never leaves the machine: the only data sent is a package\n"
-    "coordinate: a purl, a resolved commit id, or a CPE match string.\n"
+    "coordinate: a purl, a resolved commit id, a forge repository URL and tag,\n"
+    "or a CPE match string, all already in the SBOM.\n"
     "\n"
     "There are no inbound ports and no telemetry.\n"
     "\n";

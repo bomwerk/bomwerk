@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS vuln_cache(
 
 | Column | Type | Meaning |
 | --- | --- | --- |
-| `purl` | TEXT | The query key. Despite the name, this is a **namespaced key**, not always a bare purl: OSV detection entries use the query purl as-is; a full-advisory hydration entry appends a `0x1F` (unit separator) byte + `"full"`; an NVD CPE-match entry appends `0x1F` + `"nvd"`; a per-CVE NVD enrichment entry appends `0x1F` + `"nvdcve"`. `0x1F` never appears in a real purl or CPE string, so no namespace can collide with another. |
+| `purl` | TEXT | The query key. Despite the name, this is a **namespaced key**, not always a bare purl: OSV detection entries use the query purl as-is; a forge repository pinned to a tag is asked of OSV's `GIT` ecosystem under its query purl + `0x1F` (unit separator) + `"git"` (by repository URL and tag) and under the bare repository URL (`https://github.com/<owner>/<repo>`, whether OSV indexes it at all); a full-advisory hydration entry appends `0x1F` + `"full"` to the detection key; an NVD CPE-match entry appends `0x1F` + `"nvd"`; a per-CVE NVD enrichment entry appends `0x1F` + `"nvdcve"`. `0x1F` never appears in a real purl or CPE string, so no namespace can collide with another. |
 | `fetched_at` | INTEGER | Unix epoch seconds (UTC) when this entry was fetched. Compared against a caller-supplied freshness horizon (24 h by default) to decide whether to re-fetch; an entry past the horizon is still used, with a warning, under `--offline`. |
 | `payload` | TEXT | The upstream JSON response, verbatim, as canonical (sorted-key) `nlohmann::json::dump()`. |
 

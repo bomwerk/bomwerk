@@ -138,9 +138,9 @@ struct ReportContext
   bool vulnerability_check_offline = false;  ///< true => cache-only match, labeled in the report
   std::vector<ReportVulnerability> vulnerabilities;
 
-  /// The purls of every component OSV structurally cannot check
-  /// (Conan/vcpkg/generic, tag-pinned forge repositories), populated by the caller from
-  /// `vuln::has_no_known_osv_coverage`. This list is the single source of
+  /// The purls of every component OSV did not check (Conan/vcpkg/generic,
+  /// tag-pinned forge repositories OSV does not index), populated by the caller
+  /// from `vuln::components_osv_did_not_check`. This list is the single source of
   /// truth: the report tags exactly these rows AND derives the summary
   /// metric/notice count from its size, so the number and the tagged rows can
   /// never disagree. Surfaced so "0 findings" is never misread as "checked,

@@ -56,17 +56,20 @@ struct FeedEndpoint
 /// Never build a request URL from a string literal at a call site.
 ///
 /// Customer source code never leaves the machine; the only thing
-/// sent to these hosts is a package coordinate (a purl, a commit sha, or a CPE
-/// match string). `--offline` makes every one of them unnecessary.
+/// sent to these hosts is a package coordinate (a purl, a commit sha, a forge
+/// repository URL and tag, or a CPE match string), all already in the SBOM.
+/// `--offline` makes every one of them unnecessary.
 inline constexpr FeedEndpoint kFeedEndpoints[] = {
     {"OSV querybatch", kOsvQueryBatchUrl,
-     "batched advisory detection for components with an OSV-supported ecosystem", false},
+     "batched advisory detection for components with an OSV-supported ecosystem, and for "
+     "tag-pinned GitHub/GitLab/Bitbucket repositories by repository URL and tag",
+     false},
     {"OSV query", kOsvQueryUrl,
      "full advisory records (CVSS severity) for a component already known to be affected", false},
     {"NVD CVE API 2.0", kNvdCveApiUrl,
      "CPE-based advisory lookup for components OSV cannot match: Conan/vcpkg/generic and "
-     "tag-pinned forge repositories, as an application and, for a known OS or RTOS, also as "
-     "an operating system (--cpe-fallback only)",
+     "tag-pinned forge repositories OSV does not index, as an application and, for a known OS "
+     "or RTOS, also as an operating system (--cpe-fallback only)",
      false},
     {"crates.io crate version API", kCratesIoCrateVersionApiUrl,
      "declared license for an exact Cargo package version (--license-fallback only)", true},

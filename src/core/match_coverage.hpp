@@ -25,7 +25,9 @@ enum class MatchCoverage
   UnmappedPurlType,  ///< purl-shaped and versioned, but OSV cannot match it by purl: the type
                      ///< has no OSV ecosystem at all (Conan, vcpkg, generic), or it is a forge
                      ///< repository (github, gitlab, bitbucket) pinned to a tag; in both cases
-                     ///< the version is not a resolvable commit id
+                     ///< the version is not a resolvable commit id. A fact about the purl: the
+                     ///< OSV pass still asks about a forge tag by repository URL, and lists the
+                     ///< ones OSV answered in `vuln::MatchOutcome::osv_repository_checked_purls`
   UnversionedPurl,   ///< purl-shaped but carries no resolved `@version` (a bare manifest
                      ///< dependency, e.g. an un-pinned vcpkg.json entry)
   NoIdentifier       ///< not purl-shaped at all: empty, or malformed
@@ -60,8 +62,8 @@ constexpr const char* match_coverage_reason(MatchCoverage coverage)
     case MatchCoverage::Matched:
       return "";
     case MatchCoverage::UnmappedPurlType:
-      return "package type has no OSV ecosystem mapping (Conan, vcpkg, generic, or a forge "
-             "repository pinned to a tag)";
+      return "package type has no OSV ecosystem mapping (Conan, vcpkg, generic), or a forge "
+             "repository pinned to a tag, which OSV checks only when it indexes the repository";
     case MatchCoverage::UnversionedPurl:
       return "no resolved version: nothing to match against";
     case MatchCoverage::NoIdentifier:
@@ -95,5 +97,14 @@ struct MatchCoverageSummary
 
 [[nodiscard]] MatchCoverageSummary summarize_match_coverage(
     const std::vector<Component>& components);
+
+/// True when `version` reads like a release rather than a branch: it holds a
+/// `<digit>.<digit>` run and does not end in `-branch`. True for `v1.11.0`,
+/// `openssl-3.0.0` and `zephyr-v3.5.0`; false for `main`, `master`, `v4` and
+/// `v3.5-branch`. OSV's `GIT` ecosystem answers `{}` both for a real tag with no
+/// advisory and for a name it does not list as a tag (measured 2026-11-27: Zephyr
+/// at `main`, `master` and `v99.0.0`), so an empty answer only counts as "checked,
+/// nothing known" for a version of this shape.
+[[nodiscard]] bool is_release_shaped_version(std::string_view version);
 
 }  // namespace bomwerk::core

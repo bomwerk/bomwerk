@@ -83,11 +83,27 @@ This is tested on Linux and macOS. The Windows code path (`MoveFileExW` with
 write-through) exists but is not built or tested, since Windows binaries are
 not planned.
 
+### What OSV is asked about a repository pinned to a tag
+
+A GitHub, GitLab or Bitbucket repository pinned to a tag rather than a commit
+gets no answer from OSV by purl. bomwerk asks OSV's `GIT` ecosystem instead,
+in the same batch as every other query: once with the repository URL and the
+tag, and once with the repository URL alone, to learn whether OSV indexes the
+repository at all. Both are already in the SBOM, and both answers are cached,
+so `--offline` replays them. The component counts as checked by OSV when OSV
+names an advisory at the tag, or when OSV indexes the repository and the tag
+reads like a release (`v1.11.0`, `openssl-3.0.0`): then an empty answer means
+no known advisory. OSV answers a branch name or an unknown repository with the
+same empty result, so those stay `unmapped-purl-type`, are reported as not
+checked, and are left to `--cpe-fallback`. Findings OSV gives this way are
+ordinary OSV findings, not lower confidence. The SBOM's `bomwerk:match-coverage`
+property does not change with feed answers: it stays `unmapped-purl-type`.
+
 ### What `--cpe-fallback` asks NVD
 
-The fallback covers the components OSV cannot match by purl: Conan, vcpkg and
+The fallback covers the components OSV did not check: Conan, vcpkg and
 generic purls, and GitHub, GitLab or Bitbucket repositories pinned to a tag
-rather than a commit. For each, it sends NVD one `virtualMatchString` with a
+that OSV does not index. For each, it sends NVD one `virtualMatchString` with a
 wildcard vendor, the purl's name as product and its version without a leading
 `v`: `cpe:2.3:a:*:zlib:1.2.11`. Part `a` (application) is always asked.
 

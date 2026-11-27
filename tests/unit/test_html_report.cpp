@@ -674,10 +674,12 @@ int main()
     BOMWERK_TEST_CHECK(contains(document,
                                 "metric-value\">1</span><span class=\"metric-label\">checked via "
                                 "CPE (low confidence)"));
-    BOMWERK_TEST_CHECK(contains(document,
-                                "1 component(s) have no OSV ecosystem coverage (Conan, "
-                                "vcpkg, generic, or a forge repository pinned to a tag) and "
-                                "were matched against NVD by CPE"));
+    BOMWERK_TEST_CHECK(
+        contains(document,
+                 "1 component(s) have no OSV ecosystem coverage (Conan, "
+                 "vcpkg, generic, or a forge repository pinned to a tag that OSV does "
+                 "not index) and "
+                 "were matched against NVD by CPE"));
     BOMWERK_TEST_CHECK(!contains(document, "and were not checked"));
   }
 

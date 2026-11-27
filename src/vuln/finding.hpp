@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/cvss.hpp"
+#include "core/model.hpp"
 #include "vuln/delta.hpp"
 
 namespace bomwerk::vuln
@@ -18,8 +19,9 @@ namespace bomwerk::vuln
 /// the way to stdout and the HTML report.
 enum class MatchProvenance
 {
-  PurlExact,   ///< matched by purl or by resolved commit id against OSV: the package
-               ///< identity bomwerk queried is the identity the advisory names
+  PurlExact,   ///< matched against OSV by purl, by resolved commit id, or by repository
+               ///< URL and tag: the package identity bomwerk queried is the identity the
+               ///< advisory names
   CpeFallback  ///< matched by a CPE match string with a WILDCARD VENDOR against NVD
                ///<, the only path available for a purl type no feed maps. A
                ///< different vendor's product sharing the name matches too, so these
@@ -113,15 +115,24 @@ struct MatchOutcome
   /// transitions off `hits` instead of this field.
   OsvDeltaReport deltas;
 
-  /// Components skipped because OSV cannot match their purl: the package type
-  /// has no OSV ecosystem today (Conan, vcpkg, generic: verified against OSV's
-  /// own ecosystem list, not inferred from a failed query), or it is a forge
-  /// repository pinned to a tag (OSV answers `{}` for those). These are never
-  /// queried by the OSV path: sending them would waste a request, and a
-  /// returned empty result would misleadingly look identical to "checked,
-  /// clean". This stays a fact about the PURL, unchanged by whether the
-  /// CPE fallback later checked the same component against NVD.
+  /// Components OSV did not check: the package type has no OSV ecosystem
+  /// today (Conan, vcpkg, generic: verified against OSV's own ecosystem list,
+  /// not inferred from a failed query), or it is a forge repository pinned to a
+  /// tag that OSV did not answer for (see `osv_repository_checked_purls`). The
+  /// first kind is never queried: a returned empty result would misleadingly
+  /// look identical to "checked, clean". Unchanged by whether the CPE fallback
+  /// later checked the same component against NVD.
   std::size_t components_without_osv_coverage = 0;
+
+  /// The purls (verbatim `Component::purl`, like `cpe_checked_purls`) of the
+  /// forge repositories pinned to a tag that OSV answered for through its `GIT`
+  /// ecosystem, by repository URL and tag. Sorted and deduplicated. A tag pin
+  /// lands here when OSV named an advisory at the tag, or when OSV indexes the
+  /// repository and the tag is release-shaped
+  /// (`core::is_release_shaped_version`), so an empty answer means "nothing
+  /// known" and not "OSV never heard of it". Every other tag pin stays in
+  /// `components_without_osv_coverage` and is left to the CPE fallback.
+  std::vector<std::string> osv_repository_checked_purls;
 
   /// The purls of the components above that the CPE fallback actually
   /// resolved an answer for, sorted and deduplicated. Empty without
@@ -152,10 +163,17 @@ struct MatchOutcome
 /// and re-sorted by `(purl, provenance)` for a total, byte-stable order, and
 /// the counters are summed.
 ///
-/// This is the ONLY place the two feeds' results meet, deliberately: the two
-/// runs may execute concurrently (the CLI puts the throttled NVD path on its
-/// own thread), so ordering must come from the data and never from whichever
-/// thread finished first (rule 3).
+/// This is the ONLY place the two feeds' results meet, deliberately, so
+/// ordering comes from the data and never from which feed answered first
+/// (rule 3).
 [[nodiscard]] MatchOutcome merge_outcomes(MatchOutcome purl_outcome, MatchOutcome cpe_outcome);
+
+/// The components the OSV pass in `osv_outcome` did not check: every
+/// `core::MatchCoverage::UnmappedPurlType` component except the tag pins listed
+/// in `osv_outcome.osv_repository_checked_purls`. What a caller hands
+/// `match_via_cpe`, so a component OSV answered is never asked again through
+/// NVD, and what it reports as having no OSV coverage. Input order is kept.
+[[nodiscard]] std::vector<core::Component> components_osv_did_not_check(
+    const std::vector<core::Component>& components, const MatchOutcome& osv_outcome);
 
 }  // namespace bomwerk::vuln

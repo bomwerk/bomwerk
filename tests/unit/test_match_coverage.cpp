@@ -135,6 +135,21 @@ int main()
   BOMWERK_TEST_CHECK(mixed_summary.unversioned_purl == 1);
   BOMWERK_TEST_CHECK(mixed_summary.no_identifier == 1);
 
+  // T124: given pins of a forge repository, when asked whether each reads like
+  // a release, then release tags do and branch names do not.
+  {
+    using bomwerk::core::is_release_shaped_version;
+    BOMWERK_TEST_CHECK(is_release_shaped_version("v1.11.0"));
+    BOMWERK_TEST_CHECK(is_release_shaped_version("openssl-3.0.0"));
+    BOMWERK_TEST_CHECK(is_release_shaped_version("zephyr-v3.5.0"));
+    BOMWERK_TEST_CHECK(is_release_shaped_version("1.2"));
+    BOMWERK_TEST_CHECK(!is_release_shaped_version("main"));
+    BOMWERK_TEST_CHECK(!is_release_shaped_version("master"));
+    BOMWERK_TEST_CHECK(!is_release_shaped_version("v4"));
+    BOMWERK_TEST_CHECK(!is_release_shaped_version("v3.5-branch"));
+    BOMWERK_TEST_CHECK(!is_release_shaped_version(""));
+  }
+
   std::puts("test_match_coverage: OK");
   return 0;
 }

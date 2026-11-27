@@ -1,6 +1,7 @@
 #include "core/match_coverage.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <string_view>
 
 #include "core/git_url.hpp"
@@ -89,6 +90,23 @@ MatchCoverageSummary summarize_match_coverage(const std::vector<Component>& comp
   summary.matchable =
       summary.total - summary.unmapped_purl_type - summary.unversioned_purl - summary.no_identifier;
   return summary;
+}
+
+bool is_release_shaped_version(std::string_view version)
+{
+  if (version.ends_with("-branch"))
+  {
+    return false;
+  }
+  const auto is_digit = [](char character) { return character >= '0' && character <= '9'; };
+  for (std::size_t index = 0; index + 2 < version.size(); ++index)
+  {
+    if (is_digit(version[index]) && version[index + 1] == '.' && is_digit(version[index + 2]))
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace bomwerk::core

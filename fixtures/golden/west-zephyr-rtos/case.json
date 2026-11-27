@@ -1,5 +1,5 @@
 {
-  "description": "west: an application pinning Zephyr to the v3.5.0 tag and one module to a commit. The tag pin is unmapped-purl-type (OSV cannot match a forge tag) and publishes its CPE with part o, because zephyr is on the CPE fallback's operating-system list; the commit pin stays matched",
+  "description": "west: an application pinning Zephyr to the v3.5.0 tag and one module to a commit. The tag pin is unmapped-purl-type (OSV cannot match a forge tag by purl) and publishes its CPE with part o, because zephyr is on the CPE fallback's operating-system list; the commit pin stays matched",
   "args": [],
   "expect_exit": 0,
   "coverage": true

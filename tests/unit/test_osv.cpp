@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -16,6 +17,7 @@
 #include "core/result.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
+#include "vuln/cache.hpp"
 #include "vuln/http.hpp"
 #include "vuln/osv.hpp"
 
@@ -192,6 +194,96 @@ vuln::MatchOptions options_with_cache(const TempTree& tree)
   options.cache_database_path = tree.root() / "vuln_cache.sqlite3";
   return options;
 }
+
+// T124: forge repositories pinned to a tag, asked in OSV's `GIT` ecosystem.
+// Answers recorded from api.osv.dev on 2026-11-27 and trimmed to their first
+// three advisories (by id): Zephyr has 156 records at v3.5.0 and 330 for the
+// repository; spdlog has none at v1.11.0 and one for the repository.
+constexpr const char* kZephyrTagPurl = "pkg:github/zephyrproject-rtos/zephyr@v3.5.0";
+constexpr const char* kZephyrUrl = "https://github.com/zephyrproject-rtos/zephyr";
+constexpr const char* kZephyrTagVulns =
+    R"([{"id":"CVE-2023-5779","modified":"2026-10-28T02:30:59.832565Z"},)"
+    R"({"id":"CVE-2023-6249","modified":"2026-10-28T02:30:27.746716Z"},)"
+    R"({"id":"CVE-2023-6749","modified":"2026-10-28T02:30:31.509085Z"}])";
+constexpr const char* kZephyrRepositoryVulns =
+    R"([{"id":"CVE-2022-0553","modified":"2026-10-28T02:31:12.368770Z"},)"
+    R"({"id":"CVE-2022-1041","modified":"2026-10-28T02:30:25.903039Z"},)"
+    R"({"id":"CVE-2022-1042","modified":"2026-10-28T02:30:42.552303Z"}])";
+constexpr const char* kSpdlogTagPurl = "pkg:github/gabime/spdlog@v1.11.0";
+constexpr const char* kSpdlogBranchPurl = "pkg:github/gabime/spdlog@main";
+constexpr const char* kSpdlogUrl = "https://github.com/gabime/spdlog";
+constexpr const char* kSpdlogRepositoryVulns =
+    R"([{"id":"CVE-2025-6140","modified":"2026-10-28T10:51:50.799641Z"}])";
+
+/// OSV as it answers `GIT`-ecosystem queries: every query object in a batch
+/// gets its own answer, looked up by repository URL (no version) or by
+/// `<url>@<version>`; anything else answers `{}`, the way OSV answers a
+/// repository it does not index. `/v1/query` (hydration) gets
+/// `hydration_body`. Guarded by a mutex: `match_components` may call it from
+/// worker threads.
+struct GitFeed
+{
+  std::map<std::string, std::string> repository_vulns;  ///< url -> `vulns` array
+  std::map<std::string, std::string> tag_vulns;         ///< url@version -> `vulns` array
+  std::string hydration_body = R"({"vulns":[]})";
+  bool unreachable = false;
+  int call_count = 0;
+  int detect_calls = 0;
+  std::string detect_bodies;  ///< every querybatch body, concatenated
+  std::string last_hydration_body;
+  std::mutex state_mutex;
+
+  json answer_for(const json& query) const
+  {
+    json entry = json::object();
+    if (!query.contains("package") || query["package"].value("ecosystem", "") != "GIT")
+    {
+      return entry;
+    }
+    const std::string url = query["package"].value("name", "");
+    const bool has_version = query.contains("version");
+    const std::map<std::string, std::string>& table = has_version ? tag_vulns : repository_vulns;
+    const auto position =
+        table.find(has_version ? url + "@" + query["version"].get<std::string>() : url);
+    if (position != table.end())
+    {
+      entry["vulns"] = json::parse(position->second);
+    }
+    return entry;
+  }
+
+  vuln::HttpPostFunction as_function()
+  {
+    return [this](const vuln::HttpRequest& request) -> Result<vuln::HttpResponse>
+    {
+      const std::lock_guard<std::mutex> lock(state_mutex);
+      ++call_count;
+      Result<vuln::HttpResponse> result;
+      if (unreachable)
+      {
+        result.warn(core::WarningCode::kVulnHttpRequestFailed, "transport unreachable (test)");
+        return result;
+      }
+      result.value.status_code = 200;
+      if (request.url != std::string(vuln::kOsvQueryBatchUrl))
+      {
+        last_hydration_body = request.body;
+        result.value.body = hydration_body;
+        return result;
+      }
+      ++detect_calls;
+      detect_bodies += request.body;
+      json results = json::array();
+      const json batch = json::parse(request.body);
+      for (const json& query : batch["queries"])
+      {
+        results.push_back(answer_for(query));
+      }
+      result.value.body = json{{"results", results}}.dump();
+      return result;
+    };
+  }
+};
 
 bool warnings_mention(const std::vector<core::Warning>& warnings, const std::string& needle)
 {
@@ -1109,6 +1201,148 @@ int main()
     BOMWERK_TEST_CHECK(transport.query_calls == 4);
     BOMWERK_TEST_CHECK(transport.peak_in_flight.load() <= 2);
     BOMWERK_TEST_CHECK(matches.value.hits.size() == 4);
+  }
+
+  // T124: given Zephyr pinned to the v3.5.0 tag the way west reports it, and
+  // OSV indexing the repository, when matched, then OSV is asked in its `GIT`
+  // ecosystem by repository URL and tag in one batch, and its advisories come
+  // back as an ordinary (purl-exact) finding on the purl itself: no CPE
+  // fallback needed. The component counts as checked by OSV, and an offline
+  // rerun replays the same answer from the cache without the network.
+  {
+    TempTree tree;
+    GitFeed feed;
+    feed.repository_vulns[kZephyrUrl] = kZephyrRepositoryVulns;
+    feed.tag_vulns[std::string(kZephyrUrl) + "@v3.5.0"] = kZephyrTagVulns;
+    const std::vector<Component> components{component_with_purl(kZephyrTagPurl)};
+    const auto matches = vuln::match_components(components, options_with_cache(tree),
+                                                feed.as_function(), fixed_clock(kNow));
+
+    BOMWERK_TEST_CHECK(matches.complete);
+    BOMWERK_TEST_CHECK(matches.warnings.empty());
+    BOMWERK_TEST_CHECK(feed.detect_calls == 1);
+    BOMWERK_TEST_CHECK(feed.detect_bodies.find(R"("ecosystem":"GIT")") != std::string::npos);
+    BOMWERK_TEST_CHECK(feed.detect_bodies.find(R"("name":")" + std::string(kZephyrUrl) + "\"") !=
+                       std::string::npos);
+    BOMWERK_TEST_CHECK(feed.detect_bodies.find(R"("version":"v3.5.0")") != std::string::npos);
+    BOMWERK_TEST_CHECK(feed.detect_bodies.find("\"purl\"") == std::string::npos);
+    // Hydration asks the same GIT shape, by tag.
+    BOMWERK_TEST_CHECK(feed.last_hydration_body.find(R"("version":"v3.5.0")") != std::string::npos);
+    BOMWERK_TEST_CHECK(matches.value.hits.size() == 1);
+    BOMWERK_TEST_CHECK(matches.value.hits[0].purl == kZephyrTagPurl);
+    BOMWERK_TEST_CHECK(matches.value.hits[0].provenance == vuln::MatchProvenance::PurlExact);
+    BOMWERK_TEST_CHECK(
+        ids_of(matches.value.hits[0]) ==
+        (std::vector<std::string>{"CVE-2023-5779", "CVE-2023-6249", "CVE-2023-6749"}));
+    BOMWERK_TEST_CHECK(matches.value.osv_repository_checked_purls ==
+                       std::vector<std::string>{kZephyrTagPurl});
+    BOMWERK_TEST_CHECK(matches.value.components_without_osv_coverage == 0);
+    BOMWERK_TEST_CHECK(matches.value.unresolved_purls.empty());
+    BOMWERK_TEST_CHECK(vuln::components_osv_did_not_check(components, matches.value).empty());
+    // The delta names the purl, never the internal query key.
+    BOMWERK_TEST_CHECK(matches.value.deltas.changed_purls.size() == 1);
+    BOMWERK_TEST_CHECK(matches.value.deltas.changed_purls[0].purl == kZephyrTagPurl);
+
+    GitFeed offline_feed;
+    offline_feed.unreachable = true;
+    vuln::MatchOptions offline_options = options_with_cache(tree);
+    offline_options.offline = true;
+    const auto replayed = vuln::match_components(components, offline_options,
+                                                 offline_feed.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(offline_feed.call_count == 0);
+    BOMWERK_TEST_CHECK(replayed.warnings.empty());
+    BOMWERK_TEST_CHECK(replayed.value.hits.size() == 1);
+    BOMWERK_TEST_CHECK(ids_of(replayed.value.hits[0]) == ids_of(matches.value.hits[0]));
+    BOMWERK_TEST_CHECK(replayed.value.osv_repository_checked_purls ==
+                       matches.value.osv_repository_checked_purls);
+  }
+
+  // T124: given a tag-pinned repository OSV does not index (a recorded empty
+  // answer for the repository and for the tag), when matched, then it is not
+  // reported as checked: no hit, not in the OSV-checked list, counted with the
+  // Conan component as not covered, and handed on for the CPE fallback.
+  {
+    TempTree tree;
+    GitFeed feed;
+    const std::vector<Component> components{component_with_purl("pkg:github/acme/widget@v1.4.0"),
+                                            component_with_purl("pkg:conan/zlib@1.2.11")};
+    const auto matches = vuln::match_components(components, options_with_cache(tree),
+                                                feed.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(matches.complete);
+    BOMWERK_TEST_CHECK(matches.warnings.empty());
+    BOMWERK_TEST_CHECK(feed.detect_calls == 1);
+    BOMWERK_TEST_CHECK(feed.detect_bodies.find("https://github.com/acme/widget") !=
+                       std::string::npos);
+    BOMWERK_TEST_CHECK(matches.value.hits.empty());
+    BOMWERK_TEST_CHECK(matches.value.osv_repository_checked_purls.empty());
+    BOMWERK_TEST_CHECK(matches.value.components_without_osv_coverage == 2);
+    BOMWERK_TEST_CHECK(matches.value.unresolved_purls.empty());
+    BOMWERK_TEST_CHECK(matches.value.deltas.purls_examined == 0);
+    BOMWERK_TEST_CHECK(vuln::components_osv_did_not_check(components, matches.value).size() == 2);
+  }
+
+  // T124: given spdlog pinned to v1.11.0, which OSV indexes (one record for the
+  // repository) but names no advisory at, when matched, then the empty answer
+  // counts as "checked, nothing known". Pinned to the `main` branch instead,
+  // the same empty answer does not count: OSV answers `{}` for a name it does
+  // not list as a tag, so that pin stays not covered.
+  {
+    TempTree tree;
+    GitFeed feed;
+    feed.repository_vulns[kSpdlogUrl] = kSpdlogRepositoryVulns;
+    const std::vector<Component> components{component_with_purl(kSpdlogTagPurl),
+                                            component_with_purl(kSpdlogBranchPurl)};
+    const auto matches = vuln::match_components(components, options_with_cache(tree),
+                                                feed.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(matches.complete);
+    BOMWERK_TEST_CHECK(matches.warnings.empty());
+    BOMWERK_TEST_CHECK(matches.value.hits.empty());
+    BOMWERK_TEST_CHECK(matches.value.osv_repository_checked_purls ==
+                       std::vector<std::string>{kSpdlogTagPurl});
+    BOMWERK_TEST_CHECK(matches.value.components_without_osv_coverage == 1);
+    // Only the checked tag reaches the delta bookkeeping.
+    BOMWERK_TEST_CHECK(matches.value.deltas.purls_examined == 1);
+    const std::vector<Component> unchecked =
+        vuln::components_osv_did_not_check(components, matches.value);
+    BOMWERK_TEST_CHECK(unchecked.size() == 1 && unchecked[0].purl == kSpdlogBranchPurl);
+  }
+
+  // T124: given a cache written before T122, which holds the `{}` OSV answered
+  // for the Zephyr tag when it was still asked by purl, when matched, then
+  // that stale "clean" is never read: the GIT query has a key of its own.
+  {
+    TempTree tree;
+    const vuln::MatchOptions options = options_with_cache(tree);
+    {
+      core::Result<vuln::VulnCache> cache = vuln::VulnCache::open(options.cache_database_path);
+      BOMWERK_TEST_CHECK(cache.value.store(kZephyrTagPurl, kNow, "{}"));
+    }
+    GitFeed feed;
+    feed.repository_vulns[kZephyrUrl] = kZephyrRepositoryVulns;
+    feed.tag_vulns[std::string(kZephyrUrl) + "@v3.5.0"] = kZephyrTagVulns;
+    const std::vector<Component> components{component_with_purl(kZephyrTagPurl)};
+    const auto matches =
+        vuln::match_components(components, options, feed.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(feed.detect_calls == 1);
+    BOMWERK_TEST_CHECK(matches.value.hits.size() == 1);
+  }
+
+  // T124: given OSV unreachable and nothing cached, when a tag pin is matched,
+  // then it is not checked (the failure is a warning) and, since nothing says
+  // OSV indexes the repository, it is not covered rather than unresolved: it
+  // stays eligible for the CPE fallback.
+  {
+    TempTree tree;
+    GitFeed feed;
+    feed.unreachable = true;
+    const std::vector<Component> components{component_with_purl(kZephyrTagPurl)};
+    const auto matches = vuln::match_components(components, options_with_cache(tree),
+                                                feed.as_function(), fixed_clock(kNow));
+    BOMWERK_TEST_CHECK(warnings_mention(matches.warnings, "1 purl(s) unresolved"));
+    BOMWERK_TEST_CHECK(matches.value.hits.empty());
+    BOMWERK_TEST_CHECK(matches.value.osv_repository_checked_purls.empty());
+    BOMWERK_TEST_CHECK(matches.value.components_without_osv_coverage == 1);
+    BOMWERK_TEST_CHECK(matches.value.unresolved_purls.empty());
   }
 
   std::puts("test_osv: OK");
