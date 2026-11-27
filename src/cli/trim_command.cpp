@@ -4,12 +4,12 @@
 
 #include <cstddef>
 #include <cstdio>
-#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "cli/app.hpp"
+#include "cli/artifact_write.hpp"
 #include "cli/observe_trim.hpp"
 #include "cli/warning_recorder.hpp"
 #include "core/exit_codes.hpp"
@@ -36,6 +36,10 @@ namespace
 constexpr const char* kTrimDescription =
     "Compare an SBOM against a recorded build trace and report which components the build "
     "actually compiled, linked, or included.";
+
+/// How each artifact trim writes is named when its write fails.
+constexpr const char* kTrimmedSbomArtifactLabel = "trimmed SBOM";
+constexpr const char* kHtmlReportArtifactLabel = "HTML report";
 
 /// Column width every "label: value" summary line aligns to, matching the
 /// scan command's summary block so the two read as one product, not two.
@@ -90,19 +94,7 @@ bool write_trimmed_sbom(const fs::path& output_path, const core::ReleaseMeta& re
   const std::string trimmed =
       output::write_cyclonedx(components, output::ToolInfo{"bomwerk", version()}, release_meta);
 
-  std::ofstream output_stream(output_path, std::ios::binary);
-  if (!output_stream)
-  {
-    spdlog::error("failed to open output file: {}", output_path.string());
-    return false;
-  }
-  output_stream << trimmed;
-  if (!output_stream)
-  {
-    spdlog::error("failed to write output file: {}", output_path.string());
-    return false;
-  }
-  return true;
+  return write_artifact(output_path, trimmed, kTrimmedSbomArtifactLabel);
 }
 
 }  // namespace
@@ -266,16 +258,8 @@ int run_trim(const TrimOptions& options)
     report_context.warnings = recorder.collected();
 
     const std::string report_document = output::write_html_report(components, report_context);
-    std::ofstream report_stream(options.html_report_path, std::ios::binary);
-    if (!report_stream)
+    if (!write_artifact(options.html_report_path, report_document, kHtmlReportArtifactLabel))
     {
-      spdlog::error("failed to open report file: {}", options.html_report_path.string());
-      return core::kExitIncomplete;
-    }
-    report_stream << report_document;
-    if (!report_stream)
-    {
-      spdlog::error("failed to write report file: {}", options.html_report_path.string());
       return core::kExitIncomplete;
     }
     std::printf("%-*s %s (self-contained HTML)\n", kSummaryLabelWidth,

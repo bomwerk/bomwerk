@@ -4,9 +4,9 @@
 
 #include <cstddef>
 #include <cstdio>
-#include <fstream>
 #include <set>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -14,6 +14,7 @@
 #include "binscan/binary_map.hpp"
 #include "binscan/sidecar.hpp"
 #include "cli/app.hpp"
+#include "cli/artifact_write.hpp"
 #include "cli/warning_recorder.hpp"
 #include "core/exit_codes.hpp"
 #include "core/model.hpp"
@@ -48,6 +49,10 @@ constexpr const char* kDefaultTracePath = ".bomwerk/trace.jsonl";
 /// The stored symbol sample lives beside the trace, in the same working
 /// directory `bomwerk observe` already owns and `.gitignore` already covers.
 constexpr const char* kDefaultSidecarPath = ".bomwerk/binscan.json";
+
+/// How each artifact binscan writes is named when its write fails.
+constexpr const char* kSidecarArtifactLabel = "binscan sidecar";
+constexpr const char* kEnrichedSbomArtifactLabel = "enriched SBOM";
 
 /// Column width every "label: value" summary line aligns to, matching `scan`
 /// and `trim` so the three read as one product, not three.
@@ -102,34 +107,22 @@ void print_artifact(const binscan::ScannedArtifact& artifact)
               detail.c_str());
 }
 
-/// Write a text artifact, reporting the two ways that can fail. Shared by the
-/// sidecar and the enriched SBOM because both must reach the exit code
-/// identically: a sample that silently failed to store is worse than one that
-/// was never asked for.
-bool write_text_file(const fs::path& path, const std::string& contents)
+/// Write a text artifact atomically. Shared by the sidecar and the enriched
+/// SBOM because both must reach the exit code identically: a sample that
+/// silently failed to store is worse than one that was never asked for.
+bool write_text_file(const fs::path& path, const std::string& contents,
+                     std::string_view artifact_label)
 {
   // `.bomwerk/` is the observe working directory, which may not exist yet on a
   // machine that has only ever run `scan`. A failure here is not reported on
-  // its own: the open below is the authoritative test, and a directory that
+  // its own: the write below is the authoritative test, and a directory that
   // already exists reports an error on some platforms.
   if (path.has_parent_path() && !path.parent_path().empty())
   {
     std::error_code directory_error;
     fs::create_directories(path.parent_path(), directory_error);
   }
-  std::ofstream output_stream(path, std::ios::binary);
-  if (!output_stream)
-  {
-    spdlog::error("failed to open output file: {}", path.string());
-    return false;
-  }
-  output_stream << contents;
-  if (!output_stream)
-  {
-    spdlog::error("failed to write output file: {}", path.string());
-    return false;
-  }
-  return true;
+  return write_artifact(path, contents, artifact_label);
 }
 
 /// Print the dynamic dependencies that named nothing inside this repository.
@@ -296,7 +289,8 @@ int run_binscan(const BinscanOptions& options)
 
   if (!options.no_sidecar)
   {
-    if (!write_text_file(options.sidecar_path, binscan::render_binscan_sidecar(binaries.value)))
+    if (!write_text_file(options.sidecar_path, binscan::render_binscan_sidecar(binaries.value),
+                         kSidecarArtifactLabel))
     {
       return core::kExitIncomplete;
     }
@@ -308,7 +302,7 @@ int run_binscan(const BinscanOptions& options)
   {
     const std::string enriched =
         output::write_cyclonedx(components, output::ToolInfo{"bomwerk", version()}, release_meta);
-    if (!write_text_file(options.output_path, enriched))
+    if (!write_text_file(options.output_path, enriched, kEnrichedSbomArtifactLabel))
     {
       return core::kExitIncomplete;
     }

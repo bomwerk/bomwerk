@@ -4,11 +4,11 @@
 
 #include <cstddef>
 #include <cstdlib>
-#include <fstream>
 #include <string>
 #include <system_error>
 #include <vector>
 
+#include "cli/artifact_write.hpp"
 #include "cli/warning_recorder.hpp"
 #include "core/exit_codes.hpp"
 #include "core/result.hpp"
@@ -31,6 +31,9 @@ constexpr const char* kObserveDescription =
 
 constexpr const char* kDefaultTracePath = ".bomwerk/trace.jsonl";
 constexpr const char* kDefaultShimDirectory = ".bomwerk/shims";
+
+/// How the trace is named when it cannot be reset.
+constexpr const char* kTraceArtifactLabel = "empty trace";
 
 /// What an empty trace almost always means. CMake stores the compiler's
 /// absolute path in CMakeCache.txt at CONFIGURE time, so building an
@@ -75,13 +78,9 @@ bool reset_trace_file(const fs::path& trace_path)
       return false;
     }
   }
-  std::ofstream trace_stream(trace_path, std::ios::binary | std::ios::trunc);
-  if (!trace_stream)
-  {
-    spdlog::error("cannot write the trace file {}", trace_path.string());
-    return false;
-  }
-  return true;
+  // Replaced atomically like every other artifact: if the fresh file cannot be
+  // put in place, the previous run's trace is left whole rather than truncated.
+  return write_artifact(trace_path, "", kTraceArtifactLabel);
 }
 
 /// Summarise what was recorded, per tool, in a stable order.
