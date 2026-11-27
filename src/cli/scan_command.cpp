@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -17,6 +16,7 @@
 #include <vector>
 
 #include "cli/app.hpp"
+#include "cli/artifact_write.hpp"
 #include "cli/observe_trim.hpp"
 #include "cli/scan_fingerprint.hpp"
 #include "cli/warning_recorder.hpp"
@@ -83,6 +83,13 @@ constexpr std::size_t kMaxListedManifests = 20;
 /// exceptions, worse than either full alignment or none. `%-*s` reads this as
 /// a runtime width so every site stays in sync if a label's length changes.
 constexpr int kSummaryLabelWidth = 16;
+
+/// How each artifact scan writes is named when its write fails.
+constexpr const char* kSbomArtifactLabel = "SBOM";
+constexpr const char* kCraSidecarArtifactLabel = "CRA sidecar";
+constexpr const char* kCoverageArtifactLabel = "coverage file";
+constexpr const char* kHtmlReportArtifactLabel = "HTML report";
+constexpr const char* kWarningsArtifactLabel = "warnings file";
 
 /// Construct one lockfile parser's options with the resolved per-ecosystem
 /// package budget and scanned-file budget while preserving every other
@@ -1413,16 +1420,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     document = output::write_spdx(components, output::ToolInfo{"bomwerk", version()},
                                   options.spdx_version, options.release_meta);
   }
-  std::ofstream output_stream(options.output_path, std::ios::binary);
-  if (!output_stream)
+  if (!write_artifact(options.output_path, document, kSbomArtifactLabel))
   {
-    spdlog::error("failed to open output file: {}", options.output_path.string());
-    return core::kExitIncomplete;
-  }
-  output_stream << document;
-  if (!output_stream)
-  {
-    spdlog::error("failed to write output file: {}", options.output_path.string());
     return core::kExitIncomplete;
   }
   if (options.format == core::SbomFormat::Spdx)
@@ -1443,22 +1442,14 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   // bomwerk.toml's [cra] table or the release metadata actually carries
   // something: a plain scan with neither configured gets no sidecar file at
   // all, same precedent as --coverage below. A failed write is exit-2 like a
-  // failed SBOM write: no partial sidecar is ever left as the result.
+  // failed SBOM write, and leaves any previous sidecar unchanged (atomic write).
   if (output::has_cra_sidecar_content(options.release_meta, options.cra_metadata))
   {
     const std::string sidecar_document =
         output::write_cra_sidecar(options.release_meta, options.cra_metadata);
     const fs::path sidecar_path = output::cra_sidecar_path_for(options.output_path);
-    std::ofstream sidecar_stream(sidecar_path, std::ios::binary);
-    if (!sidecar_stream)
+    if (!write_artifact(sidecar_path, sidecar_document, kCraSidecarArtifactLabel))
     {
-      spdlog::error("failed to open CRA sidecar file: {}", sidecar_path.string());
-      return core::kExitIncomplete;
-    }
-    sidecar_stream << sidecar_document;
-    if (!sidecar_stream)
-    {
-      spdlog::error("failed to write CRA sidecar file: {}", sidecar_path.string());
       return core::kExitIncomplete;
     }
     std::printf("%-*s %s\n", kSummaryLabelWidth, "cra-sidecar:", sidecar_path.string().c_str());
@@ -1467,21 +1458,13 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   // The match-coverage file, a sibling artifact to the SBOM: written
   // right alongside it since, like the SBOM, it depends only on `components`
   // and never on the vulnerability run below. A failed write is exit-2 like a
-  // failed SBOM write: no partial coverage file is ever left as the result.
+  // failed SBOM write, and leaves any previous coverage file unchanged.
   if (!options.coverage_path.empty())
   {
     const std::string coverage_document = output::write_coverage_report(
         components, output::ToolInfo{"bomwerk", version()}, options.release_meta);
-    std::ofstream coverage_stream(options.coverage_path, std::ios::binary);
-    if (!coverage_stream)
+    if (!write_artifact(options.coverage_path, coverage_document, kCoverageArtifactLabel))
     {
-      spdlog::error("failed to open coverage file: {}", options.coverage_path.string());
-      return core::kExitIncomplete;
-    }
-    coverage_stream << coverage_document;
-    if (!coverage_stream)
-    {
-      spdlog::error("failed to write coverage file: {}", options.coverage_path.string());
       return core::kExitIncomplete;
     }
     std::printf("%-*s %s\n", kSummaryLabelWidth,
@@ -1489,8 +1472,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   }
 
   // The report is written LAST so it replays every warning the scan
-  // produced. A failed report write is exit-2 like a failed SBOM write: no
-  // partial report file is ever left as the result.
+  // produced. A failed report write is exit-2 like a failed SBOM write, and
+  // leaves any previous report unchanged.
   if (!options.html_report_path.empty())
   {
     // Branding is optional (--report-config); a load problem degrades the run
@@ -1538,16 +1521,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     report_context.warnings = warning_recorder.collected();
 
     const std::string report_document = output::write_html_report(components, report_context);
-    std::ofstream report_stream(options.html_report_path, std::ios::binary);
-    if (!report_stream)
+    if (!write_artifact(options.html_report_path, report_document, kHtmlReportArtifactLabel))
     {
-      spdlog::error("failed to open report file: {}", options.html_report_path.string());
-      return core::kExitIncomplete;
-    }
-    report_stream << report_document;
-    if (!report_stream)
-    {
-      spdlog::error("failed to write report file: {}", options.html_report_path.string());
       return core::kExitIncomplete;
     }
     std::printf("%-*s %s (self-contained HTML)\n", kSummaryLabelWidth,
@@ -1562,16 +1537,8 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
     const std::string warnings_document = output::write_warnings_report(
         warning_recorder.collected(), options.suppressed_warning_codes,
         output::ToolInfo{"bomwerk", version()}, options.release_meta);
-    std::ofstream warnings_stream(options.warnings_path, std::ios::binary);
-    if (!warnings_stream)
+    if (!write_artifact(options.warnings_path, warnings_document, kWarningsArtifactLabel))
     {
-      spdlog::error("failed to open warnings file: {}", options.warnings_path.string());
-      return core::kExitIncomplete;
-    }
-    warnings_stream << warnings_document;
-    if (!warnings_stream)
-    {
-      spdlog::error("failed to write warnings file: {}", options.warnings_path.string());
       return core::kExitIncomplete;
     }
     std::printf("%-*s %s\n", kSummaryLabelWidth,

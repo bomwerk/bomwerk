@@ -5,7 +5,10 @@
 // live on, so the trace is verified after the fact. These cases pin the two
 // things that matter: corruption is counted and reported rather than passed
 // silently to the compile scan, and a good trace comes out in a reproducible order.
+#include <unistd.h>
+
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -13,12 +16,14 @@
 #include <vector>
 
 #include "core/result.hpp"
+#include "core/warning_code.hpp"
 #include "observe/trace_check.hpp"
 #include "observe/trace_line.hpp"
 #include "support/check.hpp"
 #include "support/temp_tree.hpp"
 
 using bomwerk::core::Result;
+using bomwerk::core::WarningCode;
 using bomwerk::observe::build_trace_line;
 using bomwerk::observe::TraceStats;
 using bomwerk::observe::validate_and_sort_trace;
@@ -78,6 +83,47 @@ int main()
     const std::vector<std::string> lines = read_lines(trace_path);
     BOMWERK_TEST_CHECK(lines.size() == 3);
     BOMWERK_TEST_CHECK(std::is_sorted(lines.begin(), lines.end()));
+
+    // The rewrite goes through the shared atomic write: nothing but the trace
+    // itself is left in the directory (no ".sorted", no staged ".tmp").
+    std::size_t directory_entries = 0;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(tree.root()))
+    {
+      BOMWERK_TEST_CHECK(entry.path() == trace_path);
+      ++directory_entries;
+    }
+    BOMWERK_TEST_CHECK(directory_entries == 1);
+  }
+
+  // Given a trace in a directory that is not writable, when it is validated,
+  // then the rewrite fails without touching the trace: it is still whole and in
+  // its original order, and the warning names the failed step and what to
+  // check. Root ignores permission bits, so this only runs as an ordinary user.
+  if (::geteuid() != 0)
+  {
+    TempTree tree;
+    const std::filesystem::path trace_directory = tree.root() / "locked";
+    std::filesystem::create_directories(trace_directory);
+    const std::filesystem::path trace_path = trace_directory / "trace.jsonl";
+    const std::vector<std::string> unsorted = {trace_line_for("cc", "zebra.c"),
+                                               trace_line_for("cc", "apple.c")};
+    write_raw_trace(trace_path, unsorted);
+    std::filesystem::permissions(
+        trace_directory, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec,
+        std::filesystem::perm_options::replace);
+
+    const Result<TraceStats> outcome = validate_and_sort_trace(trace_path);
+    std::filesystem::permissions(trace_directory, std::filesystem::perms::owner_all,
+                                 std::filesystem::perm_options::replace);
+
+    BOMWERK_TEST_CHECK(outcome.complete);
+    BOMWERK_TEST_CHECK(outcome.value.sorted_lines == 0);
+    BOMWERK_TEST_CHECK(outcome.warnings.size() == 1);
+    BOMWERK_TEST_CHECK(outcome.warnings.front().code == WarningCode::kObserveTraceRewriteFailed);
+    BOMWERK_TEST_CHECK(outcome.warnings.front().message.find("creating the temporary file") !=
+                       std::string::npos);
+    BOMWERK_TEST_CHECK(read_lines(trace_path) == unsorted);
   }
 
   // Given a trace carrying a corrupted line: what an interleaved concurrent

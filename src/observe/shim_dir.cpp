@@ -5,9 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
-#include <fstream>
+#include <string>
 #include <system_error>
 
+#include "core/atomic_file.hpp"
 #include "core/warning_code.hpp"
 #include "observe/shim_names.hpp"
 
@@ -99,13 +100,9 @@ bool write_real_tool_sidecar(const fs::path& shim_path, const fs::path& real_too
 {
   fs::path sidecar_path = shim_path;
   sidecar_path += std::string(kRealToolSidecarSuffix);
-  std::ofstream sidecar_stream(sidecar_path, std::ios::binary | std::ios::trunc);
-  if (!sidecar_stream)
-  {
-    return false;
-  }
-  sidecar_stream << real_tool_path.string() << '\n';
-  return sidecar_stream.good();
+  // Atomic, so a failed refresh keeps the previous sidecar whole: a truncated
+  // one would leave a build configured under observe unable to find its tool.
+  return core::write_file_atomically(sidecar_path, real_tool_path.string() + '\n').written;
 }
 
 }  // namespace

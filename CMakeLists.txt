@@ -125,6 +125,7 @@ find_package(tomlplusplus CONFIG REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
 
 add_library(bomwerk_core
+  src/core/atomic_file.cpp
   src/core/base64.cpp
   src/core/build_variables.cpp
   src/core/cvss.cpp
@@ -324,6 +325,7 @@ target_link_libraries(bomwerk_vuln
 
 set(bomwerk_cli_common_sources
   src/cli/app.cpp
+  src/cli/artifact_write.cpp
   src/cli/binscan_command.cpp
   src/cli/observe_command.cpp
   src/cli/observe_trim.cpp
@@ -373,7 +375,7 @@ foreach(bomwerk_test_name IN ITEMS model manifest_names sbom_format exclusions n
                                   uuid base64 build_variables xml_scan sha256
                                   cvss git_config git_dir git_index git_url scan_config
                                   unparsed_manifests yaml_subset warning_code warning_console_format
-                                  byte_cursor)
+                                  byte_cursor atomic_file)
   bomwerk_add_test(${bomwerk_test_name})
 endforeach()
 
@@ -653,10 +655,13 @@ endforeach()
 # since CLI command implementations are intentionally not a production
 # library. app.cpp supplies version() and observe_trim.cpp supplies the trace
 # application scan/trim both call, exactly the same peer sources bomwerk_cli_
-# sources lists them alongside for the real binary.
+# sources lists them alongside for the real binary. artifact_write.cpp is the
+# shared atomic artifact write every command source calls, so every target
+# below that compiles a command source compiles it too.
 add_executable(test_all_cpes_cli
   tests/unit/test_all_cpes_cli.cpp
   src/cli/app.cpp
+  src/cli/artifact_write.cpp
   src/cli/observe_trim.cpp
   src/cli/scan_command.cpp
   src/cli/scan_fingerprint.cpp
@@ -672,12 +677,27 @@ add_test(NAME all_cpes_cli COMMAND test_all_cpes_cli)
 add_executable(test_fail_on_cli
   tests/unit/test_fail_on_cli.cpp
   src/cli/app.cpp
+  src/cli/artifact_write.cpp
   src/cli/observe_trim.cpp
   src/cli/scan_command.cpp
   src/cli/scan_fingerprint.cpp)
 target_link_libraries(test_fail_on_cli PRIVATE ${bomwerk_cli_libraries})
 target_include_directories(test_fail_on_cli PRIVATE tests)
 add_test(NAME fail_on_cli COMMAND test_fail_on_cli)
+
+# Atomic artifact writes end to end: a scan whose SBOM or coverage file cannot be
+# written exits 2 and leaves the previous file whole. Same precedent and peer
+# sources as test_fail_on_cli above.
+add_executable(test_atomic_artifacts_cli
+  tests/unit/test_atomic_artifacts_cli.cpp
+  src/cli/app.cpp
+  src/cli/artifact_write.cpp
+  src/cli/observe_trim.cpp
+  src/cli/scan_command.cpp
+  src/cli/scan_fingerprint.cpp)
+target_link_libraries(test_atomic_artifacts_cli PRIVATE ${bomwerk_cli_libraries})
+target_include_directories(test_atomic_artifacts_cli PRIVATE tests)
+add_test(NAME atomic_artifacts_cli COMMAND test_atomic_artifacts_cli)
 
 # The fingerprint reconciler's identity rules: which component shape a corpus
 # match may rewrite, and that it never overwrites another producer's version.
@@ -699,6 +719,7 @@ add_test(NAME scan_fingerprint COMMAND test_scan_fingerprint)
 add_executable(test_license_fallback_timeout_cli
   tests/unit/test_license_fallback_timeout_cli.cpp
   src/cli/app.cpp
+  src/cli/artifact_write.cpp
   src/cli/observe_trim.cpp
   src/cli/scan_command.cpp
   src/cli/scan_fingerprint.cpp)

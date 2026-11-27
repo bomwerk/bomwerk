@@ -1,11 +1,13 @@
 #include "observe/trace_check.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <fstream>
-#include <system_error>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "core/atomic_file.hpp"
 #include "core/warning_code.hpp"
 #include "observe/trace_read.hpp"
 
@@ -36,35 +38,25 @@ bool is_trace_record(const std::string& line, std::string& tool_name)
   return true;
 }
 
-/// Replace the trace with `lines`, via a temporary file so an interrupted
-/// rewrite cannot leave a half-written trace where a whole one used to be.
-bool rewrite_trace(const fs::path& trace_path, const std::vector<std::string>& lines)
+/// Replace the trace with `lines` through the shared atomic write, so an
+/// interrupted rewrite cannot leave a half-written trace where a whole one
+/// used to be.
+core::AtomicWriteOutcome rewrite_trace(const fs::path& trace_path,
+                                       const std::vector<std::string>& lines)
 {
-  fs::path temporary_path = trace_path;
-  temporary_path += ".sorted";
+  std::size_t total_bytes = 0;
+  for (const std::string& line : lines)
   {
-    std::ofstream output_stream(temporary_path, std::ios::binary | std::ios::trunc);
-    if (!output_stream)
-    {
-      return false;
-    }
-    for (const std::string& line : lines)
-    {
-      output_stream << line << '\n';
-    }
-    if (!output_stream.good())
-    {
-      return false;
-    }
+    total_bytes += line.size() + 1;
   }
-  std::error_code error;
-  fs::rename(temporary_path, trace_path, error);
-  if (error)
+  std::string contents;
+  contents.reserve(total_bytes);
+  for (const std::string& line : lines)
   {
-    fs::remove(temporary_path, error);
-    return false;
+    contents += line;
+    contents += '\n';
   }
-  return true;
+  return core::write_file_atomically(trace_path, contents);
 }
 
 }  // namespace
@@ -132,11 +124,13 @@ core::Result<TraceStats> validate_and_sort_trace(const fs::path& trace_path)
   }
 
   std::sort(well_formed_lines.begin(), well_formed_lines.end());
-  if (!rewrite_trace(trace_path, well_formed_lines))
+  const core::AtomicWriteOutcome rewrite = rewrite_trace(trace_path, well_formed_lines);
+  if (!rewrite.written)
   {
     outcome.warn(core::WarningCode::kObserveTraceRewriteFailed,
                  "could not rewrite " + trace_path.string() +
-                     " in canonical order; it is still valid but not byte-reproducible");
+                     " in canonical order; it is still valid but not byte-reproducible. " +
+                     core::describe_atomic_write_failure("sorted trace", trace_path, rewrite));
     return outcome;
   }
   outcome.value.sorted_lines = well_formed_lines.size();

@@ -47,6 +47,7 @@ contain each preview row; the 1.0.0 tag moves those rows to shipped.
 | `scan --config` / `scan --no-config` (`bomwerk.toml`) | preview | 1.0.0 | `scan_config`, `golden_repo-config` |
 | `scan --fingerprint-index` (identify vendored C/C++ by file hash against a corpus you supply) | preview | 1.0.0 | `fingerprint`, `scan_fingerprint`, `sha256`, `golden_nightmare-corpus-fingerprint` |
 | `scan` reads ESP-IDF component manager files (`dependencies.lock`, `idf_component.yml`) | preview | 1.0.0 | `esp_idf`, `golden_esp-idf-*` |
+| Atomic artifact writes: SBOM, CRA sidecar, coverage, warnings, HTML, trimmed and enriched SBOMs, binscan sidecar, trace (Linux, macOS) | preview | 1.0.0 | `atomic_file`, `atomic_artifacts_cli`, `trace_check` |
 
 `--fingerprint-index` needs a corpus index, and bomwerk does not ship one: the
 flag is useless on its own. Build one with
@@ -55,6 +56,32 @@ and hashes them, or obtain one. There is no default path, so a plain `scan`
 behaves exactly as it did before this option existed. The matcher reads that
 one local file and opens no socket, so `--endpoints` is unchanged and
 `--offline` makes no difference to it.
+
+### How artifacts are written
+
+Every file bomwerk generates (the SBOM, the CRA sidecar, `--coverage`,
+`--warnings`, `--html`, `trim -o`, the `binscan` sidecar and enriched SBOM, and
+the `observe` trace) is first written in full to a temporary file beside it,
+flushed to disk, and then renamed over the destination. A reader sees either the
+previous whole file or the new whole file, never a truncated one. If any step
+fails (the directory is not writable, the disk fills up, the destination is a
+directory or read-only), the previous file is left exactly as it was, the
+temporary file is removed, and the command exits 2 with a message that names the
+step, the path and what to check. A replaced file keeps its permissions, and a
+destination that is a symbolic link has its target replaced, not the link.
+
+The temporary file is always named
+`<file name>.bomwerk-<process id>-<number>.tmp` in the destination's directory,
+for example `sbom.cdx.json.bomwerk-4182-0.tmp`. The name is plain and
+predictable on purpose: a `.tmp` extension, no random characters, not hidden,
+never executable. If endpoint protection flags the write-then-rename pattern,
+allowlist `*.bomwerk-*.tmp` in the output directories. A run killed mid-write
+(for example with `kill -9`) can leave one such file behind. It never replaces
+the destination, and you can delete it.
+
+This is tested on Linux and macOS. The Windows code path (`MoveFileExW` with
+write-through) exists but is not built or tested, since Windows binaries are
+not planned.
 
 ### What `--cpe-fallback` asks NVD
 
