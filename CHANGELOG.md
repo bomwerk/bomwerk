@@ -13,6 +13,19 @@ contained the paid extension's source.
 ## [Unreleased]
 
 ### Added
+- A GitHub, GitLab or Bitbucket dependency pinned to a tag is checked by OSV
+  again, through OSV's `GIT` ecosystem: bomwerk asks by repository URL and tag,
+  and by repository URL alone to learn whether OSV indexes the repository, in the
+  batch it already sends. Zephyr `v3.5.0` gets 156 OSV records this way, against
+  none by purl and 74 through the NVD CPE fallback. Its findings are ordinary OSV
+  findings, without `--cpe-fallback`. Coverage stays honest: the component counts
+  as checked only when OSV names an advisory at the tag, or OSV indexes the
+  repository and the tag reads like a release. A repository OSV does not index,
+  or a branch pin, is still reported not checked and still goes to the CPE
+  fallback, which no longer asks NVD about a component OSV answered (and now
+  runs after OSV rather than alongside it). Both answers are cached, so
+  `--offline` replays them, and `--endpoints` names the repository URL and tag
+  as data sent. The SBOM's match-coverage class does not change (T124).
 - The vendored-source heuristic reads vendoring records, the notes a project
   keeps beside code it copied in. These are a directory's `README.md` index in
   Godot's layout (one `## <folder>` section with `- Version:` and

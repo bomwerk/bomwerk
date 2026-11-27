@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -51,5 +52,18 @@ struct GitRemote
 /// (`github`, `gitlab`, `bitbucket`), read from the same table, so a forge
 /// added there is recognized everywhere at once.
 [[nodiscard]] bool is_forge_purl_type(std::string_view purl_type);
+
+/// The repository URL a forge purl names, read back through the same table
+/// `build_git_purl` maps hosts with: `https://<host>/<namespace>/<name>`, with
+/// the namespace percent-decoded so a GitLab subgroup keeps its `/`. Qualifiers,
+/// subpath and version are ignored. Empty for a purl that is not a forge purl or
+/// carries no namespace. Owner and name stay as the purl spells them, which
+/// `build_git_purl` lower-cases: OSV's `GIT` ecosystem stores repository URLs in
+/// lower case and compares them case-sensitively (measured 2026-11-27:
+/// `https://github.com/freertos/freertos-kernel` is known, the mixed-case
+/// spelling is not).
+/// Example: `forge_repository_url("pkg:github/madler/zlib@v1.2.11")` ->
+/// `"https://github.com/madler/zlib"`.
+[[nodiscard]] std::optional<std::string> forge_repository_url(std::string_view purl);
 
 }  // namespace bomwerk::core

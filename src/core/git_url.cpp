@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <string_view>
 
+#include "core/purl.hpp"
 #include "core/text.hpp"
 
 namespace bomwerk::core
@@ -205,6 +206,28 @@ bool is_forge_purl_type(std::string_view purl_type)
 {
   return std::ranges::any_of(
       kForgeHosts, [purl_type](const ForgeHost& forge) { return forge.purl_type == purl_type; });
+}
+
+std::optional<std::string> forge_repository_url(std::string_view purl)
+{
+  const std::string_view identity_part = purl_identity_part(purl);
+  const std::string_view purl_type = purl_type_of(identity_part);
+  const auto forge = std::ranges::find(kForgeHosts, purl_type, &ForgeHost::purl_type);
+  if (forge == std::ranges::end(kForgeHosts))
+  {
+    return std::nullopt;
+  }
+  // "pkg:" + type + "/" precedes the namespace; purl_type_of found the type
+  // there, so the slash is present.
+  std::string_view repository_path = identity_part.substr(4 + purl_type.size() + 1);
+  repository_path = repository_path.substr(0, repository_path.find('@'));
+  const std::size_t name_separator = repository_path.rfind('/');
+  if (name_separator == std::string_view::npos || name_separator == 0 ||
+      name_separator + 1 == repository_path.size())
+  {
+    return std::nullopt;
+  }
+  return "https://" + std::string(forge->host) + "/" + percent_decode(repository_path);
 }
 
 }  // namespace bomwerk::core

@@ -1,6 +1,7 @@
 // ctest unit test for git remote URL -> purl building
 #include <chrono>
 #include <cstdio>
+#include <optional>
 #include <string>
 
 #include "core/git_url.hpp"
@@ -141,6 +142,26 @@ int main()
     BOMWERK_TEST_CHECK(resolved ==
                        resolve_relative_url("https://github.com/owner/repo", "./lib.git"));
     BOMWERK_TEST_CHECK(resolved == "https://github.com/owner/repo/lib.git");
+  }
+
+  // T124: given forge purls, when their repository URL is read back, then each
+  // names the forge host with namespace and name, a GitLab subgroup keeps its
+  // `/`, version, qualifiers and subpath are ignored, and a purl that is not a
+  // forge purl, or has no namespace, yields nothing.
+  {
+    BOMWERK_TEST_CHECK(bomwerk::core::forge_repository_url("pkg:github/madler/zlib@v1.2.11") ==
+                       std::optional<std::string>("https://github.com/madler/zlib"));
+    BOMWERK_TEST_CHECK(bomwerk::core::forge_repository_url(build_git_purl(
+                           "https://gitlab.com/group/subgroup/project.git", "v2.0.0", "project")) ==
+                       std::optional<std::string>("https://gitlab.com/group/subgroup/project"));
+    BOMWERK_TEST_CHECK(bomwerk::core::forge_repository_url("pkg:bitbucket/owner/repo@1.0") ==
+                       std::optional<std::string>("https://bitbucket.org/owner/repo"));
+    BOMWERK_TEST_CHECK(
+        bomwerk::core::forge_repository_url("pkg:github/github/codeql-action@v3?x=y#init") ==
+        std::optional<std::string>("https://github.com/github/codeql-action"));
+    BOMWERK_TEST_CHECK(!bomwerk::core::forge_repository_url("pkg:generic/zlib@1.3.1"));
+    BOMWERK_TEST_CHECK(!bomwerk::core::forge_repository_url("pkg:github/zlib@1.3.1"));
+    BOMWERK_TEST_CHECK(!bomwerk::core::forge_repository_url("not a purl"));
   }
 
   std::puts("test_git_url: OK");

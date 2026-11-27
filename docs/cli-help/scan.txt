@@ -77,9 +77,9 @@ OPTIONS:
                               exact, immutable package version; 0 forces a refresh on every
                               run)
           --cpe-fallback      Also query NVD by CPE for components OSV cannot match
-                              (Conan/vcpkg/generic, tag-pinned GitHub/GitLab/Bitbucket), asking
-                              a known OS or RTOS as an operating system too: lower-confidence
-                              findings
+                              (Conan/vcpkg/generic, tag-pinned GitHub/GitLab/Bitbucket
+                              repositories OSV does not index), asking a known OS or RTOS as an
+                              operating system too: lower-confidence findings
           --all-cpes          Synthesize CPE identifiers for every safely convertible versioned
                               component, not just types with no OSV ecosystem mapping (adds
                               npm, Go, commit-pinned, ...); CycloneDX only. Each synthesized

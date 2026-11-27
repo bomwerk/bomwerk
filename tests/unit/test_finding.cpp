@@ -174,6 +174,33 @@ int main()
     BOMWERK_TEST_CHECK(merged.deltas.purls_unchanged == 0);
   }
 
+  // T124: given an OSV outcome that answered one tag-pinned forge repository,
+  // when merged with a CPE outcome, then the OSV-checked list survives sorted
+  // and unique; and when asked what OSV did not check, then the answered tag
+  // pin and an OSV-matched purl are left out, while an unanswered tag pin and a
+  // Conan purl remain, in input order.
+  {
+    MatchOutcome osv_outcome;
+    osv_outcome.osv_repository_checked_purls = {"pkg:github/b/b@v2.0.0", "pkg:github/a/a@v1.0.0"};
+    MatchOutcome cpe_outcome;
+    cpe_outcome.osv_repository_checked_purls = {"pkg:github/a/a@v1.0.0"};
+    const MatchOutcome merged = merge_outcomes(osv_outcome, cpe_outcome);
+    BOMWERK_TEST_CHECK(
+        merged.osv_repository_checked_purls ==
+        (std::vector<std::string>{"pkg:github/a/a@v1.0.0", "pkg:github/b/b@v2.0.0"}));
+
+    std::vector<bomwerk::core::Component> components(4);
+    components[0].purl = "pkg:conan/zlib@1.2.11";
+    components[1].purl = "pkg:github/a/a@v1.0.0";
+    components[2].purl = "pkg:github/c/c@v3.0.0";
+    components[3].purl = "pkg:npm/left-pad@1.3.0";
+    const std::vector<bomwerk::core::Component> unchecked =
+        bomwerk::vuln::components_osv_did_not_check(components, merged);
+    BOMWERK_TEST_CHECK(unchecked.size() == 2);
+    BOMWERK_TEST_CHECK(unchecked[0].purl == "pkg:conan/zlib@1.2.11");
+    BOMWERK_TEST_CHECK(unchecked[1].purl == "pkg:github/c/c@v3.0.0");
+  }
+
   std::puts("test_finding: OK");
   return 0;
 }

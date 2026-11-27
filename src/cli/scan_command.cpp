@@ -24,7 +24,6 @@
 #include "core/exclusions.hpp"
 #include "core/exit_codes.hpp"
 #include "core/file_index.hpp"
-#include "core/joining_thread.hpp"
 #include "core/manifest_names.hpp"
 #include "core/match_coverage.hpp"
 #include "core/model.hpp"
@@ -401,8 +400,9 @@ CLI::App* register_scan_command(CLI::App& application, ScanOptions& options)
   // configurable from bomwerk.toml, for the same reason as --vuln/--offline.
   scan_command->add_flag("--cpe-fallback", options.cpe_fallback,
                          "Also query NVD by CPE for components OSV cannot match "
-                         "(Conan/vcpkg/generic, tag-pinned GitHub/GitLab/Bitbucket), asking a "
-                         "known OS or RTOS as an operating system too: lower-confidence findings");
+                         "(Conan/vcpkg/generic, tag-pinned GitHub/GitLab/Bitbucket repositories "
+                         "OSV does not index), asking a known OS or RTOS as an operating system "
+                         "too: lower-confidence findings");
   // Opt-in on purpose, same reasoning as --cpe-fallback above: a plain scan's
   // SBOM bytes must not change unless the operator asks. Independent of
   // --cpe-fallback -- this controls what the SBOM PUBLISHES, not whether NVD
@@ -1205,12 +1205,11 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   // it either way (an empty default simply renders as "nothing found", and
   // the report's own not-checked wording comes from options.vuln_enabled).
   core::Result<vuln::MatchOutcome> vulnerability_matches;
-  // Purls OSV structurally cannot check (Conan/vcpkg/generic, tag-pinned
-  // forge repositories). Computed once
-  // from the public predicate so the stdout note, the report's summary metric,
-  // and the report's per-row tags all count the SAME set: the numbers can
-  // never disagree (a versioned generic and a version-less vcpkg are both
-  // genuinely uncoverable, so both belong here).
+  // Purls OSV did not check: Conan/vcpkg/generic, and tag-pinned forge
+  // repositories OSV did not answer for. Computed once, after the OSV pass,
+  // from `vuln::components_osv_did_not_check`, so the stdout note, the
+  // report's summary metric, and the report's per-row tags all count the SAME
+  // set: the numbers can never disagree.
   std::vector<std::string> uncovered_osv_purls;
   // The subset of the above that the CPE fallback actually queried against
   // NVD. Derived from the same list, so "checked via CPE" and "not checked"
@@ -1219,32 +1218,23 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
   std::vector<std::string> cpe_checked_purls;
   if (options.vuln_enabled)
   {
-    for (const core::Component& component : components)
+    vuln::MatchOptions vuln_options;
+    vuln_options.offline = options.offline;
+    vulnerability_matches = vuln::match_components(
+        components, vuln_options, vuln::make_curl_http_post(std::string("bomwerk/") + version()),
+        vuln::system_clock_epoch_seconds);
+
+    // OSV first, then NVD with only what OSV did not check: a tag-pinned
+    // forge repository OSV answered for is never asked again through NVD.
+    // The order costs one OSV round trip of wall-clock time, small beside
+    // NVD's ~6 s between uncached requests (~0.7 s with an API key).
+    const std::vector<core::Component> components_for_nvd =
+        vuln::components_osv_did_not_check(components, vulnerability_matches.value);
+    for (const core::Component& component : components_for_nvd)
     {
-      // Calls the same core predicate `vuln::has_no_known_osv_coverage`
-      // is now defined in terms of, directly: one fewer indirection between
-      // this list and the coverage numbers reported elsewhere.
-      if (core::classify_match_coverage(component) == core::MatchCoverage::UnmappedPurlType)
-      {
-        uncovered_osv_purls.push_back(component.purl);
-      }
+      uncovered_osv_purls.push_back(component.purl);
     }
 
-    // Start the NVD pass FIRST, on its own thread, then run the OSV pass
-    // on this one. NVD's rate limit forces ~6 s between uncached requests (or
-    // ~0.7 s with an API key), and that waiting is what would otherwise be
-    // added to every scan; overlapping it with OSV's round-trips keeps the
-    // fallback close to free in wall-clock terms.
-    //
-    // Threading buys LATENCY, never concurrency against the feed: requests
-    // inside match_via_cpe stay strictly sequential and throttled, because
-    // NVD's limit is per key, not per connection.
-    //
-    // Determinism (rule 3) is unaffected: nothing below reads the NVD result
-    // before the join, and the two outcomes are folded by vuln::merge_outcomes,
-    // which sorts. Which thread finished first cannot reach the output.
-    core::Result<vuln::MatchOutcome> cpe_matches;
-    std::optional<core::JoiningThread> cpe_fallback_thread;
     if (options.cpe_fallback)
     {
       vuln::NvdOptions nvd_options;
@@ -1263,42 +1253,25 @@ int run_scan_ignoring_fail_on(const ScanOptions& parsed_options)
             "fallback pauses ~6 s between uncached components",
             vuln::kNvdApiKeyEnvironmentVariable);
       }
-      cpe_fallback_thread.emplace(
-          [&cpe_matches, &components, nvd_options = std::move(nvd_options)]
-          {
-            // Belt to match_via_cpe's braces: an exception escaping a thread
-            // body is std::terminate, which would break "never crash" (rule 1)
-            // far more loudly than any feed problem it could be reporting.
-            try
-            {
-              cpe_matches = vuln::match_via_cpe(
-                  components, nvd_options,
-                  vuln::make_curl_http_get(std::string("bomwerk/") + version()),
-                  vuln::system_clock_epoch_seconds, [](std::chrono::milliseconds interval)
-                  { std::this_thread::sleep_for(interval); });
-            }
-            catch (...)
-            {
-              cpe_matches = core::Result<vuln::MatchOutcome>{};
-              cpe_matches.warn(core::WarningCode::kVulnCoverageIncomplete,
-                               "CPE fallback failed unexpectedly: those components not checked");
-            }
-          });
-    }
-
-    vuln::MatchOptions vuln_options;
-    vuln_options.offline = options.offline;
-    vulnerability_matches = vuln::match_components(
-        components, vuln_options, vuln::make_curl_http_post(std::string("bomwerk/") + version()),
-        vuln::system_clock_epoch_seconds);
-
-    if (cpe_fallback_thread.has_value())
-    {
-      cpe_fallback_thread->join();
-      cpe_fallback_thread.reset();
-      // Warnings are appended in a FIXED order: OSV's first, then NVD's :
-      // rather than as each thread produced them, so the report's warning
-      // section reads the same on every run (rule 3).
+      core::Result<vuln::MatchOutcome> cpe_matches;
+      // Belt to match_via_cpe's braces: "never crash" (rule 1) holds even if
+      // something underneath it throws.
+      try
+      {
+        cpe_matches = vuln::match_via_cpe(
+            components_for_nvd, nvd_options,
+            vuln::make_curl_http_get(std::string("bomwerk/") + version()),
+            vuln::system_clock_epoch_seconds,
+            [](std::chrono::milliseconds interval) { std::this_thread::sleep_for(interval); });
+      }
+      catch (...)
+      {
+        cpe_matches = core::Result<vuln::MatchOutcome>{};
+        cpe_matches.warn(core::WarningCode::kVulnCoverageIncomplete,
+                         "CPE fallback failed unexpectedly: those components not checked");
+      }
+      // Warnings are appended in a FIXED order, OSV's first, then NVD's, so
+      // the report's warning section reads the same on every run (rule 3).
       vulnerability_matches.value = vuln::merge_outcomes(std::move(vulnerability_matches.value),
                                                          std::move(cpe_matches.value));
       for (core::Warning& cpe_warning : cpe_matches.warnings)

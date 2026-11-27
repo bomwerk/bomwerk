@@ -104,8 +104,9 @@ struct NvdOptions
 ///
 /// Why NVD and not OSV: OSV's API has no CPE query of any kind: `/v1/query`
 /// accepts only `commit`, `version` and `package{name,ecosystem,purl}`. For a
-/// Conan/vcpkg/generic purl, or a forge repository pinned to a tag, with no
-/// resolved commit id, NVD is the only feed that answers.
+/// Conan/vcpkg/generic purl with no resolved commit id, or a forge repository
+/// pinned to a tag that OSV's `GIT` ecosystem does not index, NVD is the only
+/// feed that answers.
 ///
 /// Findings carry `MatchProvenance::CpeFallback` and are LOWER CONFIDENCE by
 /// construction: a wildcard vendor also matches a different vendor's product
@@ -113,10 +114,11 @@ struct NvdOptions
 ///
 /// Requests are strictly SEQUENTIAL and throttled through `sleep_for` :
 /// NVD's rate limit is per-key, not per-connection, so issuing them in
-/// parallel would get the caller blocked rather than served. The CLI instead
-/// runs this whole function on its own thread so the waiting overlaps the OSV
-/// path (see cli/scan_command.cpp). A long-running caller that must be able
-/// to shut down during those waits sets `NvdOptions::should_stop`.
+/// parallel would get the caller blocked rather than served. Callers run this
+/// after the OSV pass and hand it `components_osv_did_not_check`, so a
+/// tag-pinned forge repository OSV answered for is not asked again (see
+/// cli/scan_command.cpp). A long-running caller that must be able to shut down
+/// during those waits sets `NvdOptions::should_stop`.
 ///
 /// Counters: this fills `MatchOutcome::cpe_checked_purls` only and leaves
 /// `components_without_osv_coverage` at 0: that number is the OSV pass's fact

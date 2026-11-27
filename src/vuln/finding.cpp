@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "core/match_coverage.hpp"
 #include "core/text.hpp"
 
 namespace bomwerk::vuln
@@ -35,6 +36,18 @@ bool delta_orders_before(const PurlAdvisoryDelta& left, const PurlAdvisoryDelta&
 bool is_ascii_digit(char character)
 {
   return character >= '0' && character <= '9';
+}
+
+/// Append `extra` to `purls`, then sort and deduplicate: the shape every purl
+/// list on `MatchOutcome` keeps (rule 3).
+void append_sorted_unique(std::vector<std::string>& purls, std::vector<std::string> extra)
+{
+  for (std::string& purl : extra)
+  {
+    purls.push_back(std::move(purl));
+  }
+  std::sort(purls.begin(), purls.end());
+  purls.erase(std::unique(purls.begin(), purls.end()), purls.end());
 }
 
 }  // namespace
@@ -106,25 +119,30 @@ MatchOutcome merge_outcomes(MatchOutcome purl_outcome, MatchOutcome cpe_outcome)
   // classifies); the CPE pass owns which of those it managed to query. Combine
   // rather than assign so neither field depends on which outcome is which.
   merged.components_without_osv_coverage += cpe_outcome.components_without_osv_coverage;
-  for (std::string& checked_purl : cpe_outcome.cpe_checked_purls)
-  {
-    merged.cpe_checked_purls.push_back(std::move(checked_purl));
-  }
-  std::sort(merged.cpe_checked_purls.begin(), merged.cpe_checked_purls.end());
-  merged.cpe_checked_purls.erase(
-      std::unique(merged.cpe_checked_purls.begin(), merged.cpe_checked_purls.end()),
-      merged.cpe_checked_purls.end());
-  // The OSV pass owns `unresolved_purls`; folding both sides keeps this
-  // correct whichever outcome carries them.
-  for (std::string& unresolved_purl : cpe_outcome.unresolved_purls)
-  {
-    merged.unresolved_purls.push_back(std::move(unresolved_purl));
-  }
-  std::sort(merged.unresolved_purls.begin(), merged.unresolved_purls.end());
-  merged.unresolved_purls.erase(
-      std::unique(merged.unresolved_purls.begin(), merged.unresolved_purls.end()),
-      merged.unresolved_purls.end());
+  // The OSV pass owns `osv_repository_checked_purls` and `unresolved_purls`,
+  // the CPE pass `cpe_checked_purls`; folding both sides keeps each correct
+  // whichever outcome carries it.
+  append_sorted_unique(merged.cpe_checked_purls, std::move(cpe_outcome.cpe_checked_purls));
+  append_sorted_unique(merged.osv_repository_checked_purls,
+                       std::move(cpe_outcome.osv_repository_checked_purls));
+  append_sorted_unique(merged.unresolved_purls, std::move(cpe_outcome.unresolved_purls));
   return merged;
+}
+
+std::vector<core::Component> components_osv_did_not_check(
+    const std::vector<core::Component>& components, const MatchOutcome& osv_outcome)
+{
+  std::vector<core::Component> unchecked;
+  for (const core::Component& component : components)
+  {
+    if (core::classify_match_coverage(component) == core::MatchCoverage::UnmappedPurlType &&
+        !std::binary_search(osv_outcome.osv_repository_checked_purls.begin(),
+                            osv_outcome.osv_repository_checked_purls.end(), component.purl))
+    {
+      unchecked.push_back(component);
+    }
+  }
+  return unchecked;
 }
 
 }  // namespace bomwerk::vuln
